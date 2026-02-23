@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-arabic: 'Tahoma', 'Segoe UI', sans-serif;
+  --animate-kenburns: kenburns 20s infinite alternate;
+  --animate-fade-in-up: fadeInUp 1s ease-out forwards;
+  --animate-shimmer: shimmer 4s infinite linear;
+
+  @keyframes kenburns {
+    0% {
+      transform: scale(1.0);
+    }
+
+    100% {
+      transform: scale(1.2);
+    }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}

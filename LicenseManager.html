@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing App - Key Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            rounded: 1rem;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #1f2937;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            wudth: 100%;
+            width: 100%;
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .result {
+            margin-top: 2rem;
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.875rem;
+            color: #111827;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            color: #dc2626;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h1>License Key Generator</h1>
+
+        <div class="form-group">
+            <label for="machineId">Client Machine ID</label>
+            <input type="text" id="machineId" placeholder="e.g. 8c4a-..." required>
+        </div>
+
+        <div class="form-group">
+            <label for="uType">License Type</label>
+            <select id="uType">
+                <option value="pro">Full PRO Version</option>
+                <option value="trial">Extended Trial</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="expiryDays">Valid For (Days)</label>
+            <input type="number" id="expiryDays" value="365" oninput="updateDatePreview()">
+            <p style="font-size: 0.8rem; color: #6b7280; margin-top: 4px;">
+                Expires on: <strong id="datePreview" style="color: #2563eb">--</strong>
+            </p>
+            <p style="font-size: 0.8rem; color: #6b7280; margin-top: 4px;">Enter 9999 for Lifetime</p>
+        </div>
+
+        <button onclick="generateKey()">Generate Key</button>
+
+        <div id="resultArea" class="hidden">
+            <label>Generated License Key:</label>
+            <div class="result" id="outputKey" onclick="copyToClipboard(this.innerText)"></div>
+            <p style="font-size: 0.8rem; color: #10b981; margin-top: 4px; text-align: center;">Click key to copy</p>
+        </div>
+    </div>
+
+    <script>
+        // --- CRYPTO LOGIC (Must match Electron App) ---
+        // In a real browser environment without Node.js 'crypto' module, we use Web Crypto API.
+        // However, Node's aes-256-cbc matches Web Crypto's AES-CBC.
+        // We need to derive a key from "your-secret-key-32-chars-exactly!!" using scrypt (or just raw bytes if simplified).
+        // In the Electron app I used: crypto.scryptSync(APP_SECRET, 'salt', 32); 
+        // Implementing scrypt in pure JS for this single file without deps is hard.
+
+        // SIMPLIFICATION FOR THIS ADMIN TOOL:
+        // We will assume the user has a modern browser.
+        // Actually, to ensure exact compatibility with Node's `scryptSync` + `createDecipheriv`, 
+        // it is safer to use a simple helper script or just CryptoJS.
+        // BUT since I cannot easily import libraries here in a single file without CDN...
+        // I will use a simple PBKDF2 which is standard in Web Crypto, but Node used scrypt.
+
+        // REFACTOR DECISION:
+        // I should probably change the Electron app to use a simple hashed key or PBKDF2 so I can replicate it here easily.
+        // OR, I can use a CDN for crypto-js.
+
+        const APP_SECRET = 'your-secret-key-32-chars-exactly!!';
+
+        function updateDatePreview() {
+            const daysInput = document.getElementById('expiryDays').value;
+            const days = parseInt(daysInput);
+            const previewEl = document.getElementById('datePreview');
+
+            if (isNaN(days) || days <= 0) {
+                previewEl.innerText = "Invalid";
+                return;
+            }
+
+            if (days === 9999) {
+                previewEl.innerText = "Lifetime (Never Expires)";
+                return;
+            }
+
+            const date = new Date();
+            date.setDate(date.getDate() + days);
+            // Format to unambiguous style: 02 Jan 2026
+            const options = { year: 'numeric', month: 'short', day: '2-digit' };
+            previewEl.innerText = date.toLocaleDateString('en-GB', options);
+        }
+
+        // Init on load
+        updateDatePreview();
+
+        async function generateKey() {
+            const mid = document.getElementById('machineId').value.trim();
+            const days = parseInt(document.getElementById('expiryDays').value);
+            const type = document.getElementById('uType').value;
+
+            if (!mid) {
+                alert("Please enter Machine ID");
+                return;
+            }
+
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + days);
+
+            const payload = JSON.stringify({
+                mid: mid,
+                exp: expiryDate.getTime(),
+                type: type
+            });
+
+            try {
+                const encrypted = await encryptAES(payload, APP_SECRET);
+
+                document.getElementById('resultArea').classList.remove('hidden');
+                document.getElementById('outputKey').innerText = encrypted;
+            } catch (e) {
+                console.error(e);
+                alert("Error generating key: " + e.message);
+            }
+        }
+
+        // --- Compatible Crypto Implementation ---
+        // We need to match Node's:
+        // key = scryptSync(password, 'salt', 32)
+        // cipher = createCipheriv('aes-256-cbc', key, iv)
+
+        async function encryptAES(text, password) {
+            // 1. Derive Key using PBKDF2 (easier in WebCrypto) - WAIT, Node used scrypt.
+            // I will change the Node implementation to use a raw key for simplicity if I can't match it.
+            // But I already wrote the Node code.
+
+            // Let's use CryptoJS via CDN for easiest compatibility with "standard" crypto names if I were using it.
+            // But since I am using built-in node crypto...
+            // Let's try to do it:
+
+            // Actually, for this specific admin tool, I will use a simple polyfill logic or assuming I can use proper WebCrypto scrypt.
+            // Chrome 105+ supports scrypt in WebCrypto.
+
+            // Let's use a bundled approach: I'll inject a minified crypto-js or similar? No, too big.
+
+            // ALTERNATIVE:
+            // Since this file is for the ADMIN (USER), he can run it.
+            // I will implement a "Raw Key" approach in the Electron app instead of Scrypt to make this easier?
+            // No, Scrypt is better.
+
+            // Let's use the Web Crypto API to derive the key.
+            // Note: Node's scrypt default params are N=16384, r=8, p=1.
+            // Web Crypto doesn't have scrypt everywhere easily.
+
+            // CHANGE OF PLAN:
+            // I will update the Electron App (licenseService.ts) to use a SIMPLE 32-byte key directly from the string (padded).
+            // This avoids the scrypt complexity disparity between Node and Browser for this simple tool.
+
+            // See Step 2 Modification Plan below.
+
+            return "Please update licenseService.ts to use raw key first!";
+        }
+
+        async function getKeyMaterial(password) {
+            const enc = new TextEncoder();
+            return window.crypto.subtle.importKey(
+                "raw",
+                enc.encode(password),
+                { name: "PBKDF2" },
+                false,
+                ["deriveBits", "deriveKey"]
+            );
+        }
+
+        async function deriveKey(password) {
+            // We will switch to PBKDF2 in Electron too, it's standard everywhere.
+            // Or easier: Just use the password directly if it's 32 chars.
+            const enc = new TextEncoder();
+            const keyData = enc.encode(password).slice(0, 32); // Ensure 32 bytes
+
+            return window.crypto.subtle.importKey(
+                "raw",
+                keyData,
+                "AES-CBC",
+                false,
+                ["encrypt"]
+            );
+        }
+
+        // Re-implementing ensure 32-byte key from string
+        async function encryptAES_Simple(text, secret) {
+            // Prepare Key (First 32 chars of secret)
+            const enc = new TextEncoder();
+            let keyBytes = enc.encode(secret);
+            if (keyBytes.length > 32) keyBytes = keyBytes.slice(0, 32);
+            if (keyBytes.length < 32) {
+                const temp = new Uint8Array(32);
+                temp.set(keyBytes);
+                keyBytes = temp;
+            }
+
+            const key = await window.crypto.subtle.importKey(
+                "raw",
+                keyBytes,
+                { name: "AES-CBC" },
+                false,
+                ["encrypt"]
+            );
+
+            const iv = window.crypto.getRandomValues(new Uint8Array(16));
+            const encodedText = enc.encode(text);
+
+            const encrypted = await window.crypto.subtle.encrypt(
+                { name: "AES-CBC", iv: iv },
+                key,
+                encodedText
+            );
+
+            // Convert to Hex
+            const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+            const encHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+            return ivHex + ':' + encHex;
+        }
+
+        // Override the function
+        window.encryptAES = encryptAES_Simple;
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Copied to clipboard!");
+            });
+        }
+    </script>
+</body>
+
+</html>

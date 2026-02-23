@@ -1,0 +1,98 @@
+{
+  "name": "billing-app",
+  "private": true,
+  "version": "2.9.13",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"cross-env BROWSER=none npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron .",
+    "build": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false tsc -p tsconfig.electron.json && tsc -b && vite build && electron-builder --dir",
+    "build:win": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false tsc -p tsconfig.electron.json && tsc -b && vite build && electron-builder --win",
+    "build:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false tsc -p tsconfig.electron.json && tsc -b && vite build && electron-builder --win portable",
+    "build:zip": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false tsc -p tsconfig.electron.json && tsc -b && vite build && electron-builder --win zip",
+    "dist": "tsc -p tsconfig.electron.json && tsc -b && vite build && electron-builder",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@types/node-forge": "^1.3.14",
+    "@types/qrcode": "^1.5.6",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "dexie": "^4.2.1",
+    "dexie-react-hooks": "^4.2.0",
+    "framer-motion": "^12.23.26",
+    "googleapis": "^170.0.0",
+    "i18next": "^25.7.3",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
+    "lucide-react": "^0.561.0",
+    "node-forge": "^1.3.3",
+    "node-machine-id": "^1.1.12",
+    "node-thermal-printer": "^4.5.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-i18next": "^16.5.0",
+    "react-router-dom": "^7.10.1",
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.22",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "png-to-ico": "^3.0.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.billing.app",
+    "productName": "Billing App",
+    "directories": {
+      "output": "release"
+    },
+    "forceCodeSigning": false,
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true,
+      "artifactName": "${productName} Setup ${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName} Portable ${version}.${ext}"
+    }
+  }
+}
