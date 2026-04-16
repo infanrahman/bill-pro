@@ -7,7 +7,7 @@ import type { Expense } from '../../services/db';
 interface ExpenseModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (data: Omit<Expense, 'id' | 'date'>) => void;
+    onSave: (data: Pick<Expense, 'description' | 'amount' | 'category' | 'notes'>) => void;
     editingExpense?: Expense | null;
 }
 

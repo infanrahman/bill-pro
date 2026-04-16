@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../services/db';
+import { useAuth } from '../../contexts/AuthContext';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 export type VatPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
@@ -29,7 +30,8 @@ export interface VatReturnData {
     };
 }
 
-export const useVatReturnData = (period: VatPeriod, customStart?: Date, customEnd?: Date) => {
+export const useVatReturnData = (period: VatPeriod, customStartStr?: string, customEndStr?: string) => {
+    const { activeBranchId, activeBranch } = useAuth();
     const [data, setData] = useState<VatReturnData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -38,18 +40,37 @@ export const useVatReturnData = (period: VatPeriod, customStart?: Date, customEn
             setLoading(true);
             try {
                 const now = new Date();
-                let start: Date, end: Date;
+                let start: Date = startOfMonth(now);
+                let end: Date = endOfMonth(now);
 
-                if (period === 'custom' && customStart && customEnd) {
-                    start = startOfDay(customStart);
-                    end = endOfDay(customEnd);
+                let safeCustomStartStr = customStartStr ? new Date(customStartStr) : undefined;
+                let safeCustomEndStr = customEndStr ? new Date(customEndStr) : undefined;
+
+                let safeCustomStart = safeCustomStartStr && !isNaN(safeCustomStartStr.getTime()) ? safeCustomStartStr : undefined;
+                let safeCustomEnd = safeCustomEndStr && !isNaN(safeCustomEndStr.getTime()) ? safeCustomEndStr : undefined;
+
+                if (period === 'custom') {
+                    if (safeCustomStart && safeCustomEnd) {
+                        if (safeCustomStart > safeCustomEnd) {
+                            start = safeCustomEnd;
+                            end = safeCustomStart;
+                        } else {
+                            start = safeCustomStart;
+                            end = safeCustomEnd;
+                        }
+                    } else if (safeCustomStart) {
+                        start = safeCustomStart;
+                        end = endOfDay(safeCustomStart);
+                    } else if (safeCustomEnd) {
+                        start = startOfDay(safeCustomEnd);
+                        end = safeCustomEnd;
+                    }
                 } else {
                     switch (period) {
                         case 'daily': start = startOfDay(now); end = endOfDay(now); break;
                         case 'weekly': start = startOfWeek(now, { weekStartsOn: 1 }); end = endOfWeek(now, { weekStartsOn: 1 }); break;
                         case 'monthly': start = startOfMonth(now); end = endOfMonth(now); break;
                         case 'yearly': start = startOfYear(now); end = endOfYear(now); break;
-                        default: start = startOfMonth(now); end = endOfMonth(now);
                     }
                 }
 
@@ -68,78 +89,89 @@ export const useVatReturnData = (period: VatPeriod, customStart?: Date, customEn
                 };
 
                 // 1. Process Invoices (Sales)
+                // RULE: Only include invoices that have taxed items (taxRate > 0)
+                // RULE: Use the invoice grandTotal as the "amount", not per-item net
                 const invoices = await db.invoices
                     .where('createdAt').between(start, end, true, true)
-                    .filter(i => i.status !== 'cancelled' && i.status !== 'draft')
+                    .and((inv: any) => (activeBranch?.isMaster || inv.branchId === activeBranchId) && inv.status !== 'cancelled' && inv.status !== 'draft' && !inv.deletedAt)
                     .toArray();
 
                 for (const inv of invoices) {
                     const isReturn = inv.type === 'return';
 
-                    for (const item of inv.items) {
-                        const amount = item.price * item.quantity;
-                        // Tax Rate: Try item level, fallback to invoice level, fallback to 0
+                    // Check if this invoice has ANY taxed items
+                    const hasTaxedItems = inv.items.some((item: any) => {
                         const rate = item.taxRate !== undefined ? item.taxRate : (inv.taxRate || 0);
-                        const vat = amount * (rate / 100);
+                        return rate > 0;
+                    });
+
+                    if (hasTaxedItems) {
+                        // Taxed Invoice → Standard Rated
+                        // Use grandTotal as the amount and taxAmount for VAT
+                        const invoiceTotal = inv.grandTotal || 0;
+                        const invoiceVat = inv.taxAmount || 0;
+                        const netAmount = Math.round((invoiceTotal - invoiceVat) * 100) / 100;
 
                         if (isReturn) {
-                            if (rate > 0) {
-                                sales.returnStandard.amount += amount;
-                                sales.returnStandard.vat += vat;
-                            } else {
-                                sales.returnZero.amount += amount;
-                                sales.returnZero.vat += vat;
-                            }
+                            sales.returnStandard.amount += netAmount;
+                            sales.returnStandard.vat += Math.round(invoiceVat * 100) / 100;
                         } else {
-                            if (rate > 0) {
-                                sales.standard.amount += amount;
-                                sales.standard.vat += vat;
-                            } else {
-                                sales.zero.amount += amount;
-                                sales.zero.vat += vat;
-                            }
+                            sales.standard.amount += netAmount;
+                            sales.standard.vat += Math.round(invoiceVat * 100) / 100;
+                        }
+                    } else {
+                        // Zero-rated invoice (no tax on any item)
+                        const invoiceTotal = inv.grandTotal || 0;
+                        if (isReturn) {
+                            sales.returnZero.amount += invoiceTotal;
+                        } else {
+                            sales.zero.amount += invoiceTotal;
                         }
                     }
                 }
 
                 // 2. Process Purchases
+                // RULE: Only include purchases where items have taxType === 'inclusive'
+                // RULE: Skip items/purchases with taxType === 'exclusive' (no input VAT to claim)
+                // RULE: Use the purchase bill totalAmount, not per-item cost
                 const purchaseRecs = await db.purchases
                     .where('date').between(start, end, true, true)
-                    .filter(p => p.status !== 'cancelled')
+                    .and((pur: any) => (activeBranch?.isMaster || pur.branchId === activeBranchId) && pur.status !== 'cancelled' && !pur.deletedAt)
                     .toArray();
-
-                // Pre-fetch all items to lookup tax rates for purchases
-                // Optimization: Only fetch items referenced in purchases if needed, but for local DB, fetching all items map is fast enough usually.
-                const allItems = await db.items.toArray();
-                const itemMap = new Map<number, number>(); // Id -> TaxRate
-                allItems.forEach(i => itemMap.set(i.id!, i.taxRate || 0));
 
                 for (const pur of purchaseRecs) {
                     if (pur.type === 'order') continue; // Exclude Orders
                     const isReturn = pur.type === 'return';
 
-                    for (const item of pur.items) {
-                        const amount = item.cost * item.quantity;
-                        // Lookup Tax Rate from Inventory Definition
-                        const rate = itemMap.get(item.itemId) || 0;
-                        const vat = amount * (rate / 100);
+                    // Check if purchase has inclusive-tax items  
+                    // (only inclusive items qualify for input VAT)
+                    const hasInclusiveItems = pur.items.some((item: any) => {
+                        const type = item.taxType || 'exclusive';
+                        const rate = item.taxRate !== undefined ? item.taxRate : 0;
+                        return type === 'inclusive' && rate > 0;
+                    });
+
+                    if (hasInclusiveItems) {
+                        // Use the total purchase bill amount
+                        const purchaseTotal = pur.totalAmount || 0;
+                        const purchaseVat = pur.taxAmount || 0;
+                        const netAmount = Math.round((purchaseTotal - purchaseVat) * 100) / 100;
 
                         if (isReturn) {
-                            if (rate > 0) {
-                                purchases.returnStandard.amount += amount;
-                                purchases.returnStandard.vat += vat;
-                            } else {
-                                purchases.returnZero.amount += amount;
-                                purchases.returnZero.vat += vat;
-                            }
+                            purchases.returnStandard.amount += netAmount;
+                            purchases.returnStandard.vat += Math.round(purchaseVat * 100) / 100;
                         } else {
-                            if (rate > 0) {
-                                purchases.standard.amount += amount;
-                                purchases.standard.vat += vat;
-                            } else {
-                                purchases.zero.amount += amount;
-                                purchases.zero.vat += vat;
-                            }
+                            purchases.standard.amount += netAmount;
+                            purchases.standard.vat += Math.round(purchaseVat * 100) / 100;
+                        }
+                    } else {
+                        // All items are exclusive or zero-rated → no input VAT claimable
+                        // Still record as zero-rated purchase for reporting completeness
+                        const purchaseTotal = pur.totalAmount || 0;
+                        if (isReturn) {
+                            purchases.returnZero.amount += purchaseTotal;
+                        } else {
+                            purchases.zero.amount += purchaseTotal;
                         }
                     }
                 }
@@ -178,7 +210,7 @@ export const useVatReturnData = (period: VatPeriod, customStart?: Date, customEn
         };
 
         fetchData();
-    }, [period, customStart, customEnd]);
+    }, [period, customStartStr, customEndStr, activeBranchId, activeBranch?.isMaster]);
 
     return { data, loading };
 };

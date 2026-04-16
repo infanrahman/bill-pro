@@ -58,12 +58,12 @@ const KeyboardShortcutsTab: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 text-slate-500">Quick Pay Modal</td>
                         </tr>
-                        {shortcuts.map(s => (
+                        {shortcuts.map((s: any) => (
                             <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 dark:text-slate-300">{s.description}</td>
                                 <td className="px-6 py-4">
                                     <div className="flex gap-1">
-                                        {s.keys.map((k, i) => (
+                                        {s.keys.map((k: any, i: any) => (
                                             <kbd key={i} className="px-2 py-1 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-xs font-mono dark:text-white">
                                                 {k}
                                             </kbd>

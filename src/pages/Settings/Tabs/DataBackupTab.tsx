@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Download, Upload, Database, AlertTriangle, CheckCircle, Clock, Folder, Cloud } from 'lucide-react';
+import { Download, Upload, Database, AlertTriangle, CheckCircle, Clock, Folder } from 'lucide-react';
 import { generateBackupData, restoreBackupData } from '../../../services/backupService';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
@@ -66,53 +66,7 @@ const DataBackupTab: React.FC = () => {
         }
     };
 
-    // Google Drive State
-    const [isGdriveConnected, setIsGdriveConnected] = useState(false);
-
-    React.useEffect(() => {
-        // Check status on mount
-        const checkStatus = async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const electron = (window as any).electron;
-            if (electron && electron.googleDrive) {
-                const status = await electron.googleDrive.getStatus();
-                setIsGdriveConnected(status);
-            }
-        };
-        checkStatus();
-    }, []);
-
-    const handleGdriveConnect = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const electron = (window as any).electron;
-        if (!electron) return;
-
-        try {
-            setLoading(true);
-            const success = await electron.googleDrive.login();
-            if (success) {
-                setIsGdriveConnected(true);
-                addToast('Connected to Google Drive', 'success');
-            } else {
-                addToast('Failed to connect', 'error');
-            }
-        } catch (e) {
-            console.error(e);
-            addToast('Connection failed', 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleGdriveDisconnect = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const electron = (window as any).electron;
-        if (!electron) return;
-
-        await electron.googleDrive.logout();
-        setIsGdriveConnected(false);
-        addToast('Disconnected from Google Drive', 'info');
-    };
+    // Cloud Drive removed as per request
 
     const [pendingFile, setPendingFile] = useState<File | null>(null);
 
@@ -162,31 +116,7 @@ const DataBackupTab: React.FC = () => {
         }
     };
 
-    // Google Drive Config State
-    const [driveConfig, setDriveConfig] = useState({ clientId: '', clientSecret: '', redirectUri: 'http://localhost:3000/oauth2callback' });
-    const [showConfig, setShowConfig] = useState(false);
-
-    React.useEffect(() => {
-        const loadConfig = async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const electron = (window as any).electron;
-            if (electron && electron.googleDrive && isAdmin) {
-                const config = await electron.googleDrive.getConfig();
-                if (config) setDriveConfig(config);
-            }
-        };
-        loadConfig();
-    }, [isAdmin]);
-
-    const handleSaveDriveConfig = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const electron = (window as any).electron;
-        if (electron && electron.googleDrive) {
-            await electron.googleDrive.setConfig(driveConfig);
-            addToast('Google Drive Settings Saved', 'success');
-            setShowConfig(false);
-        }
-    };
+    // Drive configuration removed
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -299,93 +229,6 @@ const DataBackupTab: React.FC = () => {
                         >
                             <Folder size={20} />
                         </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Google Drive Section */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3 text-green-600 dark:text-green-400">
-                        <Cloud size={24} />
-                        <h3 className="font-bold text-lg">Google Drive Backup</h3>
-                    </div>
-                    {isAdmin && (
-                        <button
-                            onClick={() => setShowConfig(!showConfig)}
-                            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
-                        >
-                            {showConfig ? 'Hide Config' : 'Configure Keys'}
-                        </button>
-                    )}
-                </div>
-
-                {isAdmin && showConfig && (
-                    <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                        <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">Admin Configuration</h4>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1">Client ID</label>
-                            <input
-                                type="text"
-                                className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
-                                value={driveConfig.clientId}
-                                onChange={e => setDriveConfig({ ...driveConfig, clientId: e.target.value })}
-                                placeholder="Enter Google Client ID"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1">Client Secret</label>
-                            <input
-                                type="password"
-                                className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
-                                value={driveConfig.clientSecret}
-                                onChange={e => setDriveConfig({ ...driveConfig, clientSecret: e.target.value })}
-                                placeholder="Enter Google Client Secret"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 mb-1">Redirect URI</label>
-                            <input
-                                type="text"
-                                className="w-full p-2 text-sm border rounded dark:bg-slate-800 dark:border-slate-600"
-                                value={driveConfig.redirectUri}
-                                onChange={e => setDriveConfig({ ...driveConfig, redirectUri: e.target.value })}
-                                placeholder="Default: http://localhost:3000/oauth2callback"
-                            />
-                            <p className="text-[10px] text-slate-400 mt-1">Must match 'Authorized redirect URI' in Google Console.</p>
-                        </div>
-                        <button
-                            onClick={handleSaveDriveConfig}
-                            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
-                        >
-                            Save Credentials
-                        </button>
-                    </div>
-                )}
-
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="text-sm text-slate-600 dark:text-slate-400">
-                        {isGdriveConnected
-                            ? "Connected. Your backups will be synced."
-                            : "Connect your Google Account to enable cloud backups."}
-                    </div>
-                    <div>
-                        {isGdriveConnected ? (
-                            <button
-                                onClick={handleGdriveDisconnect}
-                                className="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 font-medium transition-colors"
-                            >
-                                Disconnect
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleGdriveConnect}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition-colors shadow-sm shadow-green-200 flex items-center gap-2"
-                            >
-                                <Cloud size={18} />
-                                Connect Google Drive
-                            </button>
-                        )}
                     </div>
                 </div>
             </div>

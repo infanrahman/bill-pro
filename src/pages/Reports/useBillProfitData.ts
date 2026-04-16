@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../services/db';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
 
 
 export type DateRange = 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export interface BillProfitRow {
-    id: number;
+    id: string;
     invoiceNumber: string;
     date: Date;
     customerName: string;
@@ -17,7 +18,8 @@ export interface BillProfitRow {
     marginPercent: number;
 }
 
-export const useBillProfitData = (range: DateRange, customStart?: Date, customEnd?: Date) => {
+export const useBillProfitData = (range: DateRange, customStartStr?: string, customEndStr?: string) => {
+    const { activeBranchId, activeBranch } = useAuth();
     const [data, setData] = useState<BillProfitRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [totals, setTotals] = useState({
@@ -30,11 +32,32 @@ export const useBillProfitData = (range: DateRange, customStart?: Date, customEn
         const fetchData = async () => {
             setLoading(true);
             const now = new Date();
-            let start: Date, end: Date;
+            let start: Date = startOfDay(now);
+            let end: Date = endOfDay(now);
 
-            if (range === 'custom' && customStart && customEnd) {
-                start = startOfDay(customStart);
-                end = endOfDay(customEnd);
+            let customStart = customStartStr ? new Date(customStartStr) : undefined;
+            let customEnd = customEndStr ? new Date(customEndStr) : undefined;
+
+            // Safely parse custom dates
+            let safeCustomStart = customStart && !isNaN(customStart.getTime()) ? customStart : undefined;
+            let safeCustomEnd = customEnd && !isNaN(customEnd.getTime()) ? customEnd : undefined;
+
+            if (range === 'custom') {
+                if (safeCustomStart && safeCustomEnd) {
+                    if (safeCustomStart > safeCustomEnd) {
+                        start = startOfDay(safeCustomEnd);
+                        end = endOfDay(safeCustomStart);
+                    } else {
+                        start = startOfDay(safeCustomStart);
+                        end = endOfDay(safeCustomEnd);
+                    }
+                } else if (safeCustomStart) {
+                    start = startOfDay(safeCustomStart);
+                    end = endOfDay(safeCustomStart);
+                } else if (safeCustomEnd) {
+                    start = startOfDay(safeCustomEnd);
+                    end = endOfDay(safeCustomEnd);
+                }
             } else {
                 switch (range) {
                     case 'today':
@@ -53,47 +76,46 @@ export const useBillProfitData = (range: DateRange, customStart?: Date, customEn
                         start = startOfYear(now);
                         end = endOfYear(now);
                         break;
-                    default:
-                        start = startOfDay(now);
-                        end = endOfDay(now);
                 }
             }
 
             try {
+                // Fetch Items to get COGS
+                const allItemsQuery = activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId);
+                const allItems = await (allItemsQuery as any).filter((i: any) => !i.deletedAt).toArray();
+                const itemCostMap = new Map<string, number>();
+                allItems.forEach((item: any) => {
+                    if (item.id) itemCostMap.set(item.id, item.purchasePrice || 0);
+                });
+
                 // Fetch Invoices
                 const invoices = await db.invoices
                     .where('createdAt')
                     .between(start, end, true, true)
-                    .reverse()
+                    .and((inv: any) => (activeBranch?.isMaster || inv.branchId === activeBranchId) && !inv.deletedAt)
                     .toArray();
 
-                // Fetch Items for Cost
-                const allItems = await db.items.toArray();
-                const itemCostMap = new Map<number, number>();
-                allItems.forEach(item => {
-                    if (item.id) itemCostMap.set(item.id, item.purchasePrice || 0);
-                });
-
-                const validInvoices = invoices.filter(inv => inv.status !== 'cancelled' && inv.status !== 'draft');
+                const validInvoices = invoices.filter((inv: any) => inv.status !== 'cancelled' && inv.status !== 'draft');
 
                 let totalSales = 0;
                 let totalCost = 0;
                 let totalProfit = 0;
 
-                const rows: BillProfitRow[] = validInvoices.map(inv => {
+                const rows: BillProfitRow[] = validInvoices.map((inv: any) => {
                     const isReturn = inv.type === 'return';
                     const multiplier = isReturn ? -1 : 1;
 
                     // Calculate Cost
                     let invoiceCost = 0;
-                    inv.items.forEach(item => {
-                        const cost = itemCostMap.get(item.itemId) || 0;
+                    inv.items.forEach((item: any) => {
+                        // Priority: 1. Item-level stored cost, 2. Item-level defined cost, 3. Inventory current cost
+                        const cost = item.purchasePrice !== undefined 
+                            ? item.purchasePrice 
+                            : (item.cost !== undefined ? item.cost : (itemCostMap.get(item.itemId) || 0));
                         invoiceCost += (cost * item.quantity);
                     });
 
-                    // Net Sales = GrandTotal - TaxAmount
-                    // We use grandTotal because subTotal logic varies (inclusive vs exclusive)
-                    // But accurate Net is (Grand - Tax).
+                    // Net Sales = GrandTotal - TaxAmount (Always accurate regardless of inclusive/exclusive)
                     const netSales = (inv.grandTotal - (inv.taxAmount || 0));
 
                     const profit = (netSales - invoiceCost) * multiplier;
@@ -135,7 +157,7 @@ export const useBillProfitData = (range: DateRange, customStart?: Date, customEn
         };
 
         fetchData();
-    }, [range, customStart, customEnd]);
+    }, [range, customStartStr, customEndStr, activeBranchId, activeBranch?.isMaster]);
 
     return { data, loading, totals };
 };

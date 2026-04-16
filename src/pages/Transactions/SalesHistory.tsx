@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { db, type Invoice } from '../../services/db';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Dexie from 'dexie';
+import { db, type Invoice, softDeleteMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search, Printer, Download, Trash2, RotateCcw, Eye } from 'lucide-react';
+import { Search, Printer, Download, Trash2, RotateCcw, Eye, ShieldCheck, ShieldAlert, Clock, CreditCard } from 'lucide-react';
 import { generateInvoicePDF } from '../../services/invoiceGenerator';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -21,9 +23,20 @@ interface SalesHistoryProps {
 
 const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const { addToast } = useNotification();
-    const { isAdmin, hasPermission } = useAuth();
+    const { isAdmin, hasPermission, activeBranchId, activeBranch } = useAuth();
     const { formatCurrency, formatDate, settings } = useSettings();
+
+    // Check if ZATCA is enabled (LIVE or COMPLIANCE_OBTAINED)
+    const isZatcaEnabled = useMemo(() => {
+        try {
+            const cfg = localStorage.getItem('zatca_config');
+            if (!cfg) return false;
+            const { status } = JSON.parse(cfg);
+            return status === 'LIVE' || status === 'COMPLIANCE_OBTAINED';
+        } catch { return false; }
+    }, []);
 
     // Pagination & Filter State
     const [search, setSearch] = useState('');
@@ -41,72 +54,60 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
         setCurrentPage(1);
     }, [search, startDate, endDate, pageSize]);
 
-    // Query Logic
-    const getQuery = () => {
-        let collection = db.invoices.orderBy('createdAt').reverse();
+    // ==========================================
+    // OPTIMIZED QUERY: Single fetch, client-side pagination
+    // Uses the compound index [branchId+createdAt] for efficient retrieval
+    // ==========================================
+    const allFilteredInvoices = useLiveQuery(async () => {
+        // Step 1: Use the compound index for branch-scoped, date-ordered query
+        let collection;
+        if (activeBranch?.isMaster) {
+            // Master branch sees all — use createdAt index for ordering
+            collection = db.invoices.orderBy('createdAt').reverse();
+        } else {
+            // Non-master: use compound index [branchId+createdAt]
+            collection = db.invoices
+                .where('[branchId+createdAt]')
+                .between(
+                    [activeBranchId, Dexie.minKey],
+                    [activeBranchId, Dexie.maxKey]
+                )
+                .reverse();
+        }
 
-        return collection.filter(inv => {
-            // Apply Filters
-            if (activeTabFilter(inv) === false) return false;
+        // Step 2: Apply filters in a single pass
+        const searchLower = search.toLowerCase();
+        const startDateTime = startDate ? new Date(startDate).getTime() : 0;
+        const endDateTime = endDate ? new Date(endDate).getTime() : Infinity;
 
-            const customerName = inv.customerName || '';
-            const invoiceNumber = inv.invoiceNumber || '';
+        return collection.filter((inv: any) => {
+            // Skip soft-deleted records
+            if (inv.deletedAt) return false;
 
-            // Search
-            const matchesSearch = !search ||
-                customerName.toLowerCase().includes(search.toLowerCase()) ||
-                invoiceNumber.toLowerCase().includes(search.toLowerCase());
-            if (!matchesSearch) return false;
+            // Date range filter (use timestamps for fast comparison)
+            const invTime = new Date(inv.createdAt).getTime();
+            if (invTime < startDateTime || invTime > endDateTime) return false;
 
-            // Date Range
-            if (startDate) {
-                const invDate = new Date(inv.createdAt);
-                const start = new Date(startDate);
-                invDate.setHours(0, 0, 0, 0);
-                start.setHours(0, 0, 0, 0);
-                if (invDate < start) return false;
-            }
-            if (endDate) {
-                const invDate = new Date(inv.createdAt);
-                const end = new Date(endDate);
-                invDate.setHours(0, 0, 0, 0);
-                end.setHours(0, 0, 0, 0);
-                if (invDate > end) return false;
+            // Search filter
+            if (searchLower) {
+                const name = (inv.customerName || '').toLowerCase();
+                const num = (inv.invoiceNumber || '').toLowerCase();
+                if (!name.includes(searchLower) && !num.includes(searchLower)) return false;
             }
 
             return true;
-        });
-    };
+        }).toArray();
+    }, [search, startDate, endDate, activeBranchId, activeBranch?.isMaster]);
 
-    // Hard filter for 'invoice' type since this component is for Sales History
-    const activeTabFilter = (_inv: Invoice) => {
-        // Usually SalesHistory shows all, or just type='invoice' ?
-        // The previous code filtered by activeTab in Sales.tsx (parent), but here in SalesHistory
-        // it loaded ALL invoices. The parent Sales.tsx only conditionally rendered SalesHistory.
-        // Let's assume SalesHistory is for ALL Invoices + Returns if mixed, or just Invoices.
-        // Based on previous code: `db.invoices.orderBy('createdAt').reverse().toArray()`
-        // It loaded everything. But Filter logic had:
-        // `const filteredInvoices = invoices?.filter(inv => ...)`
-        // It didn't filter by type explicitly in the filter function?
-        // Ah, the parent renders it when `activeTab === 'invoice'`.
-        // Let's stick to showing all for now but usually we might want to hide 'drafts' etc.
-        return true;
-    };
-
-    // Count Total Items (for pagination)
-    const totalItems = useLiveQuery(async () => {
-        return await getQuery().count();
-    }, [search, startDate, endDate]) || 0;
-
-    // Fetch Paginated Data
-    const filteredInvoices = useLiveQuery(async () => {
-        return await getQuery()
-            .offset((currentPage - 1) * pageSize)
-            .limit(pageSize)
-            .toArray();
-    }, [search, startDate, endDate, currentPage, pageSize]);
-
+    // Client-side pagination (instant page switching, no re-query)
+    const totalItems = allFilteredInvoices?.length || 0;
     const totalPages = Math.ceil(totalItems / pageSize);
+
+    const filteredInvoices = useMemo(() => {
+        if (!allFilteredInvoices) return undefined;
+        const start = (currentPage - 1) * pageSize;
+        return allFilteredInvoices.slice(start, start + pageSize);
+    }, [allFilteredInvoices, currentPage, pageSize]);
 
 
     const printInvoice = (invoice: Invoice) => {
@@ -121,10 +122,10 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
     };
 
     // Delete Confirmation State
-    const [invoiceToDelete, setInvoiceToDelete] = useState<number | null>(null);
+    const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const handleDeleteClick = (id: number, e: React.MouseEvent) => {
+    const handleDeleteClick = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setInvoiceToDelete(id);
     };
@@ -133,7 +134,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
         if (invoiceToDelete) {
             setIsDeleting(true);
             try {
-                await db.invoices.delete(invoiceToDelete);
+                await db.invoices.update(invoiceToDelete, softDeleteMetadata());
                 addToast(t('transactions.invoice_deleted'), 'success');
             } catch (error) {
                 console.error(error);
@@ -146,23 +147,16 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
     };
 
     const handleExportExcel = async () => {
-        // For export, we might want ALL matching records, not just the current page.
-        // BUT caution with 1TB data. 
-        // Let's provide an export of "Current filtered view" (all matching filters).
-        // If user has no filters, this might still be heavy.
-        // Ideally export should be a separate worker or process.
-        // For now, let's fetch matching items (maybe with a sane limit like 1000 or 5000?)
-
         try {
-            // Fetch all matching filters
-            const dataToExport = await getQuery().toArray(); // WARNING: Heavy if no filters
+            // Use the already-filtered data instead of re-querying
+            const dataToExport = allFilteredInvoices || [];
 
             if (dataToExport.length === 0) {
                 addToast(t('common.no_records'), 'info');
                 return;
             }
 
-            const data = dataToExport.map(inv => ({
+            const data = dataToExport.map((inv: any) => ({
                 [t('transactions.invoice_no')]: inv.invoiceNumber,
                 [t('transactions.date')]: formatDate(inv.createdAt),
                 [t('transactions.customer')]: inv.customerName,
@@ -202,7 +196,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
                     <div className="flex flex-col">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('transactions.from')}</label>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -211,7 +205,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
                     <div className="flex flex-col">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('transactions.to')}</label>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -232,98 +226,135 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
-                        <tr>
-                            <th className="p-4 font-medium">{t('transactions.invoice_no')}</th>
-                            <th className="p-4 font-medium">{t('transactions.date')}</th>
-                            <th className="p-4 font-medium">{t('transactions.customer')}</th>
-                            <th className="p-4 font-medium">{t('transactions.amount')}</th>
-                            <th className="p-4 font-medium">{t('transactions.payment')}</th>
-                            <th className="p-4 font-medium">{t('transactions.actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {filteredInvoices?.map((inv) => (
-                            <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                                <td className="p-4 font-mono text-sm dark:text-slate-300">{inv.invoiceNumber}</td>
-                                <td className="p-4 dark:text-slate-300">{formatDate(inv.createdAt)}</td>
-                                <td className="p-4 font-medium dark:text-white">{inv.customerName}</td>
-                                <td className="p-4 font-bold text-slate-800 dark:text-white">{formatCurrency(inv.grandTotal)}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-semibold uppercase 
-                                        ${inv.type === 'return' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
-                                            inv.paymentMode ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-slate-100'}`}>
-                                        {inv.type === 'return' ? t('common.return') : t(`payment.${inv.paymentMode}`) || inv.paymentMode}
-                                    </span>
-                                </td>
-                                <td className="p-4 flex gap-2">
-                                    <button
-                                        onClick={() => setViewInvoice(inv)}
-                                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                        title={t('transactions.view_details')}
-                                    >
-                                        <Eye size={18} />
-                                    </button>
-                                    {hasPermission('sales_manage') && inv.type !== 'return' && (
-                                        <button
-                                            onClick={() => onReturn && onReturn(inv)}
-                                            className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
-                                            title="Return"
-                                        >
-                                            <RotateCcw size={18} />
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => printInvoice(inv)}
-                                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                        title={t('transactions.print_invoice')}
-                                    >
-                                        <Printer size={18} />
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            const saved = localStorage.getItem('businessDetails');
-                                            const business = saved ? JSON.parse(saved) : { name: 'My Shop' };
-                                            import('../../services/invoiceGenerator').then(m => {
-                                                m.downloadInvoicePDF(inv, business).then(success => {
-                                                    if (success) addToast(t('transactions.download_success'), 'success');
-                                                    else addToast(t('transactions.download_failed'), 'info');
-                                                });
-                                            });
-                                        }}
-                                        className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                        title={t('transactions.download_pdf')}
-                                    >
-                                        <Download size={18} />
-                                    </button>
-                                    {settings.enableSharing && (
-                                        <button
-                                            onClick={() => {
-                                                setSelectedInvoiceForShare(inv);
-                                                setShareModalOpen(true);
-                                            }}
-                                            className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                            title="Share"
-                                        >
-                                            <Send size={18} />
-                                        </button>
-                                    )}
-                                    {/* Delete: Admin OR sales_manage */}
-                                    {(isAdmin || hasPermission('sales_manage')) && (
-                                        <button
-                                            onClick={(e) => handleDeleteClick(inv.id!, e)}
-                                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                            title={t('transactions.delete_invoice')}
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="p-4 font-semibold">{t('transactions.invoice_no')}</th>
+                                <th className="p-4 font-semibold">{t('transactions.date')}</th>
+                                <th className="p-4 font-semibold">{t('transactions.customer')}</th>
+                                <th className="p-4 font-semibold">{t('transactions.amount')}</th>
+                                <th className="p-4 font-semibold">{t('transactions.payment')}</th>
+                                {isZatcaEnabled && <th className="p-4 font-semibold">ZATCA</th>}
+                                <th className="p-4 font-semibold text-right">{t('transactions.actions')}</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {filteredInvoices?.map((inv: any) => (
+                                <tr key={inv.id} className="group hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors">
+                                    <td className="p-4 font-mono text-sm dark:text-slate-300">{inv.invoiceNumber}</td>
+                                    <td className="p-4 dark:text-slate-300 text-sm">{formatDate(inv.createdAt)}</td>
+                                    <td className="p-4 font-medium dark:text-white text-sm">{inv.customerName}</td>
+                                    <td className="p-4 font-bold text-slate-800 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1.5 rounded-md text-xs font-semibold uppercase border
+                                        ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
+                                                (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
+                                                    inv.paymentMode ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+                                            {inv.type === 'return' 
+                                                ? t('common.return') 
+                                                : (settings.cafeMode && inv.paymentStatus !== 'paid') 
+                                                    ? 'Pending' 
+                                                    : t(`payment.${inv.paymentMode}`) || inv.paymentMode}
+                                        </span>
+                                    </td>
+                                    {isZatcaEnabled && (
+                                        <td className="p-4">
+                                            {inv.zatcaStatus === 'REPORTED' ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                    <ShieldCheck size={12} /> Reported
+                                                </span>
+                                            ) : inv.zatcaStatus === 'ERROR' ? (
+                                                <span 
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
+                                                    title={inv.zatcaError || 'Validation Error'}
+                                                >
+                                                    <ShieldAlert size={12} /> Error
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600">
+                                                    <Clock size={12} /> Pending
+                                                </span>
+                                            )}
+                                        </td>
+                                    )}
+                                    <td className="p-4 flex gap-2 justify-end">
+                                        <button
+                                            onClick={() => setViewInvoice(inv)}
+                                            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title={t('transactions.view_details')}
+                                        >
+                                            <Eye size={18} />
+                                        </button>
+                                        {settings.cafeMode && inv.paymentStatus !== 'paid' && inv.type !== 'return' && (
+                                            <button
+                                                onClick={() => navigate('/pos', { state: { editInvoice: inv } })}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                                title="Proceed to Payment"
+                                            >
+                                                <CreditCard size={18} />
+                                            </button>
+                                        )}
+                                        {hasPermission('sales_edit') && inv.type !== 'return' && (
+                                            <button
+                                                onClick={() => onReturn && onReturn(inv)}
+                                                className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
+                                                title="Return"
+                                            >
+                                                <RotateCcw size={18} />
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => printInvoice(inv)}
+                                            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title={t('transactions.print_invoice')}
+                                        >
+                                            <Printer size={18} />
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                const saved = localStorage.getItem('businessDetails');
+                                                const business = saved ? JSON.parse(saved) : { name: 'My Shop' };
+                                                import('../../services/invoiceGenerator').then(m => {
+                                                    m.downloadInvoicePDF(inv, business).then(success => {
+                                                        if (success) addToast(t('transactions.download_success'), 'success');
+                                                        else addToast(t('transactions.download_failed'), 'info');
+                                                    });
+                                                });
+                                            }}
+                                            className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                            title={t('transactions.download_pdf')}
+                                        >
+                                            <Download size={18} />
+                                        </button>
+                                        {settings.enableSharing && (
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedInvoiceForShare(inv);
+                                                    setShareModalOpen(true);
+                                                }}
+                                                className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                                title="Share"
+                                            >
+                                                <Send size={18} />
+                                            </button>
+                                        )}
+                                        {/* Delete: Admin OR sales_delete */}
+                                        {(isAdmin || hasPermission('sales_delete')) && (
+                                            <button
+                                                onClick={(e) => handleDeleteClick(inv.id!, e)}
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                title={t('transactions.delete_invoice')}
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
 
                 <Pagination
                     currentPage={currentPage}

@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Save } from 'lucide-react';
 import Modal from '../../components/UI/Modal';
 import { useNotification } from '../../contexts/NotificationContext';
-import { db } from '../../services/db';
-import type { Customer } from '../../services/db';
+import { db, type Customer, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useTranslation } from 'react-i18next';
 
 interface CustomerFormProps {
@@ -19,7 +18,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
         phone: '',
         email: '',
         address: '',
-        totalSpent: 0
+        totalSpent: 0,
+        loyaltyPoints: 0
     });
     const { addToast } = useNotification();
 
@@ -27,7 +27,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
         e.preventDefault();
         try {
             if (customer?.id) {
-                await db.customers.update(customer.id, formData);
+                await db.customers.update(customer.id, { ...formData, ...updateRecordMetadata() });
                 addToast(t('customers.update_success'), 'success');
             } else {
                 // Check duplicates by phone
@@ -39,7 +39,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
                         return;
                     }
                 }
-                await db.customers.add(formData as Customer);
+                await db.customers.add({ ...formData, ...createRecordMetadata() } as Customer);
                 addToast(t('customers.add_success'), 'success');
             }
             onSave();
@@ -102,6 +102,16 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
                         rows={2}
                         value={formData.address || ''}
                         onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.loyalty_points', { defaultValue: 'Loyalty Points' })}</label>
+                    <input
+                        type="number"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-800 dark:text-white"
+                        value={formData.loyaltyPoints || 0}
+                        onChange={(e) => setFormData({ ...formData, loyaltyPoints: parseInt(e.target.value) || 0 })}
                     />
                 </div>
 

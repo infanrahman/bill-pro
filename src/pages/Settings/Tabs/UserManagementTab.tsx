@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { db, type User } from '../../../services/db';
+import { db, type User, softDeleteMetadata, createRecordMetadata } from '../../../services/db';
 import { useAuth, PERMISSIONS } from '../../../contexts/AuthContext';
 import Modal from '../../../components/UI/Modal';
 import ConfirmationModal from '../../../components/UI/ConfirmationModal';
 import { useNotification } from '../../../contexts/NotificationContext';
-import { Plus, Edit2, Trash2, Shield, User as UserIcon, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, User as UserIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const UserManagementTab: React.FC = () => {
@@ -28,7 +28,9 @@ const UserManagementTab: React.FC = () => {
 
     const loadUsers = async () => {
         try {
-            const allUsers = await db.users.toArray();
+            const allUsers = await db.users
+                .filter((u: any) => !u.deletedAt)
+                .toArray();
             setUsers(allUsers);
         } catch (error) {
             console.error("Failed to load users", error);
@@ -71,17 +73,37 @@ const UserManagementTab: React.FC = () => {
     const handlePermissionToggle = (permissionId: string) => {
         setFormData(prev => {
             const currentPermissions = prev.permissions || [];
+            let newPermissions = [...currentPermissions];
+
             if (currentPermissions.includes(permissionId)) {
-                return {
-                    ...prev,
-                    permissions: currentPermissions.filter(p => p !== permissionId)
-                };
+                // Remove
+                newPermissions = newPermissions.filter((p: any) => p !== permissionId);
+                
+                // Logic: If disabling 'View', also disable associated CRUD permissions
+                if (permissionId === 'inventory_view') newPermissions = newPermissions.filter((p: any) => !['inventory_add', 'inventory_edit', 'inventory_delete'].includes(p));
+                if (permissionId === 'sales_view') newPermissions = newPermissions.filter((p: any) => !['sales_add', 'sales_edit', 'sales_delete'].includes(p));
+                if (permissionId === 'purchases_view') newPermissions = newPermissions.filter((p: any) => !['purchases_add', 'purchases_edit', 'purchases_delete'].includes(p));
+                if (permissionId === 'customers_view') newPermissions = newPermissions.filter((p: any) => !['customers_add', 'customers_edit', 'customers_delete'].includes(p));
+                if (permissionId === 'suppliers_view') newPermissions = newPermissions.filter((p: any) => !['suppliers_add', 'suppliers_edit', 'suppliers_delete'].includes(p));
+                if (permissionId === 'expenses_view') newPermissions = newPermissions.filter((p: any) => !['expenses_add', 'expenses_edit', 'expenses_delete'].includes(p));
+
             } else {
-                return {
-                    ...prev,
-                    permissions: [...currentPermissions, permissionId]
-                };
+                // Add
+                newPermissions.push(permissionId);
+                
+                // Logic: If enabling CRUD, implicitly enable 'View'
+                if (['inventory_add', 'inventory_edit', 'inventory_delete'].includes(permissionId) && !newPermissions.includes('inventory_view')) newPermissions.push('inventory_view');
+                if (['sales_add', 'sales_edit', 'sales_delete'].includes(permissionId) && !newPermissions.includes('sales_view')) newPermissions.push('sales_view');
+                if (['purchases_add', 'purchases_edit', 'purchases_delete'].includes(permissionId) && !newPermissions.includes('purchases_view')) newPermissions.push('purchases_view');
+                if (['customers_add', 'customers_edit', 'customers_delete'].includes(permissionId) && !newPermissions.includes('customers_view')) newPermissions.push('customers_view');
+                if (['suppliers_add', 'suppliers_edit', 'suppliers_delete'].includes(permissionId) && !newPermissions.includes('suppliers_view')) newPermissions.push('suppliers_view');
+                if (['expenses_add', 'expenses_edit', 'expenses_delete'].includes(permissionId) && !newPermissions.includes('expenses_view')) newPermissions.push('expenses_view');
             }
+
+            return {
+                ...prev,
+                permissions: newPermissions
+            };
         });
     };
 
@@ -120,6 +142,7 @@ const UserManagementTab: React.FC = () => {
                 }
 
                 await db.users.add({
+                    ...createRecordMetadata(),
                     name: formData.name!,
                     username: formData.username!,
                     password: formData.password!,
@@ -150,7 +173,7 @@ const UserManagementTab: React.FC = () => {
         if (!userToDeleteState) return;
 
         try {
-            await db.users.delete(userToDeleteState.id!);
+            await db.users.update(userToDeleteState.id!, softDeleteMetadata());
             addToast(t('users.delete_success'), 'success');
             loadUsers();
         } catch (error) {
@@ -159,6 +182,54 @@ const UserManagementTab: React.FC = () => {
             setUserToDeleteState(null);
         }
     };
+
+    const renderToggle = (id: string, label: string) => {
+        const isSelected = formData.permissions?.includes(id);
+        return (
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-300 transition-colors cursor-pointer" onClick={() => handlePermissionToggle(id)}>
+                <span className={`text-sm font-medium select-none ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+                    {label}
+                </span>
+                <div className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${isSelected ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-600'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isSelected ? 'translate-x-2' : '-translate-x-2'}`} />
+                </div>
+            </div>
+        );
+    };
+
+    const renderMiniToggle = (id: string, label: string) => {
+        const isSelected = formData.permissions?.includes(id);
+        return (
+            <div
+                className={`flex flex-col items-center gap-1 p-2 rounded-lg cursor-pointer transition-all select-none ${
+                    isSelected
+                        ? 'bg-blue-600/10 dark:bg-blue-500/20 ring-1 ring-blue-500'
+                        : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                onClick={() => handlePermissionToggle(id)}
+            >
+                <span className={`text-[10px] font-bold uppercase tracking-wide ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                    {label}
+                </span>
+                <div className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                    isSelected ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                }`}>
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        isSelected ? 'translate-x-3.5' : 'translate-x-0.5'
+                    }`} />
+                </div>
+            </div>
+        );
+    };
+
+    const renderCrudRow = (prefix: string) => (
+        <div className="grid grid-cols-4 gap-1.5">
+            {renderMiniToggle(`${prefix}_view`, 'View')}
+            {renderMiniToggle(`${prefix}_add`, 'Add')}
+            {renderMiniToggle(`${prefix}_edit`, 'Edit')}
+            {renderMiniToggle(`${prefix}_delete`, 'Del')}
+        </div>
+    );
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -178,7 +249,7 @@ const UserManagementTab: React.FC = () => {
 
             {/* Users List */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {users.map(u => (
+                {users.map((u: any) => (
                     <div key={u.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start mb-4">
@@ -220,7 +291,7 @@ const UserManagementTab: React.FC = () => {
                                     <div className="mt-3">
                                         <span className="font-medium text-slate-500 dark:text-slate-500 block text-xs mb-2">{t('users.permissions')}</span>
                                         <div className="flex flex-wrap gap-2">
-                                            {u.permissions?.length ? u.permissions.map(p => (
+                                            {u.permissions?.length ? u.permissions.map((p: any) => (
                                                 <span key={p} className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md border border-slate-200 dark:border-slate-600">
                                                     {PERMISSIONS.find(perm => perm.id === p)?.label || p}
                                                 </span>
@@ -241,7 +312,7 @@ const UserManagementTab: React.FC = () => {
                 onClose={handleCloseModal}
                 title={editingUser ? t('users.edit_user') : t('users.new_user')}
             >
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -295,27 +366,86 @@ const UserManagementTab: React.FC = () => {
 
                         {/* Permissions Section - Only for non-admin */}
                         {formData.role !== 'admin' && (
-                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">{t('users.permissions')}</label>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {PERMISSIONS.map(perm => {
-                                        const isSelected = formData.permissions?.includes(perm.id);
-                                        return (
-                                            <div
-                                                key={perm.id}
-                                                onClick={() => handlePermissionToggle(perm.id)}
-                                                className={`cursor-pointer px-3 py-2 rounded-lg border transition-all flex items-center justify-between ${isSelected
-                                                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700'
-                                                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-300'
-                                                    }`}
-                                            >
-                                                <span className={`text-sm ${isSelected ? 'text-blue-700 dark:text-blue-300 font-medium' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                    {perm.label}
-                                                </span>
-                                                {isSelected && <Check size={16} className="text-blue-600 dark:text-blue-400" />}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-5 mt-4">
+                                <label className="block text-base font-bold text-slate-800 dark:text-white mb-4">{t('users.permissions')}</label>
+                                <div className="space-y-4">
+                                    
+                                    {/* Core Operations */}
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Core Operations</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {renderToggle('pos_access', 'POS Terminal')}
+                                            {renderToggle('reports_view', 'Reports & Analysis')}
+                                            {renderToggle('cashbook_access', 'Cash Book')}
+                                        </div>
+                                    </div>
+
+                                    {/* Inventory & Financials */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Inventory</h4>
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Items</p>
+                                                {renderCrudRow('inventory')}
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Sales</h4>
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Invoices</p>
+                                                {renderCrudRow('sales')}
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Purchases</h4>
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Orders</p>
+                                                {renderCrudRow('purchases')}
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Expenses</h4>
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Records</p>
+                                                {renderCrudRow('expenses')}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* People & Admin */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">People</h4>
+                                            <div className="space-y-3">
+                                                <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Customers</p>
+                                                    {renderCrudRow('customers')}
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Suppliers</p>
+                                                    {renderCrudRow('suppliers')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">Administration</h4>
+                                            <div className="space-y-3">
+                                                {renderToggle('users_manage', 'User Management')}
+                                                {renderToggle('settings_backup', 'Data Backups')}
+                                                <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                                                    <span className="text-xs font-bold text-slate-500 uppercase mb-2 block">Settings Tabs</span>
+                                                    <div className="grid grid-cols-3 gap-1.5">
+                                                        {renderMiniToggle('settings_general', 'General')}
+                                                        {renderMiniToggle('settings_taxes', 'Taxes')}
+                                                        {renderMiniToggle('settings_invoice', 'Invoice')}
+                                                        {renderMiniToggle('settings_printers', 'Printers')}
+                                                        {renderMiniToggle('settings_backup', 'Backup')}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         )}

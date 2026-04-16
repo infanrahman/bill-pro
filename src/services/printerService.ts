@@ -17,12 +17,12 @@ export const getPrinters = async (): Promise<any[]> => {
 
 export const printContent = async (html: string, config: Partial<PrinterConfig> = {}) => {
     const defaultOptions = {
-        printerName: config.selectedPrinter || '',
+        printerName: config.selectedPrinter || undefined, // Use undefined for system default
         silent: config.silent ?? true, // Default to silent if not specified
         copies: config.copies || 1,
         pageSize: config.pageSize === 'thermal' ? '80mm' : (config.pageSize || 'A4'),
         landscape: config.orientation === 'landscape',
-        margins: config.margins || (config.pageSize === 'thermal' ? { marginType: 'none' } : { marginType: 'printableArea' })
+        margins: config.margins || (config.pageSize === 'thermal' || config.pageSize === '80mm' ? { marginType: 'none' } : { marginType: 'printableArea' })
     };
 
     if (window.electron && window.electron.print) {

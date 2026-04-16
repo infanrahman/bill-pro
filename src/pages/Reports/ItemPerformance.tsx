@@ -55,8 +55,8 @@ const ItemPerformance: React.FC<Props> = ({ data, loading, totals }) => {
                     <h3 className="font-semibold text-slate-800 dark:text-white">{t('reports.item_performance')}</h3>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700">
+                    <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                             <tr>
                                 <th className="px-4 py-3">{t('inventory.item_name')}</th>
                                 <th className="px-4 py-3 text-center">{t('reports.opening')}</th>
@@ -71,17 +71,17 @@ const ItemPerformance: React.FC<Props> = ({ data, loading, totals }) => {
                             {loading ? (
                                 <tr><td colSpan={7} className="text-center py-8">{t('common.loading')}</td></tr>
                             ) : data.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center py-8">{t('reports.no_records')}</td></tr>
+                                <tr><td colSpan={7} className="text-center py-8 text-slate-500">{t('reports.no_records')}</td></tr>
                             ) : (
-                                data.map(row => (
-                                    <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-white">{row.name}</td>
-                                        <td className="px-4 py-3 text-center text-slate-500">{row.openingStock}</td>
-                                        <td className="px-4 py-3 text-center text-blue-600 bg-blue-50/50 dark:bg-blue-900/10">+{row.qtyIn}</td>
-                                        <td className="px-4 py-3 text-center text-red-600 bg-red-50/50 dark:bg-red-900/10">-{row.qtyOut}</td>
-                                        <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-white">{row.closingStock}</td>
-                                        <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">{formatCurrency(row.revenue || 0)}</td>
-                                        <td className={`px-4 py-3 text-right font-medium ${(row.profit || 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(row.profit || 0)}</td>
+                                data.map((row: any) => (
+                                    <tr key={row.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                        <td className="p-4 font-medium text-slate-800 dark:text-white text-sm">{row.name}</td>
+                                        <td className="p-4 text-center text-slate-500 font-mono text-sm">{row.openingStock}</td>
+                                        <td className="p-4 text-center text-blue-600 bg-blue-50/50 dark:bg-blue-900/10 font-mono text-sm">+{row.qtyIn}</td>
+                                        <td className="p-4 text-center text-red-600 bg-red-50/50 dark:bg-red-900/10 font-mono text-sm">-{row.qtyOut}</td>
+                                        <td className="p-4 text-center font-bold text-slate-800 dark:text-white text-sm bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-transparent transition-colors">{row.closingStock}</td>
+                                        <td className="p-4 text-right font-medium text-slate-700 dark:text-slate-300 text-sm">{formatCurrency(row.revenue || 0)}</td>
+                                        <td className={`p-4 text-right font-bold text-sm bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-transparent transition-colors ${(row.profit || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{formatCurrency(row.profit || 0)}</td>
                                     </tr>
                                 ))
                             )}

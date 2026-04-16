@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationBell from '../UI/NotificationBell';
+
 import { Zap } from 'lucide-react';
 import QuickPaymentModal from '../Sales/QuickPaymentModal';
 import { useState, useEffect } from 'react';
@@ -65,6 +66,7 @@ const MainLayout: React.FC = () => {
                             <Zap size={16} className="fill-yellow-700 dark:fill-yellow-400" />
                             <span className="hidden md:inline">Quick Pay</span>
                         </button>
+
                         <NotificationBell />
                         <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                             {/* Avatar Placeholder */}

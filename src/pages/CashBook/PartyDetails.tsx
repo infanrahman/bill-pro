@@ -2,25 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Phone, FileText, Wallet, Trash2, Edit, AlertCircle } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type CashEntry } from '../../services/db';
+import { db, type CashEntry, softDeleteMetadata } from '../../services/db';
 import { formatCurrency } from '../../utils/currency';
 import { format } from 'date-fns';
 
 import CashEntryModal from './CashEntryModal';
 import { exportToPDF } from '../../utils/export';
-import ConfirmationModal from '../../components/UI/ConfirmationModal';
 import { useNotification } from '../../contexts/NotificationContext';
+import { useAuth } from '../../contexts/AuthContext';
+import ConfirmationModal from '../../components/UI/ConfirmationModal';
 
 interface PartyDetailsProps {
-    partyId: number;
+    partyId: string;
     onBack: () => void;
 }
 
 const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
     const { t } = useTranslation();
     const { addToast } = useNotification();
-    const party = useLiveQuery(() => db.cashParties.get(partyId), [partyId]);
-    const entries = useLiveQuery(() => db.cashEntries.where('partyId').equals(partyId).sortBy('date'), [partyId]);
+    const { activeBranchId } = useAuth();
+    
+    const party = useLiveQuery(() => 
+        db.cashParties.where('id').equals(partyId).and((p: any) => !p.deletedAt && p.branchId === activeBranchId).first()
+    , [partyId, activeBranchId]);
+    
+    const entries = useLiveQuery(async () => {
+        const data = await db.cashEntries.where('partyId').equals(partyId).and((e: any) => e.branchId === activeBranchId).toArray();
+        return data.filter((e: any) => !e.deletedAt).sort((a: any, b: any) => a.date.getTime() - b.date.getTime());
+    }, [partyId, activeBranchId]);
 
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [entryType, setEntryType] = useState<'in' | 'out'>('in');
@@ -49,8 +58,8 @@ const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
             // + I GAVE (Loaned out) -> Increases what I will Get
             // - I GOT (Repayment) -> Decreases what I will Get
 
-            const totalGiven = entries.filter(e => e.type === 'out').reduce((sum, e) => sum + e.amount, 0);
-            const totalGot = entries.filter(e => e.type === 'in').reduce((sum, e) => sum + e.amount, 0);
+            const totalGiven = entries.filter((e: any) => e.type === 'out').reduce((sum: any, e: any) => sum + e.amount, 0);
+            const totalGot = entries.filter((e: any) => e.type === 'in').reduce((sum: any, e: any) => sum + e.amount, 0);
 
             setBalance(party.openingBalance + totalGiven - totalGot);
         }
@@ -60,10 +69,15 @@ const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
         if (!party) return;
 
         try {
-            // Delete all entries for this party
-            await db.cashEntries.where('partyId').equals(partyId).delete();
-            // Delete the party
-            await db.cashParties.delete(partyId);
+            // Delete all entries for this party (Soft Delete)
+            const entryIds = await db.cashEntries.where('partyId').equals(partyId).primaryKeys();
+            await db.transaction('rw', db.cashEntries, db.cashParties, async () => {
+                for (const id of entryIds) {
+                    await db.cashEntries.update(id, softDeleteMetadata());
+                }
+                // Delete the party (Soft Delete)
+                await db.cashParties.update(partyId, softDeleteMetadata());
+            });
 
             setIsDeleteOpen(false);
             onBack();
@@ -77,7 +91,7 @@ const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
     const handleDeleteEntry = async () => {
         if (!entryToDelete || !entryToDelete.id) return;
         try {
-            await db.cashEntries.delete(entryToDelete.id);
+            await db.cashEntries.update(entryToDelete.id, softDeleteMetadata());
             addToast('Transaction deleted successfully', 'success');
             setIsEntryDeleteOpen(false);
             setEntryToDelete(null);
@@ -92,7 +106,7 @@ const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
     const handleExport = () => {
         if (!entries?.length) return;
         const headers = ['Date', 'Type', 'Description', 'Amount'];
-        const rows = entries.map(e => [
+        const rows = entries.map((e: any) => [
             format(e.date, 'yyyy-MM-dd HH:mm'),
             e.type === 'in' ? 'Got' : 'Gave',
             e.description,
@@ -206,7 +220,7 @@ const PartyDetails: React.FC<PartyDetailsProps> = ({ partyId, onBack }) => {
                     Transactions
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {entries?.slice().reverse().map(entry => (
+                    {entries?.slice().reverse().map((entry: any) => (
                         <div key={entry.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group">
                             <div className="flex flex-col gap-1">
                                 <span className="font-medium dark:text-white">

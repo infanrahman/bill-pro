@@ -60,7 +60,9 @@ const BusinessProfile: React.FC = () => {
     const handleAddUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const { createRecordMetadata } = await import('../services/db');
             await db.users.add({
+                ...createRecordMetadata(),
                 username: newUser.username,
                 password: newUser.password,
                 name: newUser.name,
@@ -75,10 +77,10 @@ const BusinessProfile: React.FC = () => {
     };
 
     // Modal States
-    const [userToDelete, setUserToDelete] = useState<number | null>(null);
+    const [userToDelete, setUserToDelete] = useState<string | null>(null);
     const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
-    const handleDeleteUser = (id: number) => {
+    const handleDeleteUser = (id: string) => {
         setUserToDelete(id);
     };
 
@@ -415,7 +417,7 @@ const BusinessProfile: React.FC = () => {
                         <div>
                             <h3 className="text-sm font-medium text-slate-500 uppercase mb-3">{t('settings.existing_users')}</h3>
                             <div className="space-y-2">
-                                {users?.map(user => (
+                                {users?.map((user: any) => (
                                     <div key={user.id} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
                                         <div>
                                             <p className="font-medium dark:text-white">{user.name}</p>

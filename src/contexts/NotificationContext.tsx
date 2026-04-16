@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, type Notification } from '../services/db';
+import { db, type Notification, createRecordMetadata } from '../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 interface Toast {
@@ -13,8 +13,8 @@ interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
     addToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
-    addNotification: (message: string, type: 'info' | 'warning' | 'success' | 'error', relatedId?: number) => Promise<void>;
-    markAsRead: (id: number) => Promise<void>;
+    addNotification: (message: string, type: 'info' | 'warning' | 'success' | 'error', relatedId?: string) => Promise<void>;
+    markAsRead: (id: string) => Promise<void>;
     markAllAsRead: () => Promise<void>;
     checkReminders: () => Promise<void>;
 }
@@ -41,8 +41,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
 
-    const addNotification = React.useCallback(async (message: string, type: 'info' | 'warning' | 'success' | 'error', relatedId?: number) => {
+    const addNotification = React.useCallback(async (message: string, type: 'info' | 'warning' | 'success' | 'error', relatedId?: string) => {
         await db.notifications.add({
+            ...createRecordMetadata(),
             title: type.toUpperCase(), // Default title based on type
             message,
             type,
@@ -52,13 +53,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
     }, []);
 
-    const markAsRead = React.useCallback(async (id: number) => {
-        await db.notifications.update(id, { read: true });
+    const markAsRead = React.useCallback(async (id: string) => {
+        await db.notifications.update(id, { read: true, updatedAt: new Date() });
     }, []);
 
     const markAllAsRead = React.useCallback(async () => {
         const unread = await db.notifications.filter(n => !n.read).toArray();
-        await Promise.all(unread.map(n => db.notifications.update(n.id!, { read: true })));
+        await Promise.all(unread.map(n => db.notifications.update(n.id!, { read: true, updatedAt: new Date() })));
     }, []);
 
     const checkReminders = React.useCallback(async () => {
@@ -126,8 +127,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 .toArray();
 
             for (const po of overduePurchases) {
-                // Note: Dexie 'relatedId' was used in previous code, but interface has referenceId.
-                const relId = po.id || 0;
+                const relId = po.id;
+                if (!relId) continue;
 
                 const existsId = await db.notifications
                     .where({ referenceId: relId, type: 'error' })
@@ -148,7 +149,35 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Initial check on mount
     useEffect(() => {
         checkReminders();
-    }, [checkReminders]);
+
+        const handleSuspend = () => {
+            addToast('Account Suspended: Cloud Sync disabled. Please contact support.', 'error');
+        };
+
+        const handleExpire = () => {
+            addToast('Subscription Expired: Please renew to restore cloud sync.', 'error');
+        };
+
+        const handleDisabled = () => {
+            addToast('Cloud Sync Disabled: This feature is not allowed for your account.', 'warning');
+        };
+
+        const handleError = (e: any) => {
+            addToast(e.detail || 'Cloud Sync Error: Connection rejected.', 'error');
+        };
+
+        window.addEventListener('saas-suspend', handleSuspend);
+        window.addEventListener('saas-expire', handleExpire);
+        window.addEventListener('saas-disabled', handleDisabled);
+        window.addEventListener('saas-error', handleError);
+        
+        return () => {
+            window.removeEventListener('saas-suspend', handleSuspend);
+            window.removeEventListener('saas-expire', handleExpire);
+            window.removeEventListener('saas-disabled', handleDisabled);
+            window.removeEventListener('saas-error', handleError);
+        };
+    }, [checkReminders, addToast]);
 
     return (
         <NotificationContext.Provider value={{

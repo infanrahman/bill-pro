@@ -24,8 +24,8 @@ const Login: React.FC = () => {
             } else {
                 setError(t('login.invalid_credentials'));
             }
-        } catch (err) {
-            setError(t('login.error_login'));
+        } catch (err: any) {
+            setError(t('login.error_login') + ": " + (err.message || String(err)));
         } finally {
             setLoading(false);
         }

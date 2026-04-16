@@ -14,12 +14,9 @@ const VatReport: React.FC = () => {
     const [period, setPeriod] = useState<VatPeriod>('monthly');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-
-    const start = startDate ? new Date(startDate) : undefined;
-    const end = endDate ? new Date(endDate) : undefined;
     const activePeriod = (startDate && endDate) ? 'custom' : period;
 
-    const { data, loading } = useVatReturnData(activePeriod, start, end);
+    const { data, loading } = useVatReturnData(activePeriod, startDate, endDate);
     const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || '{}');
 
     const periods: { id: VatPeriod; label: string }[] = [
@@ -81,19 +78,18 @@ const VatReport: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return <div className="p-12 text-center text-slate-500">{t('common.loading')}</div>;
+    if (!data) {
+        if (loading) return <div className="p-12 text-center text-slate-500">{t('common.loading')}</div>;
+        return null;
     }
 
-    if (!data) return null;
-
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div className={`space-y-6 animate-in fade-in duration-500 transition-opacity ${loading ? 'opacity-50 pointer-events-none select-none' : ''}`}>
             {/* Controls */}
             <div className="flex flex-col xl:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
                     <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex">
-                        {periods.map((p) => (
+                        {periods.map((p: any) => (
                             <button
                                 key={p.id}
                                 onClick={() => handlePeriodChange(p.id)}
@@ -110,17 +106,17 @@ const VatReport: React.FC = () => {
                     <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg px-2">
                         <Calendar size={16} className="text-slate-400" />
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={startDate}
                             onChange={(e) => { setStartDate(e.target.value); setPeriod('custom'); }}
-                            className="bg-transparent border-0 p-0 text-sm w-28 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
                         />
                         <span className="text-slate-400">-</span>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={endDate}
                             onChange={(e) => { setEndDate(e.target.value); setPeriod('custom'); }}
-                            className="bg-transparent border-0 p-0 text-sm w-28 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
                         />
                     </div>
                 </div>

@@ -7,6 +7,7 @@ import { Zap } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 import { useKeyboard } from '../../contexts/KeyboardContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface QuickPaymentModalProps {
     isOpen: boolean;
@@ -20,13 +21,14 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
     const { addToast } = useNotification();
     const { settings, formatCurrency } = useSettings();
     const { registerShortcut, unregisterShortcut } = useKeyboard();
+    const { activeBranchId } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
 
     // State
     // Updated Interface for Quantity Support
     interface QuickPayItem {
         id: number;
-        itemId?: number;
+        itemId?: string;
         name: string;
         quantity: number;
         price: number;
@@ -277,7 +279,7 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
             // 1. Create Invoice Items
             const invoiceItems: InvoiceItem[] = currentItems.map(item => {
                 return {
-                    itemId: item.itemId || 0, // 0 for manual items
+                    itemId: item.itemId || '', // '' for manual items
                     name: item.name,
                     quantity: item.quantity,
                     price: item.price,
@@ -288,7 +290,11 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
             });
 
             // 2. Create Invoice Record
-            const invoice: Invoice = {
+            const { createRecordMetadata } = await import('../../services/db');
+            
+            const invoice = {
+                ...createRecordMetadata(),
+                branchId: activeBranchId,
                 invoiceNumber: `QP-${Date.now().toString().slice(-6)}`,
                 customerName: 'Quick Sale',
                 items: invoiceItems,
@@ -301,9 +307,8 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
                 paymentMode: paymentMode as any,
                 paymentStatus: 'paid',
                 status: 'paid',
-                type: 'invoice',
-                createdAt: new Date()
-            };
+                type: 'invoice'
+            } as Invoice;
 
             const id = await db.invoices.add(invoice);
 

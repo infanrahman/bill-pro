@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../services/db';
+import { useAuth } from '../../contexts/AuthContext';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, format } from 'date-fns';
 
 export type DateRange = 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -15,7 +16,8 @@ export interface ReportData {
     loading: boolean;
 }
 
-export const useReportData = (range: DateRange, customStart?: Date, customEnd?: Date) => {
+export const useReportData = (range: DateRange, customStartStr?: string, customEndStr?: string) => {
+    const { activeBranchId, activeBranch } = useAuth();
     const [data, setData] = useState<ReportData>({
         totalSales: 0,
         totalExpenses: 0,
@@ -32,11 +34,32 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
             setData(prev => ({ ...prev, loading: true }));
 
             const now = new Date();
-            let start: Date, end: Date;
+            let start: Date = startOfDay(now);
+            let end: Date = endOfDay(now);
 
-            if (range === 'custom' && customStart && customEnd) {
-                start = startOfDay(customStart);
-                end = endOfDay(customEnd);
+            // Safely parse custom dates from strings passed in
+            let customStart = customStartStr ? new Date(customStartStr) : undefined;
+            let customEnd = customEndStr ? new Date(customEndStr) : undefined;
+
+            let safeCustomStart = customStart && !isNaN(customStart.getTime()) ? customStart : undefined;
+            let safeCustomEnd = customEnd && !isNaN(customEnd.getTime()) ? customEnd : undefined;
+
+            if (range === 'custom') {
+                if (safeCustomStart && safeCustomEnd) {
+                    if (safeCustomStart > safeCustomEnd) {
+                        start = startOfDay(safeCustomEnd);
+                        end = endOfDay(safeCustomStart);
+                    } else {
+                        start = startOfDay(safeCustomStart);
+                        end = endOfDay(safeCustomEnd);
+                    }
+                } else if (safeCustomStart) {
+                    start = startOfDay(safeCustomStart);
+                    end = endOfDay(safeCustomStart);
+                } else if (safeCustomEnd) {
+                    start = startOfDay(safeCustomEnd);
+                    end = endOfDay(safeCustomEnd);
+                }
             } else {
                 switch (range) {
                     case 'today':
@@ -55,9 +78,6 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                         start = startOfYear(now);
                         end = endOfYear(now);
                         break;
-                    default:
-                        start = startOfDay(now);
-                        end = endOfDay(now);
                 }
             }
 
@@ -66,19 +86,21 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                 const invoices = await db.invoices
                     .where('createdAt')
                     .between(start, end, true, true)
+                    .and((inv: any) => (activeBranch?.isMaster || inv.branchId === activeBranchId) && !inv.deletedAt)
                     .toArray();
 
                 // Fetch Expenses
                 const expenses = await db.expenses
                     .where('date')
                     .between(start, end, true, true)
+                    .and((exp: any) => (activeBranch?.isMaster || exp.branchId === activeBranchId) && !exp.deletedAt)
                     .toArray();
 
                 // Fetch ALL Items to get current purchase price (COGS Proxy)
-                // In a perfect world, we'd have historical cost in InvoiceItem, but we don't.
-                const allItems = await db.items.toArray();
-                const itemCostMap = new Map<number, number>();
-                allItems.forEach(item => {
+                const allItemsQuery = activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId);
+                const allItems = await (allItemsQuery as any).filter((i: any) => !i.deletedAt).toArray();
+                const itemCostMap = new Map<string, number>();
+                allItems.forEach((item: any) => {
                     if (item.id) itemCostMap.set(item.id, item.purchasePrice || 0);
                 });
 
@@ -86,27 +108,36 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                 let totalSales = 0;
                 let totalCOGS = 0;
 
-                invoices.forEach(inv => {
+                invoices.forEach((inv: any) => {
                     // Only count valid sales
                     if (inv.status === 'cancelled') return;
 
                     const isReturn = inv.type === 'return';
                     const multiplier = isReturn ? -1 : 1;
 
-                    // Sales Sum
+                    // Sales Sum (use grandTotal for revenue display)
                     totalSales += (inv.grandTotal * multiplier);
 
-                    // COGS Calculation
-                    inv.items.forEach(item => {
-                        const costPrice = itemCostMap.get(item.itemId) || 0;
+                    // COGS Calculation — prioritize line-item stored cost over current inventory price
+                    inv.items.forEach((item: any) => {
+                        const costPrice = item.purchasePrice !== undefined 
+                            ? item.purchasePrice 
+                            : (item.cost !== undefined ? item.cost : (itemCostMap.get(item.itemId) || 0));
                         totalCOGS += (costPrice * item.quantity * multiplier);
                     });
                 });
 
-                const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+                const totalExpenses = expenses.reduce((sum: any, exp: any) => sum + exp.amount, 0);
 
-                // Gross Profit (Total Sale Profit) = Sales - Cost of Goods Sold
-                const grossProfit = totalSales - totalCOGS;
+                // Gross Profit = Net Sales (excl. tax) - COGS
+                // Using net sales (grandTotal - taxAmount) prevents tax from inflating profit figures
+                const netSalesForProfit = invoices
+                    .filter((inv: any) => inv.status !== 'cancelled')
+                    .reduce((sum: number, inv: any) => {
+                        const multiplier = inv.type === 'return' ? -1 : 1;
+                        return sum + ((inv.grandTotal - (inv.taxAmount || 0)) * multiplier);
+                    }, 0);
+                const grossProfit = netSalesForProfit - totalCOGS;
 
                 // Net Profit = Gross Profit - Operating Expenses
                 // Note: We deliberately exclude "Total Inventory Purchases" from expense here,
@@ -116,14 +147,14 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                 // Prepare Chart Data
                 const days = eachDayOfInterval({ start, end });
 
-                const salesByDate = days.map(day => {
+                const salesByDate = days.map((day: any) => {
                     const dayLabels = format(day, range === 'year' ? 'MMM' : 'dd MMM');
                     const dayStart = startOfDay(day);
                     const dayEnd = endOfDay(day);
 
                     const dailySales = invoices
-                        .filter(inv => inv.createdAt >= dayStart && inv.createdAt <= dayEnd && inv.status !== 'cancelled')
-                        .reduce((sum, inv) => {
+                        .filter((inv: any) => inv.createdAt >= dayStart && inv.createdAt <= dayEnd && inv.status !== 'cancelled')
+                        .reduce((sum: any, inv: any) => {
                             if (inv.type === 'return') return sum - inv.grandTotal;
                             return sum + inv.grandTotal;
                         }, 0);
@@ -137,14 +168,14 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                 let chartData = salesByDate;
                 if (range === 'year' || (range === 'custom' && days.length > 60)) {
                     const monthly: Record<string, number> = {};
-                    invoices.forEach(inv => {
+                    invoices.forEach((inv: any) => {
                         if (inv.status === 'cancelled') return;
                         const month = format(inv.createdAt, 'MMM yyyy');
                         const amount = inv.type === 'return' ? -inv.grandTotal : inv.grandTotal;
                         monthly[month] = (monthly[month] || 0) + amount;
                     });
-                    const uniqueMonths = Array.from(new Set(days.map(d => format(d, 'MMM yyyy'))));
-                    chartData = uniqueMonths.map(m => ({ date: m, amount: monthly[m] || 0 }));
+                    const uniqueMonths = Array.from(new Set(days.map((d: any) => format(d, 'MMM yyyy'))));
+                    chartData = uniqueMonths.map((m: any) => ({ date: m, amount: monthly[m] || 0 }));
                 }
 
                 setData({
@@ -152,8 +183,8 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
                     totalExpenses,
                     grossProfit,
                     netProfit,
-                    currentStockValue: allItems.reduce((sum, item) => sum + ((item.stock || 0) * (item.purchasePrice || 0)), 0),
-                    salesCount: invoices.filter(i => i.status !== 'cancelled').length,
+                    currentStockValue: allItems.reduce((sum: any, item: any) => sum + ((item.stock || 0) * (item.purchasePrice || 0)), 0),
+                    salesCount: invoices.filter((i: any) => i.status !== 'cancelled').length,
                     salesByDate: chartData,
                     loading: false
                 });
@@ -165,7 +196,7 @@ export const useReportData = (range: DateRange, customStart?: Date, customEnd?: 
         };
 
         fetchData();
-    }, [range, customStart, customEnd]);
+    }, [range, customStartStr, customEndStr, activeBranchId, activeBranch?.isMaster]);
 
     return data;
 };

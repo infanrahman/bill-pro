@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { NotificationProvider } from './contexts/NotificationContext';
+import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { LicenseProvider } from './contexts/LicenseContext';
 import { KeyboardProvider } from './contexts/KeyboardContext';
@@ -36,6 +36,43 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppContent = () => {
   const { status, loading } = useLicense();
+  const { addToast } = useNotification();
+
+  useEffect(() => {
+    const handleGlobalF8 = async (e: KeyboardEvent) => {
+      if (e.key === 'F8') {
+        e.preventDefault();
+        try {
+          const saved = localStorage.getItem('printerConfig');
+          if (!saved) {
+            addToast('Please configure a thermal printer in Settings first.', 'error');
+            return;
+          }
+          const config = JSON.parse(saved);
+          if (!config.thermal?.printerName) {
+            addToast('No thermal printer selected in Settings.', 'error');
+            return;
+          }
+          if (window.electron && window.electron.openCashDrawer) {
+            const success = await window.electron.openCashDrawer(config.thermal.printerName);
+            if (success) {
+              addToast('Cash drawer opened.', 'success');
+            } else {
+              addToast('Failed to open cash drawer. Check printer connection.', 'error');
+            }
+          } else {
+            addToast('Cash drawer requires the desktop app.', 'error');
+          }
+        } catch (err) {
+          console.error('Drawer error:', err);
+          addToast('Error opening cash drawer.', 'error');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalF8);
+    return () => window.removeEventListener('keydown', handleGlobalF8);
+  }, [addToast]);
 
   if (loading) {
     return <div className="flex h-screen w-screen items-center justify-center bg-slate-900 text-white">Loading...</div>;

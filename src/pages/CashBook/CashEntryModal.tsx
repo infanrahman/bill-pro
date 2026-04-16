@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, DollarSign, FileText, Tag, Clock } from 'lucide-react';
-import { db, type CashEntry } from '../../services/db';
+import { db, type CashEntry, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../contexts/NotificationContext';
 import { format } from 'date-fns';
@@ -10,7 +10,7 @@ interface CashEntryModalProps {
     onClose: () => void;
     onSave: () => void;
     type: 'in' | 'out';
-    partyId?: number; // New optional prop
+    partyId?: string; // New optional prop
     editEntry?: CashEntry;
 }
 
@@ -55,6 +55,7 @@ const CashEntryModal: React.FC<CashEntryModalProps> = ({ isOpen, onClose, onSave
 
             if (editEntry && editEntry.id) {
                 await db.cashEntries.update(editEntry.id, {
+                    ...updateRecordMetadata(),
                     amount: parseFloat(amount),
                     date: entryDate,
                     category: category || (type === 'in' ? 'Income' : 'Expense'),
@@ -63,6 +64,7 @@ const CashEntryModal: React.FC<CashEntryModalProps> = ({ isOpen, onClose, onSave
                 addToast(t('cashbook.entry_updated'), 'success');
             } else {
                 const entry: CashEntry = {
+                    ...createRecordMetadata(),
                     type,
                     amount: parseFloat(amount),
                     date: entryDate,

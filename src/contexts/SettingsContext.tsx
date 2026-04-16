@@ -4,25 +4,30 @@ interface AppSettings {
     currency: string;
     decimals: number;
     dateFormat: string;
+    invoicePrefix?: string; // Custom prefix for generated invoices
     enableSharing?: boolean;
     enableBillWiseProfit?: boolean;
     enableStockReport?: boolean;
     enableExcelExport?: boolean;
     enableSpreadsheet?: boolean; // New feature toggle
     cafeMode?: boolean; // Enable image-based POS for restaurants/cafes
+    applyTax?: boolean; // Global tax toggle
 }
 
 const defaultSettings: AppSettings = {
     currency: '$',
     decimals: 2,
     dateFormat: 'dd/MM/yyyy',
+    invoicePrefix: 'INV-',
     enableSharing: false,
     enableBillWiseProfit: false,
     enableStockReport: false,
     enableExcelExport: false,
     enableSpreadsheet: false,
-    cafeMode: false
+    cafeMode: false,
+    applyTax: false
 };
+
 
 interface SettingsContextType {
     settings: AppSettings;

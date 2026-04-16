@@ -13,16 +13,11 @@ import { generateGenericReportHTML } from '../../services/reportHTMLGenerator';
 const DayBook: React.FC = () => {
     const { t } = useTranslation();
     const { formatCurrency } = useSettings();
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [range, setRange] = useState<'today' | 'custom'>('today');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
-    // Convert string input to Date object for the hook
-    const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.value) {
-            setSelectedDate(new Date(e.target.value));
-        }
-    };
-
-    const { transactions, summary, loading } = useDayBookData(selectedDate);
+    const { transactions, summary, loading } = useDayBookData(range, startDate, endDate);
 
     const handlePrint = async () => {
         const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || '{}');
@@ -31,7 +26,7 @@ const DayBook: React.FC = () => {
 
         const html = generateGenericReportHTML({
             title: t('reports.day_book_title') || "Day Book",
-            period: format(selectedDate, 'dd MMM yyyy'),
+            period: startDate && endDate ? `${startDate} to ${endDate}` : range.toUpperCase(),
             columns: [
                 { header: 'Time', accessor: (row) => format(row.date, 'HH:mm'), width: '10%' },
                 { header: 'Type', accessor: (row) => row.type.toUpperCase(), width: '15%' },
@@ -58,7 +53,7 @@ const DayBook: React.FC = () => {
     };
 
     const exportToExcel = () => {
-        const data = transactions.map(t => ({
+        const data = transactions.map((t: any) => ({
             Date: format(t.date, 'yyyy-MM-dd HH:mm'),
             Type: t.type.toUpperCase(),
             Description: t.description,
@@ -70,21 +65,21 @@ const DayBook: React.FC = () => {
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DayBook");
-        XLSX.writeFile(wb, `DayBook_${format(selectedDate, 'yyyy-MM-dd')}.xlsx`);
+        XLSX.writeFile(wb, `DayBook_${startDate || 'Today'}.xlsx`);
     };
 
     const exportToPDF = () => {
         const doc = new jsPDF();
 
         doc.setFontSize(18);
-        doc.text(`Day Book: ${format(selectedDate, 'dd MMM yyyy')}`, 14, 20);
+        doc.text(`Day Book: ${startDate && endDate ? `${startDate} to ${endDate}` : range.toUpperCase()}`, 14, 20);
 
         doc.setFontSize(11);
         doc.text(`Total In: ${formatCurrency(summary.totalIn)}`, 14, 30);
         doc.text(`Total Out: ${formatCurrency(summary.totalOut)}`, 80, 30);
         doc.text(`Net Balance: ${formatCurrency(summary.balance)}`, 150, 30);
 
-        const tableData = transactions.map(t => [
+        const tableData = transactions.map((t: any) => [
             format(t.date, 'HH:mm'),
             t.type.toUpperCase(),
             t.description,
@@ -101,7 +96,7 @@ const DayBook: React.FC = () => {
             headStyles: { fillColor: [66, 66, 66] }
         });
 
-        doc.save(`DayBook_${format(selectedDate, 'yyyy-MM-dd')}.pdf`);
+        doc.save(`DayBook_${startDate || 'Today'}.pdf`);
     };
 
     const getTypeColor = (type: DayBookItem['type']) => {
@@ -126,12 +121,29 @@ const DayBook: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="relative">
+                    <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                        <button
+                            onClick={() => { setRange('today'); setStartDate(''); setEndDate(''); }}
+                            className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${range === 'today' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                        >
+                            {t('reports.period_daily')}
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg px-2">
+                        <Calendar size={16} className="text-slate-400" />
                         <input
-                            type="date"
-                            value={format(selectedDate, 'yyyy-MM-dd')}
-                            onChange={handleDateChange}
-                            className="pl-4 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none dark:[color-scheme:dark]"
+                            type="datetime-local"
+                            value={startDate}
+                            onChange={(e) => { setStartDate(e.target.value); setRange('custom'); }}
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+                        />
+                        <span className="text-slate-400">-</span>
+                        <input
+                            type="datetime-local"
+                            value={endDate}
+                            onChange={(e) => { setEndDate(e.target.value); setRange('custom'); }}
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
                         />
                     </div>
 
@@ -232,7 +244,7 @@ const DayBook: React.FC = () => {
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {transactions.map((item) => (
+                        {transactions.map((item: any) => (
                             <div key={item.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between gap-4">
                                 {/* Left: Info */}
                                 <div className="flex items-start gap-4 flex-1">

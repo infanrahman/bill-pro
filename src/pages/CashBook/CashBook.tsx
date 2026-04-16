@@ -21,7 +21,7 @@ const CashBook: React.FC = () => {
 
     // Tabs
     const [activeTab, setActiveTab] = useState<'supplier' | 'customer'>('supplier');
-    const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
+    const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
 
     // If a party is selected, show details
     if (selectedPartyId) {

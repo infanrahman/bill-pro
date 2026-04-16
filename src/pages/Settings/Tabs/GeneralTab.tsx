@@ -74,7 +74,7 @@ const GeneralTab: React.FC = () => {
                             onChange={(e) => updateSettings({ currency: e.target.value })}
                             className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white min-w-[120px]"
                         >
-                            {currencies.map(curr => (
+                            {currencies.map((curr: any) => (
                                 <option key={curr.code} value={curr.symbol}>
                                     {curr.label}
                                 </option>
@@ -212,6 +212,53 @@ const GeneralTab: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Global Tax Toggle */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium dark:text-white">{t('pos.add_vat', { defaultValue: 'Apply Tax (15%)' })}</span>
+                                <Info size={16} className="text-slate-400" />
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                {t('settings.general.apply_tax_desc', { defaultValue: 'Automatically add 15% VAT to all orders' })}
+                            </p>
+                        </div>
+                        <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input
+                                type="checkbox"
+                                name="apply-tax-toggle"
+                                id="apply-tax-toggle"
+                                checked={settings.applyTax || false}
+                                onChange={(e) => updateSettings({ applyTax: e.target.checked })}
+                                className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                style={{ right: settings.applyTax ? '0' : '50%', borderColor: settings.applyTax ? '#3b82f6' : '#d1d5db' }}
+                            />
+                            <label
+                                htmlFor="apply-tax-toggle"
+                                className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer ${settings.applyTax ? 'bg-blue-500' : 'bg-gray-300'}`}
+                            ></label>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Custom Invoice Prefix */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2" title="Default is INV-">
+                            <span className="font-medium dark:text-white">{t('settings.general.invoice_prefix') || 'Invoice Prefix'}</span>
+                            <Info size={16} className="text-slate-400" />
+                        </div>
+                        <input
+                            type="text"
+                            value={settings.invoicePrefix || 'INV-'}
+                            onChange={(e) => updateSettings({ invoicePrefix: e.target.value })}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white min-w-[120px] text-right"
+                            placeholder="INV-"
+                        />
+                    </div>
+                </div>
+
                 {/* Spreadsheet Feature Toggle */}
                 <div className="p-6 border-b border-slate-100 dark:border-slate-700">
                     <div className="flex items-center justify-between">
@@ -242,11 +289,11 @@ const GeneralTab: React.FC = () => {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="flex items-center gap-2">
-                                <span className="font-medium dark:text-white">{t('settings.general.cafe_mode') || 'Cafe Mode'}</span>
+                                <span className="font-medium dark:text-white">{t('settings.general.cafe_mode', { defaultValue: 'Enable Market / Cafe Mode' })}</span>
                                 <Info size={16} className="text-slate-400" />
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                {t('settings.general.cafe_mode_desc') || 'Enable image-based POS for restaurants/cafes'}
+                                {t('settings.general.cafe_mode_desc', { defaultValue: 'Enable image-based POS for restaurants/cafes' })}
                             </p>
                         </div>
                         <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
@@ -276,7 +323,7 @@ const GeneralTab: React.FC = () => {
                             onChange={(e) => updateSettings({ dateFormat: e.target.value })}
                             className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white min-w-[150px]"
                         >
-                            {dateFormats.map(fmt => (
+                            {dateFormats.map((fmt: any) => (
                                 <option key={fmt.value} value={fmt.value}>
                                     {fmt.label}
                                 </option>

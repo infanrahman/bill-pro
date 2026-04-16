@@ -6,19 +6,26 @@ import { useTranslation } from 'react-i18next';
 import { useSettings } from '../../contexts/SettingsContext';
 
 interface SpreadsheetListProps {
-    onSelect: (id: number | 'new') => void;
+    onSelect: (id: string | 'new') => void;
 }
 
 const SpreadsheetList: React.FC<SpreadsheetListProps> = ({ onSelect }) => {
     const { t } = useTranslation();
     const { formatDate } = useSettings();
 
-    // Query spreadsheets
+    // Query spreadsheets and sort in memory since updatedAt is not indexed
     const spreadsheets = useLiveQuery(
-        () => db.spreadsheets.orderBy('updatedAt').reverse().toArray()
+        async () => {
+            const data = await db.spreadsheets.toArray();
+            return data.sort((a: any, b: any) => {
+                const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                return dateB - dateA; // Descending
+            });
+        }
     );
 
-    const handleDelete = async (id: number, e: React.MouseEvent) => {
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (window.confirm('Are you sure you want to delete this spreadsheet?')) {
             await db.spreadsheets.delete(id);
@@ -63,7 +70,7 @@ const SpreadsheetList: React.FC<SpreadsheetListProps> = ({ onSelect }) => {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {spreadsheets.map((sheet) => (
+                    {spreadsheets.map((sheet: any) => (
                         <div
                             key={sheet.id}
                             onClick={() => sheet.id && onSelect(sheet.id)}

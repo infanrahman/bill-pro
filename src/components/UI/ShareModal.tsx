@@ -23,9 +23,10 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, data, type }) 
         setLoading(true);
         try {
             const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || 'null');
+            const title = type === 'invoice' ? t('sales.invoice') || 'Invoice' : t('purchases.bill') || 'Bill';
 
             // Generate formatted text
-            const invoiceText = generateInvoiceText(data, type, businessDetails);
+            const invoiceText = generateInvoiceText(data, type, businessDetails, title);
             const encodedText = encodeURIComponent(invoiceText);
 
             // Get contact info

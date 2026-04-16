@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
-import { db } from '../services/db';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { db, createRecordMetadata } from '../services/db';
 import type { Invoice, InvoiceItem, Item } from '../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Search, Trash2, FileText, ShoppingCart, RotateCcw, DollarSign, Save, Printer } from 'lucide-react';
+import { Plus, Search, Trash2, FileText, ShoppingCart, RotateCcw, DollarSign, Save, Printer, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNotification } from '../contexts/NotificationContext';
 import { useSettings } from '../contexts/SettingsContext';
 import Modal from '../components/UI/Modal';
 import SalesHistory from './Transactions/SalesHistory';
+import { useAuth } from '../contexts/AuthContext';
 
 import { useGridNavigation } from '../hooks/useGridNavigation';
 import { generateInvoicePDF } from '../services/invoiceGenerator';
@@ -17,15 +19,27 @@ import { Receipt, CreditCard } from 'lucide-react';
 
 const Sales = () => {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const { addToast } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
+    const { activeBranchId } = useAuth();
     const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment'>('invoice');
 
-    // Stats
+    // Check if ZATCA is enabled
+    const isZatcaEnabled = useMemo(() => {
+        try {
+            const cfg = localStorage.getItem('zatca_config');
+            if (!cfg) return false;
+            const { status } = JSON.parse(cfg);
+            return status === 'LIVE' || status === 'COMPLIANCE_OBTAINED';
+        } catch { return false; }
+    }, []);
+
+    // Stats — use indexed 'type' field for fast counts (no full table scans)
     const stats = {
-        orders: useLiveQuery(() => db.invoices.filter(i => i.type === 'order').count()) || 0,
-        invoices: useLiveQuery(() => db.invoices.filter(i => i.type === 'invoice').count()) || 0,
-        returns: useLiveQuery(() => db.invoices.filter(i => i.type === 'return').count()) || 0,
+        orders: useLiveQuery(() => db.invoices.where('type').equals('order').count()) || 0,
+        invoices: useLiveQuery(() => db.invoices.where('type').equals('invoice').count()) || 0,
+        returns: useLiveQuery(() => db.invoices.where('type').equals('return').count()) || 0,
         payments: useLiveQuery(() => db.customerPayments.count()) || 0,
     };
 
@@ -33,9 +47,9 @@ const Sales = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState('');
-    // const [editingId, setEditingId] = useState<number | null>(null); // For future use
+    // const [editingId, setEditingId] = useState<string | null>(null); // For future use
     const [customerName, setCustomerName] = useState('');
-    const [customerId, setCustomerId] = useState<number | undefined>(undefined);
+    const [customerId, setCustomerId] = useState<string | undefined>(undefined);
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
     // const [dueDate, setDueDate] = useState(''); // For future use
     const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -43,7 +57,7 @@ const Sales = () => {
 
     // Payment State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [paymentCustomerId, setPaymentCustomerId] = useState<number | undefined>(undefined);
+    const [paymentCustomerId, setPaymentCustomerId] = useState<string | undefined>(undefined);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'bank_transfer'>('cash');
     const [paymentReference, setPaymentReference] = useState('');
@@ -55,17 +69,19 @@ const Sales = () => {
     const [newItemPrice, setNewItemPrice] = useState('');
     const [newItemStock, setNewItemStock] = useState('');
 
-    // Fetch Lists
-    const customers = useLiveQuery(() => db.customers.toArray(), []);
-    const inventory = useLiveQuery(() => db.items.toArray(), []);
+    // Fetch Lists — branch-scoped with soft-delete filter
+    const customers = useLiveQuery(() => db.customers.where('branchId').equals(activeBranchId).filter((c: any) => !c.deletedAt).toArray(), [activeBranchId]);
+    const inventory = useLiveQuery(() => db.items.where('branchId').equals(activeBranchId).filter((i: any) => !i.deletedAt).toArray(), [activeBranchId]);
 
-    // Derived Lists (Top-Level Hooks)
+    // Derived Lists — use indexed 'type' field, branch-scoped, with deletedAt filter
     const currentList = useLiveQuery(async () => {
-        const all = await db.invoices.toArray();
-        return all
-            .filter(i => i.type === activeTab)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [activeTab]);
+        return db.invoices
+            .where('type')
+            .equals(activeTab)
+            .filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId)
+            .reverse()
+            .sortBy('createdAt');
+    }, [activeTab, activeBranchId]);
 
     // Grid Nav
     const { getGridCellProps } = useGridNavigation({
@@ -76,7 +92,7 @@ const Sales = () => {
     const paymentList = useLiveQuery(() => db.customerPayments.orderBy('date').reverse().toArray(), []);
 
     // Filtered Lists
-    const filteredInventory = inventory?.filter(i =>
+    const filteredInventory = inventory?.filter((i: any) =>
         (i.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (i.barcode || '').includes(searchTerm)
     );
@@ -117,7 +133,7 @@ const Sales = () => {
     const addToOrder = (item: Item) => {
         const existing = items.find(i => i.itemId === item.id);
         if (existing) {
-            setItems(items.map(i =>
+            setItems(items.map((i: any) =>
                 i.itemId === item.id ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.price } : i
             ));
         } else {
@@ -126,6 +142,7 @@ const Sales = () => {
                 name: item.name,
                 quantity: 1,
                 price: item.salePrice,
+                purchasePrice: item.purchasePrice, // Capture cost
                 total: item.salePrice,
                 taxType: item.taxType,
                 taxRate: item.taxRate
@@ -133,8 +150,8 @@ const Sales = () => {
         }
     };
 
-    const updateItem = (itemId: number, field: keyof InvoiceItem, value: any) => {
-        setItems(items.map(i => {
+    const updateItem = (itemId: string, field: keyof InvoiceItem, value: any) => {
+        setItems(items.map((i: any) => {
             if (i.itemId === itemId) {
                 const updated = { ...i, [field]: value };
                 if (field === 'quantity' || field === 'price') {
@@ -146,11 +163,11 @@ const Sales = () => {
         }));
     };
 
-    const removeItem = (itemId: number) => {
-        setItems(items.filter(i => i.itemId !== itemId));
+    const removeItem = (itemId: string) => {
+        setItems(items.filter((i: any) => i.itemId !== itemId));
     };
 
-    const totalAmount = items.reduce((sum, i) => sum + i.total, 0);
+    const totalAmount = items.reduce((sum: any, i: any) => sum + i.total, 0);
 
     const handleSave = async () => {
         if (!customerName || items.length === 0) {
@@ -158,21 +175,65 @@ const Sales = () => {
             return;
         }
 
+        const finalItems = items.map(item => {
+            const nominal = item.price * item.quantity;
+            const rate = item.taxRate || 0;
+            const type = item.taxType || 'exclusive';
+
+            let lineTax = 0;
+            let lineFinal = 0;
+
+            if (settings.applyTax) {
+                if (type === 'exclusive') {
+                    lineTax = Math.round((nominal * (rate / 100)) * 100) / 100;
+                    lineFinal = Math.round((nominal + lineTax) * 100) / 100;
+                } else {
+                    const base = nominal / (1 + (rate / 100));
+                    lineTax = Math.round((nominal - base) * 100) / 100;
+                    lineFinal = Math.round(nominal * 100) / 100;
+                }
+            } else {
+                lineTax = 0;
+                lineFinal = nominal;
+            }
+
+            return {
+                ...item,
+                taxAmount: lineTax,
+                total: lineFinal
+            };
+        });
+
+        const totalTax = finalItems.reduce((sum, i) => sum + (i.taxAmount || 0), 0);
+        const totalGrand = finalItems.reduce((sum, i) => sum + i.total, 0);
+
+        // Generate proper sequential invoice number (same logic as POS)
+        const lastInvoice = await db.invoices.orderBy('createdAt').last();
+        let nextNumber = 1;
+        if (lastInvoice && lastInvoice.invoiceNumber) {
+            const lastNumStr = lastInvoice.invoiceNumber.replace(/\D/g, '');
+            const lastNum = parseInt(lastNumStr, 10);
+            if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+        }
+        const prefix = activeTab === 'order' ? 'SO-' : 'RET-';
+        const seqInvoiceNumber = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+
         const invoiceData: Invoice = {
-            invoiceNumber: `${activeTab === 'order' ? 'SO' : 'RET'}-${Date.now()}`,
+            ...createRecordMetadata(),
+            branchId: activeBranchId || '',
+            invoiceNumber: seqInvoiceNumber,
             customerName,
             customerId,
-            items,
-            subTotal: totalAmount, // Simplified calculation for now
-            taxAmount: 0,
+            items: finalItems,
+            subTotal: totalAmount, 
+            taxAmount: totalTax,
             discountAmount: 0,
-            grandTotal: totalAmount,
+            grandTotal: totalGrand,
             paidAmount: 0,
-            remainingAmount: totalAmount,
+            remainingAmount: totalGrand,
             paymentMode: 'split', // Default
             paymentStatus: activeTab === 'order' ? 'pending' : 'paid',
             createdAt: new Date(orderDate),
-            // dueDate: dueDate ? new Date(dueDate) : undefined,
             type: activeTab as 'order' | 'return',
             status: activeTab === 'order' ? 'pending' : 'paid',
             notes
@@ -202,7 +263,7 @@ const Sales = () => {
                             // Return means we owe them, or they owe us less.
                             // So Balance = Balance - ReturnAmount
                             await db.customers.update(customerId, {
-                                balance: customer.balance - totalAmount
+                                balance: customer.balance - totalGrand
                             });
                         }
                     }
@@ -304,7 +365,7 @@ const Sales = () => {
                     setActiveTab('return');
                     setCustomerId(inv.customerId);
                     setCustomerName(inv.customerName);
-                    setItems(inv.items.map(i => ({ ...i }))); // Clone items
+                    setItems(inv.items.map((i: any) => ({ ...i }))); // Clone items
                     setNotes(t('sales.return_for_invoice', { number: inv.invoiceNumber }));
                     setIsModalOpen(true);
                 }} />}
@@ -319,12 +380,13 @@ const Sales = () => {
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.customer')}</th>
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.amount')}</th>
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.status')}</th>
+                                    {activeTab === 'return' && isZatcaEnabled && <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">ZATCA</th>}
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300 text-right">{t('common.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {!currentList ? (
-                                    Array.from({ length: 5 }).map((_, i) => (
+                                    Array.from({ length: 5 }).map((_: any, i: any) => (
                                         <tr key={i} className="animate-pulse">
                                             <td className="p-4"><Skeleton width={100} height={20} /></td>
                                             <td className="p-4"><Skeleton width={120} height={20} /></td>
@@ -350,7 +412,7 @@ const Sales = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    currentList.map((invoice, rowIndex) => (
+                                    currentList.map((invoice: any, rowIndex: any) => (
                                         <tr key={invoice.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                             <td
                                                 {...getGridCellProps(rowIndex, 0)}
@@ -369,17 +431,48 @@ const Sales = () => {
                                                     {invoice.status?.toUpperCase()}
                                                 </span>
                                             </td>
+                                            {activeTab === 'return' && isZatcaEnabled && (
+                                                <td className="p-4">
+                                                    {invoice.zatcaStatus === 'REPORTED' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                            <ShieldCheck size={12} /> Reported
+                                                        </span>
+                                                    ) : invoice.zatcaStatus === 'ERROR' ? (
+                                                        <span 
+                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
+                                                            title={invoice.zatcaError || 'Validation Error'}
+                                                        >
+                                                            <ShieldAlert size={12} /> Error
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600">
+                                                            <Clock size={12} /> Pending
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            )}
                                             <td {...getGridCellProps(rowIndex, 5)} className="p-4 text-right flex justify-end gap-2 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-lg">
                                                 {activeTab === 'order' && invoice.status === 'pending' && (
                                                     <button
                                                         onClick={async () => {
                                                             try {
                                                                 await db.transaction('rw', [db.invoices, db.items, db.customers], async () => {
+                                                                    // Generate sequential invoice number
+                                                                    const last = await db.invoices.orderBy('createdAt').last();
+                                                                    let nextNum = 1;
+                                                                    if (last && last.invoiceNumber) {
+                                                                        const numStr = last.invoiceNumber.replace(/\D/g, '');
+                                                                        const parsed = parseInt(numStr, 10);
+                                                                        if (!isNaN(parsed)) nextNum = parsed + 1;
+                                                                    }
+                                                                    const convInvNumber = `${settings.invoicePrefix || 'INV-'}${nextNum.toString().padStart(3, '0')}`;
+
                                                                     // 1. Create New Invoice
                                                                     const newInvoice: Invoice = {
                                                                         ...invoice,
-                                                                        id: undefined,
-                                                                        invoiceNumber: `INV-${Date.now()}`,
+                                                                        ...createRecordMetadata(),
+                                                                        branchId: activeBranchId || '',
+                                                                        invoiceNumber: convInvNumber,
                                                                         type: 'invoice',
                                                                         status: 'pending',
                                                                         paymentStatus: 'pending',
@@ -431,6 +524,15 @@ const Sales = () => {
                                                 >
                                                     <Printer size={18} />
                                                 </button>
+                                                {settings.cafeMode && invoice.status === 'pending' && activeTab === 'order' && (
+                                                    <button
+                                                        onClick={() => navigate('/pos', { state: { editInvoice: invoice } })}
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                                        title="Proceed to Payment"
+                                                    >
+                                                        <CreditCard size={18} />
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))
@@ -462,7 +564,7 @@ const Sales = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {!paymentList ? (
-                                    Array.from({ length: 5 }).map((_, i) => (
+                                    Array.from({ length: 5 }).map((_: any, i: any) => (
                                         <tr key={i} className="animate-pulse">
                                             <td className="p-4"><Skeleton width={80} height={20} /></td>
                                             <td className="p-4"><Skeleton width={150} height={20} /></td>
@@ -484,7 +586,7 @@ const Sales = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    paymentList.map(payment => {
+                                    paymentList.map((payment: any) => {
                                         const customer = customers?.find(c => c.id === payment.customerId);
                                         return (
                                             <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -518,10 +620,10 @@ const Sales = () => {
                         <select
                             className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
                             value={paymentCustomerId || ''}
-                            onChange={e => setPaymentCustomerId(Number(e.target.value))}
+                            onChange={e => setPaymentCustomerId(e.target.value)}
                         >
                             <option value="">{t('sales.select_customer')}</option>
-                            {customers?.map(c => (
+                            {customers?.map((c: any) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
@@ -576,13 +678,28 @@ const Sales = () => {
                                     return;
                                 }
                                 try {
-                                    await db.customerPayments.add({
-                                        customerId: paymentCustomerId,
-                                        amount: parseFloat(paymentAmount),
-                                        date: new Date(),
-                                        paymentMode: paymentMethod,
-                                        reference: paymentReference
+                                    const amount = parseFloat(paymentAmount);
+                                    await db.transaction('rw', [db.customerPayments, db.customers], async () => {
+                                        // 1. Save Payment
+                                        await db.customerPayments.add({
+                                            ...createRecordMetadata(),
+                                            branchId: activeBranchId || '',
+                                            customerId: paymentCustomerId,
+                                            amount: amount,
+                                            date: new Date(),
+                                            paymentMode: paymentMethod,
+                                            reference: paymentReference
+                                        });
+
+                                        // 2. Update Customer Balance (Reduction in Debt)
+                                        const customer = await db.customers.get(paymentCustomerId);
+                                        if (customer) {
+                                            await db.customers.update(paymentCustomerId, {
+                                                balance: (customer.balance || 0) - amount
+                                            });
+                                        }
                                     });
+
                                     addToast(t('sales.payment_recorded'), 'success');
                                     setIsPaymentModalOpen(false);
                                     setPaymentAmount('');
@@ -637,7 +754,7 @@ const Sales = () => {
                             onScroll={handleScroll}
                             className="flex-1 overflow-y-auto space-y-2"
                         >
-                            {visibleItems?.map(item => (
+                            {visibleItems?.map((item: any) => (
                                 <button
                                     key={item.id}
                                     onClick={() => addToOrder(item)}
@@ -666,14 +783,14 @@ const Sales = () => {
                                         className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
                                         value={customerId || ''}
                                         onChange={e => {
-                                            const id = Number(e.target.value);
+                                            const id = e.target.value;
                                             const c = customers?.find(cus => cus.id === id);
                                             setCustomerId(id);
                                             setCustomerName(c ? c.name : '');
                                         }}
                                     >
                                         <option value="">{t('sales.select_existing_customer')}</option>
-                                        {customers?.map(c => (
+                                        {customers?.map((c: any) => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
@@ -703,7 +820,7 @@ const Sales = () => {
                             <div className="space-y-3">
                                 <h3 className="font-semibold text-sm text-slate-500 uppercase tracking-wider">{t('sales.items_count')} ({items.length})</h3>
                                 <div className="border rounded-lg divide-y dark:border-slate-700 dark:divide-slate-700">
-                                    {items.map((item) => (
+                                    {items.map((item: any) => (
                                         <div key={item.itemId} className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800">
                                             <div className="flex-1">
                                                 <p className="font-medium dark:text-white text-sm">{item.name}</p>
@@ -853,8 +970,10 @@ const Sales = () => {
                                     const cost = parseFloat(newItemCost) || 0;
                                     const stock = parseInt(newItemStock) || 0;
 
-                                    // Add to DB
+                                    const meta = createRecordMetadata();
                                     const id = await db.items.add({
+                                        ...meta,
+                                        branchId: activeBranchId || '',
                                         name: newItemName,
                                         purchasePrice: cost,
                                         salePrice: price,
@@ -867,7 +986,9 @@ const Sales = () => {
 
                                     // Add to current order list directly
                                     addToOrder({
-                                        id: Number(id),
+                                        ...meta,
+                                        branchId: activeBranchId || '',
+                                        id: id as string,
                                         name: newItemName,
                                         purchasePrice: cost,
                                         stock: stock,

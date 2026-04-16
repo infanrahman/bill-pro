@@ -29,7 +29,7 @@ const Sidebar: React.FC = () => {
     const allLinks = [
         { to: '/', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: null }, // Always visible
         { to: '/pos', icon: ShoppingCart, label: t('sidebar.pos'), permission: 'pos_access' },
-        { to: '/inventory', icon: Package, label: t('sidebar.inventory'), permission: 'inventory_view' },
+        { to: '/inventory', icon: Package, label: settings.cafeMode ? t('sidebar.menu', { defaultValue: 'Menu' }) : t('sidebar.inventory'), permission: 'inventory_view' },
         { to: '/sales', icon: TrendingUp, label: t('sidebar.sales'), permission: 'sales_view' },
         { to: '/expenses', icon: DollarSign, label: t('sidebar.expenses'), permission: 'expenses_view' }, // Decoupled
         { to: '/purchase', icon: ShoppingBag, label: t('sidebar.purchase'), permission: 'purchases_view' },
@@ -38,7 +38,7 @@ const Sidebar: React.FC = () => {
         { to: '/cash-book', icon: BookOpen, label: t('sidebar.cashbook'), permission: 'cashbook_access' },
         { to: '/customers', icon: Users, label: t('sidebar.customers'), permission: 'customers_view' },
         { to: '/spreadsheet', icon: FileSpreadsheet, label: t('sidebar.excel_sheet'), permission: null },
-        { to: '/settings', icon: Settings, label: t('sidebar.settings'), permission: 'settings_manage' },
+        { to: '/settings', icon: Settings, label: t('sidebar.settings'), permission: 'settings_any' },
     ];
 
     const links = allLinks.filter(link => {
@@ -48,9 +48,15 @@ const Sidebar: React.FC = () => {
             return true;
         }
 
-        // Special case: Settings also accessible if you have backup_manage or users_manage
-        if (link.label === t('sidebar.settings')) {
-            return role === 'admin' || hasPermission('settings_manage') || hasPermission('backup_manage') || hasPermission('users_manage');
+        // Settings: visible for admin OR if any settings-related permission is granted
+        if (link.permission === 'settings_any') {
+            return role === 'admin'
+                || hasPermission('settings_general')
+                || hasPermission('settings_taxes')
+                || hasPermission('settings_invoice')
+                || hasPermission('settings_printers')
+                || hasPermission('settings_backup')
+                || hasPermission('users_manage');
         }
 
         return hasPermission(link.permission);

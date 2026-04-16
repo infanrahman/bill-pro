@@ -54,44 +54,60 @@ const Dashboard: React.FC = () => {
     const { t } = useTranslation();
     const { checkReminders } = useNotification();
     const { formatCurrency, formatDate } = useSettings();
+    const { hasPermission, activeBranchId, activeBranch } = useAuth();
 
     React.useEffect(() => {
         checkReminders();
     }, [checkReminders]);
 
-    const invoices = useLiveQuery(() => db.invoices.toArray(), []);
-    const expenses = useLiveQuery(() => db.expenses.toArray(), []);
+    const invoices = useLiveQuery(() => activeBranch?.isMaster ? db.invoices.toArray() : db.invoices.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
+    const expenses = useLiveQuery(() => activeBranch?.isMaster ? db.expenses.toArray() : db.expenses.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
     const lowStockItems = useLiveQuery(() =>
-        db.items.filter(i => i.stock <= i.minStock).toArray(), []
+        activeBranch?.isMaster ? db.items.filter((i: any) => i.stock <= i.minStock).toArray() : db.items.where('branchId').equals(activeBranchId).filter((i: any) => i.stock <= i.minStock).toArray(), [activeBranchId, activeBranch?.isMaster]
     );
-    const purchases = useLiveQuery(() => db.purchases.toArray(), []);
-    const suppliers = useLiveQuery(() => db.suppliers.toArray(), []);
+    const purchases = useLiveQuery(() => activeBranch?.isMaster ? db.purchases.toArray() : db.purchases.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
+    const suppliers = useLiveQuery(() => activeBranch?.isMaster ? db.suppliers.toArray() : db.suppliers.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
 
+    const inventoryItems = useLiveQuery(() => db.items.toArray());
+ 
     // Calculate Metrics
-    const totalSales = invoices?.reduce((sum, inv) => sum + inv.grandTotal, 0) || 0;
-    const totalExpenses = expenses?.reduce((sum, exp) => sum + exp.amount, 0) || 0;
-    const netProfit = totalSales - totalExpenses; // Simplified Profit (Sales - Expenses) - COGS ideally
+    const { totalSales, totalTax, totalCOGS } = (invoices || []).reduce((acc, inv) => {
+        acc.totalSales += inv.grandTotal;
+        acc.totalTax += inv.taxAmount || 0;
+        
+        const invCOGS = (inv.items || []).reduce((pSum, item) => {
+            const cost = item.purchasePrice ?? (inventoryItems?.find(oi => oi.id === item.itemId)?.purchasePrice || 0);
+            return pSum + (cost * item.quantity);
+        }, 0);
+        
+        acc.totalCOGS += invCOGS;
+        return acc;
+    }, { totalSales: 0, totalTax: 0, totalCOGS: 0 });
+ 
+    const netRevenue = totalSales - totalTax;
+    const totalExpenses = expenses?.reduce((sum: any, exp: any) => sum + exp.amount, 0) || 0;
+    const netProfit = netRevenue - totalCOGS - totalExpenses;
 
     const todaySales = invoices
-        ?.filter(inv => new Date(inv.createdAt).toDateString() === today.toDateString())
-        .reduce((sum, inv) => sum + inv.grandTotal, 0) || 0;
+        ?.filter((inv: any) => new Date(inv.createdAt).toDateString() === today.toDateString())
+        .reduce((sum: any, inv: any) => sum + inv.grandTotal, 0) || 0;
 
     // Purchase Metrics
-    const pendingOrders = purchases?.filter(p => p.type === 'order' && p.status === 'pending') || [];
+    const pendingOrders = purchases?.filter((p: any) => p.type === 'order' && p.status === 'pending') || [];
     const totalPurchasesMonth = purchases
-        ?.filter(p => p.type === 'bill' && new Date(p.date).getMonth() === today.getMonth())
-        .reduce((sum, p) => sum + p.totalAmount, 0) || 0;
-    const totalSupplierBalance = suppliers?.reduce((sum, s) => sum + (s.balance || 0), 0) || 0;
+        ?.filter((p: any) => p.type === 'bill' && new Date(p.date).getMonth() === today.getMonth())
+        .reduce((sum: any, p: any) => sum + p.totalAmount, 0) || 0;
+    const totalSupplierBalance = suppliers?.reduce((sum: any, s: any) => sum + (s.balance || 0), 0) || 0;
 
     // Chart Data Preparation (Last 7 Days)
-    const chartData = Array.from({ length: 7 }).map((_, i) => {
+    const chartData = Array.from({ length: 7 }).map((_: any, i: any) => {
         const d = new Date();
         d.setDate(d.getDate() - (6 - i));
         const dateStr = d.toDateString();
 
         const sales = invoices
-            ?.filter(inv => new Date(inv.createdAt).toDateString() === dateStr)
-            .reduce((sum, inv) => sum + inv.grandTotal, 0) || 0;
+            ?.filter((inv: any) => new Date(inv.createdAt).toDateString() === dateStr)
+            .reduce((sum: any, inv: any) => sum + inv.grandTotal, 0) || 0;
 
         return {
             name: formatDate(d),
@@ -99,7 +115,7 @@ const Dashboard: React.FC = () => {
         };
     });
 
-    const { hasPermission } = useAuth();
+
 
 
     // ... (existing code)
@@ -144,7 +160,7 @@ const Dashboard: React.FC = () => {
                     <>
                         <StatCard
                             title={t('dashboard.total_revenue')}
-                            value={formatCurrency(totalSales)}
+                            value={formatCurrency(netRevenue)}
                             icon={DollarSign}
                             color="bg-blue-500"
                             subValue={`+${formatCurrency(todaySales)} ${t('dashboard.today_suffix')}`}
@@ -246,7 +262,7 @@ const Dashboard: React.FC = () => {
                             <AlertCircle size={20} className="text-orange-500" /> {t('dashboard.low_stock_items')}
                         </h3>
                         <div className="space-y-4">
-                            {lowStockItems?.slice(0, 5).map(item => (
+                            {lowStockItems?.slice(0, 5).map((item: any) => (
                                 <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                     <div>
                                         <p className="font-medium dark:text-white line-clamp-1">{item.name}</p>
@@ -273,36 +289,36 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                    <table className="w-full text-left whitespace-nowrap min-w-[700px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                             <tr>
-                                <th className="px-4 py-3 rounded-l-lg">{t('common.date')}</th>
-                                <th className="px-4 py-3">{t('dashboard.invoice_no')}</th>
-                                <th className="px-4 py-3">{t('dashboard.customer')}</th>
-                                <th className="px-4 py-3">{t('dashboard.amount')}</th>
-                                <th className="px-4 py-3">{t('dashboard.mode')}</th>
-                                <th className="px-4 py-3 rounded-r-lg">{t('dashboard.status')}</th>
+                                <th className="p-4 font-semibold">{t('common.date')}</th>
+                                <th className="p-4 font-semibold">{t('dashboard.invoice_no')}</th>
+                                <th className="p-4 font-semibold">{t('dashboard.customer')}</th>
+                                <th className="p-4 font-semibold">{t('dashboard.amount')}</th>
+                                <th className="p-4 font-semibold">{t('dashboard.mode')}</th>
+                                <th className="p-4 font-semibold">{t('dashboard.status')}</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {[...(invoices || [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5).map(inv => (
-                                <tr key={inv.id} className="text-sm">
-                                    <td className="px-4 py-4 font-medium text-slate-700 dark:text-slate-300">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {[...(invoices || [])].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5).map((inv: any) => (
+                                <tr key={inv.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                    <td className="p-4 font-medium text-slate-700 dark:text-slate-300 text-sm">
                                         {formatDate(inv.createdAt)}
                                     </td>
-                                    <td className="px-4 py-4 text-slate-500">#{inv.invoiceNumber}</td>
-                                    <td className="px-4 py-4 text-slate-600 dark:text-slate-400 font-medium">{inv.customerName}</td>
-                                    <td className="px-4 py-4 font-bold text-slate-800 dark:text-white">{formatCurrency(inv.grandTotal)}</td>
-                                    <td className="px-4 py-4">
-                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded text-xs uppercase">
+                                    <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">#{inv.invoiceNumber}</td>
+                                    <td className="p-4 text-slate-600 dark:text-slate-300 font-medium text-sm">{inv.customerName}</td>
+                                    <td className="p-4 font-bold text-slate-800 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</td>
+                                    <td className="p-4 text-sm">
+                                        <span className="px-2 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md text-xs font-semibold uppercase border border-slate-200 dark:border-slate-700">
                                             {inv.paymentMode}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase
-                                            ${inv.paymentStatus === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                inv.paymentStatus === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                    'bg-blue-100 text-blue-700'}`}>
+                                    <td className="p-4 text-sm">
+                                        <span className={`px-2 py-1.5 rounded-md text-xs font-semibold uppercase border
+                                            ${inv.paymentStatus === 'paid' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' :
+                                                inv.paymentStatus === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
+                                                    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'}`}>
                                             {inv.paymentStatus}
                                         </span>
                                     </td>

@@ -17,11 +17,25 @@ contextBridge.exposeInMainWorld('electron', {
     // New Print API
     print: (content: string, options: PrintOptions) => ipcRenderer.invoke('print', content, options),
     printThermalRaw: (data: any, printerName: string) => ipcRenderer.invoke('print-thermal-raw', { data, printerName }),
+    openCashDrawer: (printerName: string) => ipcRenderer.invoke('printer:open-drawer', { printerName }),
     getPrinters: () => ipcRenderer.invoke('get-printers'),
 
     downloadPDF: (html: string, filename: string, silent?: boolean) => ipcRenderer.invoke('download-pdf', { html, filename, silent }),
     saveFileSilently: (buffer: ArrayBuffer, filename: string) => ipcRenderer.invoke('save-file-silently', { buffer, filename }),
     openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+
+    scanNetworkScales: (port?: number) => ipcRenderer.invoke('scan-network-scales', port),
+    testScaleConnection: (ip: string, port: number) => ipcRenderer.invoke('test-scale-connection', { ip, port }),
+
+    // Scale Direct TCP
+    scaleConnect: (ip: string, port?: number) => ipcRenderer.invoke('scale:connect', { ip, port }),
+    scaleSyncTime: (ip: string, port?: number, timeStr?: string) => ipcRenderer.invoke('scale:sync-time', { ip, port, timeStr }),
+    scaleUploadPLU: (ip: string, port: number | undefined, product: any) => ipcRenderer.invoke('scale:upload-plu', { ip, port, product }),
+    scaleDeletePLU: (ip: string, port: number | undefined, pluNumber: string) => ipcRenderer.invoke('scale:delete-plu', { ip, port, pluNumber }),
+    scaleDownloadPLU: (ip: string, port?: number) => ipcRenderer.invoke('scale:download-plu', { ip, port }),
+    scaleFullSync: (ip: string, port: number | undefined, products: any[]) => ipcRenderer.invoke('scale:full-sync', { ip, port, products }),
+    scaleIncrementalSync: (ip: string, port: number | undefined, products: any[]) => ipcRenderer.invoke('scale:incremental-sync', { ip, port, products }),
+    scaleSyncHotkeys: (ip: string, port: number | undefined, hotkeys: any[]) => ipcRenderer.invoke('scale:sync-hotkeys', { ip, port, hotkeys }),
 
     getLicenseStatus: () => ipcRenderer.invoke('license:get-status'),
     activateLicense: (key: string) => ipcRenderer.invoke('license:activate', key),

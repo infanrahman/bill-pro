@@ -8,11 +8,13 @@ import DataBackupTab from './Tabs/DataBackupTab';
 import GeneralTab from './Tabs/GeneralTab';
 import ActivityLogTab from './Tabs/ActivityLogTab';
 import UserManagementTab from './Tabs/UserManagementTab';
+import BranchesTab from './Tabs/BranchesTab';
 import HelpTab from './Tabs/HelpTab';
-import { User, Bell, Printer, Database, Settings as SettingsIcon, Shield, Users, HelpCircle, ShieldCheck, Keyboard } from 'lucide-react';
+import { User, Bell, Printer, Database, Settings as SettingsIcon, Shield, Users, HelpCircle, ShieldCheck, Keyboard, Scale as ScaleIcon, MapPin } from 'lucide-react';
 
 import ZatcaTab from './Tabs/ZatcaTab';
 import LicenseTab from './Tabs/LicenseTab';
+import ScaleTab from './Tabs/ScaleTab';
 
 import KeyboardShortcutsTab from './Tabs/KeyboardShortcutsTab';
 
@@ -22,33 +24,25 @@ const Settings: React.FC = () => {
     const [activeTab, setActiveTab] = useState('general');
 
     const allTabs = [
-        { id: 'general', label: t('settings.tabs.general'), icon: SettingsIcon, permission: null },
+        { id: 'general', label: t('settings.tabs.general'), icon: SettingsIcon, permission: 'settings_general' },
         { id: 'shortcuts', label: t('settings.tabs.shortcuts'), icon: Keyboard, permission: null },
         { id: 'license', label: t('settings.tabs.license'), icon: ShieldCheck, permission: 'admin' },
-        { id: 'profile', label: t('settings.tabs.business_profile'), icon: User, permission: 'admin' }, // Usually only admin
+        { id: 'profile', label: t('settings.tabs.business_profile'), icon: User, permission: 'settings_general' },
+        { id: 'branches', label: t('settings.tabs.branches', 'Branches'), icon: MapPin, permission: 'admin' },
         { id: 'zatca', label: t('settings.tabs.zatca'), icon: ShieldCheck, permission: 'admin' },
         { id: 'users', label: t('settings.tabs.users_roles'), icon: Users, permission: 'users_manage' },
-        { id: 'reminders', label: t('settings.tabs.reminders'), icon: Bell, permission: 'settings' },
-        { id: 'print', label: t('settings.tabs.invoice_print'), icon: Printer, permission: 'settings' },
-        { id: 'backup', label: t('settings.tabs.data_backup'), icon: Database, permission: 'backup_manage' },
+        { id: 'reminders', label: t('settings.tabs.reminders'), icon: Bell, permission: 'settings_general' },
+        { id: 'print', label: t('settings.tabs.invoice_print'), icon: Printer, permission: 'settings_invoice' },
+        { id: 'scales', label: t('settings.tabs.scales', { defaultValue: 'Scale Management' }), icon: ScaleIcon, permission: 'settings_printers' },
+        { id: 'backup', label: t('settings.tabs.data_backup'), icon: Database, permission: 'settings_backup' },
         { id: 'logs', label: t('settings.tabs.activity_logs'), icon: Shield, permission: 'admin' },
         { id: 'help', label: t('settings.tabs.help'), icon: HelpCircle, permission: null },
     ];
 
-    const tabs = allTabs.filter(tab => {
+    const tabs = allTabs.filter((tab: any) => {
         if (!tab.permission) return true;
         if (tab.permission === 'admin') return user?.role === 'admin';
-        // 'settings' permission implies backup or general settings access if we had it, 
-        // but for now let's allow basic settings for shopkeepers? 
-        // Actually, let's keep it simple:
-        // print/reminders -> accessible if 'settings' permission, OR if admin.
-        // But I didn't add 'settings' permission to UserForm.
-        // Let's map 'print','reminders' to 'pos' maybe? Use 'pos' for print settings?
-        // Let's assume shopkeepers can change print settings if they have POS access.
-        if (tab.id === 'print') return true;
-        if (tab.id === 'reminders') return true;
-
-        return hasPermission(tab.permission);
+        return user?.role === 'admin' || hasPermission(tab.permission);
     });
 
     return (
@@ -59,7 +53,7 @@ const Settings: React.FC = () => {
                     <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{t('settings.title')}</h1>
                 </div>
                 <nav className="flex-1 px-4 space-y-2">
-                    {tabs.map((tab) => {
+                    {tabs.map((tab: any) => {
                         const Icon = tab.icon;
                         return (
                             <button
@@ -84,12 +78,14 @@ const Settings: React.FC = () => {
                     {activeTab === 'general' && <GeneralTab />}
                     {activeTab === 'license' && <LicenseTab />}
                     {activeTab === 'shortcuts' && <React.Suspense fallback={<div>Loading...</div>}><KeyboardShortcutsTab /></React.Suspense>}
-                    {activeTab === 'profile' && <BusinessProfileTab />}
+                    {activeTab === 'profile' && <BusinessProfileTab onBack={() => setActiveTab('general')} />}
+                    {activeTab === 'branches' && <BranchesTab />}
                     {activeTab === 'zatca' && <ZatcaTab />}
                     {activeTab === 'users' && <UserManagementTab />}
                     {activeTab === 'reminders' && <RemindersTab />}
-                    {activeTab === 'print' && <InvoicePrintTab />}
-                    {activeTab === 'backup' && <DataBackupTab />}
+                    { activeTab === 'print' && <InvoicePrintTab /> }
+                    { activeTab === 'scales' && <ScaleTab /> }
+                    { activeTab === 'backup' && <DataBackupTab /> }
                     {activeTab === 'logs' && <ActivityLogTab />}
                     {activeTab === 'help' && <HelpTab />}
                 </div>

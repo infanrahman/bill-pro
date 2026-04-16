@@ -33,9 +33,9 @@ const UserList: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const [userToDelete, setUserToDelete] = useState<number | null>(null);
+    const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-    const handleDeleteClick = (id: number) => {
+    const handleDeleteClick = (id: string) => {
         setUserToDelete(id);
     };
 
@@ -97,51 +97,53 @@ const UserList: React.FC = () => {
                 </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-lg border border-indigo-100 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-indigo-50 border-b border-indigo-100">
-                        <tr>
-                            <th className="p-4 font-semibold text-indigo-900">{t('users.username')}</th>
-                            <th className="p-4 font-semibold text-indigo-900">{t('users.full_name')}</th>
-                            <th className="p-4 font-semibold text-indigo-900">{t('users.role')}</th>
-                            <th className="p-4 font-semibold text-indigo-900 text-right">{t('common.actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-indigo-50">
-                        {users.map((userItem) => (
-                            <tr key={userItem.id} className="hover:bg-indigo-50/50 transition-colors">
-                                <td className="p-4 font-medium text-gray-900">{userItem.username}</td>
-                                <td className="p-4 text-gray-600">{userItem.name}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${userItem.role === 'admin'
-                                        ? 'bg-purple-100 text-purple-700'
-                                        : 'bg-blue-100 text-blue-700'
-                                        }`}>
-                                        {userItem.role === 'admin' ? t('users.admin') : t('users.shopkeeper')}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-right space-x-2">
-                                    <button
-                                        onClick={() => handleEdit(userItem)}
-                                        className="text-gray-400 hover:text-indigo-600 transition-colors"
-                                        title={t('common.edit')}
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                    </button>
-                                    {currentUser?.username !== userItem.username && (
-                                        <button
-                                            onClick={() => userItem.id && handleDeleteClick(userItem.id)}
-                                            className="text-gray-400 hover:text-red-600 transition-colors"
-                                            title={t('common.delete')}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </td>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="p-4 font-semibold">{t('users.username')}</th>
+                                <th className="p-4 font-semibold">{t('users.full_name')}</th>
+                                <th className="p-4 font-semibold">{t('users.role')}</th>
+                                <th className="p-4 font-semibold text-right">{t('common.actions')}</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {users.map((userItem: any) => (
+                                <tr key={userItem.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                    <td className="p-4 font-medium text-slate-900 dark:text-white text-sm">{userItem.username}</td>
+                                    <td className="p-4 text-slate-600 dark:text-slate-400 text-sm">{userItem.name}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1.5 rounded-md text-xs font-semibold ${userItem.role === 'admin'
+                                            ? 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800'
+                                            : 'bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                                            }`}>
+                                            {userItem.role === 'admin' ? t('users.admin') : t('users.shopkeeper')}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 flex justify-end gap-2">
+                                        <button
+                                            onClick={() => handleEdit(userItem)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                                            title={t('common.edit')}
+                                        >
+                                            <Edit size={18} />
+                                        </button>
+                                        {currentUser?.username !== userItem.username && (
+                                            <button
+                                                onClick={() => userItem.id && handleDeleteClick(userItem.id)}
+                                                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                title={t('common.delete')}
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {showForm && (

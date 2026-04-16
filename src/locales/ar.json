@@ -26,11 +26,10 @@
         "delete_confirm_title": "تأكيد الحذف",
         "placeholder_amount": "0.00",
         "placeholder_qty": "0",
-        "placeholder_item": "أدخل اسم العنصر...",
+        "placeholder_item": "مثال: رسوم خدمة",
         "placeholder_notes": "أضف ملاحظات...",
         "placeholder_details": "أدخل التفاصيل...",
         "item_description": "العنصر / الوصف",
-        "placeholder_item": "مثال: رسوم خدمة",
         "placeholder_search": "بحث...",
         "refresh": "تحديث",
         "back": "رجوع",
@@ -46,7 +45,18 @@
         "vat": "الضريبة",
         "generating": "جار الإنشاء...",
         "no_results": "لا توجد نتائج",
-        "try_different_search": "جرب كلمة بحث أخرى"
+        "try_different_search": "جرب كلمة بحث أخرى",
+        "showing": "عرض",
+        "of": "من",
+        "page": "صفحة",
+        "notes": "ملاحظات",
+        "notes_placeholder": "أضف ملاحظات...",
+        "share_text_info": "سيتم تنسيق تفاصيل المستند كنص وإرسالها مباشرة عبر WhatsApp أو البريد الإلكتروني.",
+        "share_whatsapp": "مشاركة عبر WhatsApp",
+        "share_email": "مشاركة عبر البريد الإلكتروني",
+        "select": "تحديد",
+        "exclusive": "غير شامل",
+        "inclusive": "شامل"
     },
     "sidebar": {
         "dashboard": "لوحة القيادة",
@@ -75,7 +85,6 @@
         "recent_transactions": "المعاملات الأخيرة",
         "view_all": "عرض الكل",
         "customer": "العميل",
-        "amount": "المبلغ",
         "amount": "المبلغ",
         "status": "الحالة",
         "today_suffix": "اليوم",
@@ -117,6 +126,7 @@
         "tax": "الضريبة",
         "discount": "الخصم",
         "total": "المجموع",
+        "order_type": "نوع الطلب",
         "checkout": "دفع",
         "clear_cart": "إفراغ السلة",
         "empty_cart": "السلة فارغة",
@@ -162,7 +172,12 @@
         "sale_success": "تم إكمال البيع بنجاح!",
         "sale_failed": "فشل في معالجة البيع",
         "invoice_sent": "تم إرسال الفاتورة إلى الطابعة",
-        "print_failed": "تم حفظ البيع، لكن الطباعة فشلت"
+        "print_failed": "تم حفظ البيع، لكن الطباعة فشلت",
+        "dine_in": "محلي",
+        "parcel": "سفري",
+        "pickup": "استلام",
+        "delivery": "توصيل",
+        "kitchen_notes": "ملاحظة للمطبخ (مثال: بدون بصل)"
     },
     "purchases": {
         "title": "إدارة المشتريات",
@@ -196,7 +211,7 @@
         "total_amount": "المبلغ الإجمالي",
         "paid_amount": "المبلغ المدفوع / المقدم",
         "refund_received": "تم استلام المبلغ المسترد",
-        "balance_due": "الرصيد المستحق",
+        "balance_due": "المبلغ المستحق",
         "balance_credit": "رصيد الائتمان",
         "payment_type": "نوع الدفع",
         "notes": "الوصف / ملاحظات...",
@@ -251,7 +266,6 @@
         "print_title_order": "أمر شراء",
         "print_title_return": "إشعار مدين / مرتجع",
         "unit_cost": "تكلفة الوحدة",
-        "balance_due": "المبلغ المستحق",
         "record_payment": "تسجيل الدفع",
         "bill_amount": "قيمة الفاتورة",
         "payment_amount": "مبلغ الدفع",
@@ -262,10 +276,15 @@
         "outstanding_bills": "فواتير مستحقة",
         "no_outstanding_bills": "لا توجد فواتير مستحقة",
         "pay_now": "ادفع الآن",
-        "bill_no": "رقم الفاتورة"
+        "bill_no": "رقم الفاتورة",
+        "paid": "مدفوع",
+        "share_bill": "مشاركة الفاتورة"
     },
     "inventory": {
         "title": "إدارة المخزون",
+        "category": "فئة",
+        "item_code": "رمز الصنف / PLU للميزان",
+        "item_code_placeholder": "مثال 00010",
         "add_item": "إضافة عنصر جديد",
         "edit_item": "تعديل العنصر",
         "search_placeholder": "البحث بالاسم أو الباركود...",
@@ -301,6 +320,7 @@
         "bulk_delete_error": "فشل حذف العناصر",
         "generate_barcode": "توليد باركود عشوائي",
         "product_label": "ملصق المنتج",
+        "show_cost_code": "إظهار رمز التكلفة السري",
         "print_label": "طباعة الملصق",
         "generating": "جار التوليد...",
         "unit": "الوحدة",
@@ -308,7 +328,23 @@
         "actions": "الإجراءات",
         "save_item": "حفظ العنصر",
         "update_item": "تحديث العنصر",
-        "no_items_desc": "ابدأ بإضافة عناصر إلى المخزون الخاص بك."
+        "no_items_desc": "ابدأ بإضافة عناصر إلى المخزون الخاص بك.",
+        "categories": "الفئات",
+        "add_category": "إضافة فئة",
+        "edit_category": "تعديل الفئة",
+        "new_category": "فئة جديدة",
+        "save_category": "حفظ الفئة",
+        "category_name": "الاسم",
+        "category_desc": "الوصف",
+        "category_updated": "تم تحديث الفئة بنجاح",
+        "category_created": "تم إنشاء الفئة بنجاح",
+        "category_save_error": "فشل حفظ الفئة",
+        "category_deleted": "تم حذف الفئة",
+        "category_delete_error": "فشل حذف الفئة",
+        "category_delete_confirm": "هل أنت متأكد من أنك تريد حذف هذه الفئة؟",
+        "no_categories": "لا توجد فئات",
+        "no_categories_desc": "قم بإنشاء فئات لتنظيم عناصرك.",
+        "arabic_name": "الاسم العربي"
     },
     "transactions": {
         "title": "سجل المبيعات",
@@ -407,8 +443,6 @@
         "total_cost": "التكلفة الإجمالية",
         "total_profit": "إجمالي الربح",
         "margin": "هامش الربح %",
-        "stock_summary": "ملخص المخزون",
-        "item_performance": "أداء الأصناف",
         "vat_report": "تقرير الضريبة",
         "net_sales_excl": "صافي المبيعات (بدون ضريبة)",
         "vat_amount": "قيمة الضريبة",
@@ -451,7 +485,8 @@
         "money_out": "الأموال الصادرة",
         "est_daily_profit": "الربح اليومي المقدر",
         "transactions": "المعاملات",
-        "no_transactions_for_date": "لا توجد معاملات لهذا التاريخ."
+        "no_transactions_for_date": "لا توجد معاملات لهذا التاريخ.",
+        "no_records": "لا توجد سجلات"
     },
     "units": {
         "pc": "قطعة",
@@ -550,10 +585,10 @@
     "settings": {
         "tabs": {
             "general": "عام",
-            "shortcuts": "اختصارات لوحة المفاتيح",
+            "shortcuts": "اختصارات المفاتيح",
             "license": "حالة الترخيص",
             "business_profile": "الملف التجاري",
-            "zatca": "ZATCA الربط مع",
+            "zatca": "تكامل هيئة الزكاة (ZATCA)",
             "users_roles": "المستخدمين والصلاحيات",
             "load_error": "مشكلة في تحميل المستخدمين",
             "update_success": "تم تحديث المستخدم بنجاح",
@@ -561,9 +596,7 @@
             "reminders": "التذكيرات",
             "invoice_print": "الفاتورة والطباعة",
             "data_backup": "نسخ احتياطي للبيانات",
-            "activity_logs": "سجلات النشاط",
-            "zatca": "تكامل هيئة الزكاة (ZATCA)",
-            "shortcuts": "اختصارات المفاتيح"
+            "activity_logs": "سجلات النشاط"
         },
         "general": {
             "title": "التطبيق",
@@ -715,7 +748,8 @@
         "total": "المجموع",
         "payment_mode": "طريقة الدفع",
         "bank_transfer": "تحويل بنكي",
-        "item_name_placeholder": "مثال: ماوس لاسلكي"
+        "item_name_placeholder": "مثال: ماوس لاسلكي",
+        "share_invoice": "مشاركة الفاتورة"
     },
     "backup": {
         "title": "إدارة البيانات",
@@ -786,8 +820,17 @@
         "regular_settings": "إعدادات الطابعة العادية (PDF/A4)",
         "select_doc_printer": "اختر طابعة المستندات",
         "default_system": "طابعة النظام الافتراضية",
-        "save_settings": "حفظ الإعدادات",
-        "saved_success": "تم حفظ الإعدادات"
+        "saved_success": "تم حفظ الإعدادات",
+        "barcode_title": "طابعة الباركود",
+        "barcode_desc": "تكوين طابعة مخصصة لملصقات المنتجات",
+        "barcode_settings": "إعدادات طابعة الملصقات",
+        "select_barcode_printer": "اختر طابعة الباركود",
+        "label_width": "عرض الملصق (مثال: 50mm)",
+        "label_height": "ارتفاع الملصق (مثال: 25mm)",
+        "barcode_copies": "النسخ الافتراضية لكل صنف",
+        "label_orientation": "الاتجاه",
+        "portrait": "طولي",
+        "landscape": "عرضي"
     },
     "reminders": {
         "title": "التذكيرات",
@@ -834,12 +877,11 @@
     },
     "cashbook": {
         "title": "دفتر النقدية",
-        "subtitle": "إدارة الأطراف النقدية الخاصة بك",
+        "subtitle": "تتبع تدفقاتك النقدية اليومية",
         "access_denied_msg": "ليس لديك إذن للوصول إلى دفتر النقدية.",
         "tab_suppliers": "الموردين (نقدي)",
         "tab_customers": "العملاء (نقدي)",
         "party_list": "قائمة الأطراف",
-        "subtitle": "تتبع تدفقاتك النقدية اليومية",
         "net_balance": "صافي الرصيد",
         "total_in": "إجمالي الداخل",
         "total_out": "إجمالي الخارج",
@@ -958,6 +1000,31 @@
         "expires_on": "ينتهي في:",
         "advanced_options": "خيارات متقدمة",
         "reset_license": "إعادة تعيين الترخيص",
-        "reset_confirm": "هل أنت متأكد أنك تريد إعادة تعيين الترخيص؟ سيؤدي هذا إلى إزالة المفتاح الحالي ويتطلب إعادة التفعيل."
+        "reset_confirm": "هل أنت متأكد أنك تريد إعادة تعيين الترخيص؟ سيؤدي هذا إلى إزالة المفتاح الحالي وتتطلب إعادة التنشيط."
+    },
+    "scales": {
+        "description": "إدارة موازين IP ومزامنة الأصناف واختبار الاتصال.",
+        "add_scale": "إضافة ميزان",
+        "bulk_update": "تحديث الكل",
+        "name": "اسم الميزان / الموقع",
+        "ip_address": "عنوان IP",
+        "port": "المنفذ",
+        "model": "موديل الميزان",
+        "test_config": "اختبار",
+        "download": "تحميل",
+        "sync_items": "مزامنة",
+        "no_scales": "لا توجد موازين.",
+        "add_success": "تمت إضافة الميزان بنجاح.",
+        "add_error": "فشل إضافة الميزان.",
+        "delete_confirm": "هل أنت متأكد من إزالة هذا الميزان؟",
+        "delete_success": "تم الحذف.",
+        "test_success": "تم الاتصال بنجاح!",
+        "test_failed": "فشل الاتصال.",
+        "test_error": "خطأ أثناء الاتصال.",
+        "download_success": "تم تحميل {{count}} صنف.",
+        "download_error": "خطأ في التحميل.",
+        "sync_error": "خطأ في المزامنة.",
+        "bulk_sync_success": "اكتملت المزامنة لجميع الموازين.",
+        "bulk_sync_error": "خطأ أثناء المزامنة."
     }
 }

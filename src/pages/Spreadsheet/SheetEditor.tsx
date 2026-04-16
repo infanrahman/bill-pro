@@ -34,7 +34,7 @@ interface SpreadsheetState {
 }
 
 interface SheetEditorProps {
-    sheetId: number | 'new';
+    sheetId: string | 'new';
     onBack: () => void;
 }
 
@@ -44,7 +44,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
 
     // State
     const [data, setData] = useState<string[][]>(Array(20).fill('').map(() => Array(10).fill('')));
-    const [headers, setHeaders] = useState<string[]>(Array(10).fill('').map((_, i) => String.fromCharCode(65 + i)));
+    const [headers, setHeaders] = useState<string[]>(Array(10).fill('').map((_: any, i: any) => String.fromCharCode(65 + i)));
     const [colWidths, setColWidths] = useState<Record<number, number>>({});
     const [styles, setStyles] = useState<Record<string, CellStyle>>({});
     const [selectedCell, setSelectedCell] = useState<{ r: number, c: number } | null>(null);
@@ -82,12 +82,16 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
             try {
                 const sheet = await db.spreadsheets.get(sheetId);
                 if (sheet) {
-                    setSheetName(sheet.name);
-                    setData(sheet.data);
-                    setHeaders(sheet.headers);
-                    setStyles(sheet.styles);
-                    setColWidths(sheet.colWidths);
-                    setRowHeights(sheet.rowHeights);
+                    setSheetName(sheet.name || 'Untitled');
+
+                    // Safely reconstruct data, ensuring no undefined rows crash the mapping later
+                    const safeData = sheet.data ? sheet.data.map((row: any) => row ? [...row] : []) : Array(20).fill('').map(() => Array(10).fill(''));
+                    setData(safeData);
+
+                    setHeaders(sheet.headers || Array(10).fill('').map((_: any, i: any) => String.fromCharCode(65 + i)));
+                    setStyles(sheet.styles || {});
+                    setColWidths(sheet.colWidths || {});
+                    setRowHeights(sheet.rowHeights || {});
                 } else {
                     addToast('Spreadsheet not found', 'error');
                     onBack();
@@ -103,6 +107,13 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
     const saveState = useCallback(async () => {
         setIsSaving(true);
         try {
+            // First we need to get the existing sheet if it exists
+            let existingParams: Partial<SpreadsheetState> & { createdAt?: Date } = {};
+            if (sheetId !== 'new') {
+                const sheet = await db.spreadsheets.get(sheetId);
+                if (sheet) existingParams = { createdAt: sheet.createdAt };
+            }
+
             const payload = {
                 name: sheetName,
                 data,
@@ -111,11 +122,15 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
                 colWidths,
                 rowHeights,
                 updatedAt: new Date(),
-                createdAt: sheetId === 'new' ? new Date() : undefined
+                createdAt: existingParams.createdAt || new Date()
             };
 
             if (sheetId === 'new') {
-                await db.spreadsheets.add(payload as any);
+                const { createRecordMetadata } = await import('../../services/db');
+                await db.spreadsheets.add({
+                    ...createRecordMetadata(),
+                    ...payload
+                } as any);
                 addToast('Spreadsheet created', 'success');
                 onBack(); // Simplest to go back to list to see it
             } else {
@@ -347,11 +362,11 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
             // 1. Handle Ranges First (SUM, AVG, etc)
             parsed = parsed.replace(/(SUM|AVERAGE|MIN|MAX|COUNT)\(([A-Z]+[0-9]+):([A-Z]+[0-9]+)\)/g, (_, fn, p1, p2) => {
                 const vals = getRangeValues(p1, p2);
-                if (fn === 'SUM') return String(vals.reduce((a, b) => a + b, 0));
-                if (fn === 'AVERAGE') return String(vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
+                if (fn === 'SUM') return String(vals.reduce((a: any, b: any) => a + b, 0));
+                if (fn === 'AVERAGE') return String(vals.length ? vals.reduce((a: any, b: any) => a + b, 0) / vals.length : 0);
                 if (fn === 'MIN') return String(vals.length ? Math.min(...vals) : 0);
                 if (fn === 'MAX') return String(vals.length ? Math.max(...vals) : 0);
-                if (fn === 'COUNT') return String(vals.filter(v => v !== 0).length);
+                if (fn === 'COUNT') return String(vals.filter((v: any) => v !== 0).length);
                 return '0';
             });
 
@@ -377,7 +392,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
             };
 
             const funcs = ['IF', 'CONCAT', 'UPPER', 'LOWER', 'ROUND', 'ABS', 'SQRT', 'LEN', 'TRIM'];
-            funcs.forEach(fn => {
+            funcs.forEach((fn: any) => {
                 const regex = new RegExp(`\\b${fn}\\(`, 'g');
                 parsed = parsed.replace(regex, `this.${fn}(`);
             });
@@ -431,7 +446,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
         }
 
         if (vals.length === 0) return null;
-        const sum = vals.reduce((a, b) => a + b, 0);
+        const sum = vals.reduce((a: any, b: any) => a + b, 0);
         return {
             sum,
             avg: sum / vals.length,
@@ -475,7 +490,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
     const deleteRow = () => {
         if (!selectedCell) return;
         addToHistory();
-        const newData = data.filter((_, i) => i !== selectedCell.r);
+        const newData = data.filter((_: any, i: any) => i !== selectedCell.r);
         setData(newData);
         setSelectedCell(null);
     };
@@ -486,14 +501,14 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
         const headerName = headers.length >= 26 ? `A${nextChar}` : nextChar;
 
         const newHeaders = [...headers];
-        const newData = data.map(r => [...r]);
+        const newData = data.map((r: any) => [...r]);
 
         if (typeof index === 'number') {
             newHeaders.splice(index, 0, headerName);
-            newData.forEach(r => r.splice(index, 0, ''));
+            newData.forEach((r: any) => r.splice(index, 0, ''));
         } else {
             newHeaders.push(headerName);
-            newData.forEach(r => r.push(''));
+            newData.forEach((r: any) => r.push(''));
         }
         setHeaders(newHeaders);
         setData(newData);
@@ -503,8 +518,8 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
         if (!selectedCell) return;
         addToHistory();
         const c = selectedCell.c;
-        setHeaders(headers.filter((_, i) => i !== c));
-        setData(data.map(row => row.filter((_, i) => i !== c)));
+        setHeaders(headers.filter((_: any, i: any) => i !== c));
+        setData(data.map((row: any) => row.filter((_: any, i: any) => i !== c)));
         setSelectedCell(null);
     };
 
@@ -544,7 +559,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
         const cMin = selectionRange ? Math.min(selectionRange.start.c, selectionRange.end.c) : selectedCell.c;
         const cMax = selectionRange ? Math.max(selectionRange.start.c, selectionRange.end.c) : selectedCell.c;
 
-        const newData = data.map(r => [...r]);
+        const newData = data.map((r: any) => [...r]);
         for (let r = rMin; r <= rMax; r++) {
             for (let c = cMin; c <= cMax; c++) {
                 if (newData[r] && newData[r][c] !== undefined) newData[r][c] = '';
@@ -652,7 +667,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
     };
 
     const exportExcel = () => {
-        const out = data.map((row, r) => row.map((cell, c) => getDisplayValue(r, c, cell)));
+        const out = data.map((row: any, r: any) => row.map((cell: any, c: any) => getDisplayValue(r, c, cell)));
         const ws = utils.aoa_to_sheet([headers, ...out]);
         const wb = utils.book_new();
         utils.book_append_sheet(wb, ws, "Sheet1");
@@ -741,7 +756,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
                     <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 shadow-sm">
                         <tr>
                             <th className="w-10 p-1 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 z-30"></th>
-                            {headers.map((h, i) => (
+                            {headers.map((h: any, i: any) => (
                                 <th key={i} className="border border-slate-200 dark:border-slate-700 p-0 relative group" style={{ width: colWidths[i] || 100 }}>
                                     <input
                                         className="w-full bg-transparent text-center font-bold text-xs p-1 outline-none dark:text-slate-300"
@@ -769,7 +784,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {data.map((row, r) => (
+                        {data.map((row: any, r: any) => (
                             <tr key={r} style={{ height: rowHeights[r] || 24 }}>
                                 <td
                                     className="text-center font-mono text-xs text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 sticky left-0 z-10 cursor-pointer hover:bg-slate-200 relative group"
@@ -789,7 +804,7 @@ const SheetEditor: React.FC<SheetEditorProps> = ({ sheetId, onBack }) => {
                                         }}
                                     />
                                 </td>
-                                {row.map((cell, c) => {
+                                {row.map((cell: any, c: any) => {
                                     const isSelected = selectedCell?.r === r && selectedCell?.c === c;
                                     const inRange = selectionRange && r >= Math.min(selectionRange.start.r, selectionRange.end.r) && r <= Math.max(selectionRange.start.r, selectionRange.end.r) && c >= Math.min(selectionRange.start.c, selectionRange.end.c) && c <= Math.max(selectionRange.start.c, selectionRange.end.c);
                                     const style = styles[`${r},${c}`] || {};

@@ -2,7 +2,12 @@
 import type { Invoice, Purchase } from "../services/db";
 import { format } from "date-fns";
 
-export const generateInvoiceText = (data: Invoice | Purchase, type: 'invoice' | 'purchase', businessDetails: any): string => {
+export const generateInvoiceText = (
+    data: Invoice | Purchase,
+    type: 'invoice' | 'purchase',
+    businessDetails: any,
+    title?: string
+): string => {
     const isInvoice = type === 'invoice';
     const refNumber = isInvoice ? (data as Invoice).invoiceNumber : (data as Purchase).orderNumber;
     const date = isInvoice ? (data as Invoice).createdAt : (data as Purchase).date;
@@ -13,7 +18,8 @@ export const generateInvoiceText = (data: Invoice | Purchase, type: 'invoice' | 
     text += `${businessDetails?.phone || ''}\n`;
     text += `--------------------------------\n`;
 
-    text += `*${type.toUpperCase()} #${refNumber}*\n`;
+    const displayTitle = title || (type === 'invoice' ? 'Receipt' : 'Bill');
+    text += `*${displayTitle} #${refNumber}*\n`;
     text += `Date: ${format(new Date(date), 'dd/MM/yyyy')}\n`;
 
     if (isInvoice) {

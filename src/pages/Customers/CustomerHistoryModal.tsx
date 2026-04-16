@@ -7,7 +7,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 
 interface CustomerHistoryModalProps {
-    customerId: number;
+    customerId: string;
     onClose: () => void;
 }
 
@@ -32,9 +32,9 @@ const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({ customerId,
                 const fetchedPayments = await db.customerPayments.where('customerId').equals(customerId).toArray();
 
                 // Sort invoices by date descending
-                fetchedInvoices.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                fetchedInvoices.sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
                 // Sort payments by date descending
-                fetchedPayments.sort((a, b) => b.date.getTime() - a.date.getTime());
+                fetchedPayments.sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
 
                 setInvoices(fetchedInvoices);
                 setPayments(fetchedPayments);
@@ -108,7 +108,7 @@ const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({ customerId,
                                     {invoices.length === 0 ? (
                                         <p className="text-center text-gray-500 dark:text-gray-400 py-4">{t('customers.no_invoices')}</p>
                                     ) : (
-                                        invoices.map((inv) => (
+                                        invoices.map((inv: any) => (
                                             <div key={inv.id} className="bg-gray-50 dark:bg-slate-700/50 p-4 rounded-lg flex justify-between items-center border border-gray-100 dark:border-slate-600">
                                                 <div>
                                                     <div className="font-bold dark:text-white">#{inv.invoiceNumber}</div>
@@ -145,7 +145,7 @@ const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({ customerId,
                                     {payments.length === 0 ? (
                                         <p className="text-center text-gray-500 dark:text-gray-400 py-4">{t('customers.no_payments')}</p>
                                     ) : (
-                                        payments.map((p) => (
+                                        payments.map((p: any) => (
                                             <div key={p.id} className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg flex justify-between items-center border border-green-100 dark:border-green-800/30">
                                                 <div>
                                                     <div className="font-bold text-green-700 dark:text-green-400">Payment Received</div>
@@ -170,13 +170,13 @@ const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({ customerId,
                                         <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl text-center">
                                             <div className="text-sm text-indigo-600 dark:text-indigo-400 font-medium mb-1">{t('customers.total_invoiced')}</div>
                                             <div className="text-2xl font-bold text-indigo-800 dark:text-indigo-300">
-                                                {formatCurrency(invoices.reduce((sum, i) => sum + i.grandTotal, 0))}
+                                                {formatCurrency(invoices.reduce((sum: any, i: any) => sum + i.grandTotal, 0))}
                                             </div>
                                         </div>
                                         <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl text-center">
                                             <div className="text-sm text-green-600 dark:text-green-400 font-medium mb-1">{t('customers.total_paid')}</div>
                                             <div className="text-2xl font-bold text-green-800 dark:text-green-300">
-                                                {formatCurrency(payments.reduce((sum, p) => sum + p.amount, 0))}
+                                                {formatCurrency(payments.reduce((sum: any, p: any) => sum + p.amount, 0))}
                                             </div>
                                         </div>
                                     </div>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../services/db';
+import { useAuth } from '../../contexts/AuthContext';
 import { startOfDay, endOfDay } from 'date-fns';
 
 export interface DayBookItem {
     id: string;
-    originalId?: number;
+    originalId?: string;
     date: Date;
     type: 'sale' | 'purchase' | 'expense' | 'receipt' | 'payment' | 'return' | 'contra' | 'other';
     description: string;
@@ -22,7 +23,8 @@ export interface DayBookSummary {
     cashInHand: number;
 }
 
-export const useDayBookData = (selectedDate: Date) => {
+export const useDayBookData = (range: 'today' | 'custom', customStartStr?: string, customEndStr?: string) => {
+    const { activeBranchId, activeBranch } = useAuth();
     const [transactions, setTransactions] = useState<DayBookItem[]>([]);
     const [summary, setSummary] = useState<DayBookSummary>({ totalIn: 0, totalOut: 0, balance: 0, dailyProfit: 0, cashInHand: 0 });
     const [loading, setLoading] = useState(true);
@@ -31,13 +33,38 @@ export const useDayBookData = (selectedDate: Date) => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const start = startOfDay(selectedDate);
-                const end = endOfDay(selectedDate);
+                let start: Date, end: Date;
+
+                // Safely parse custom dates
+                let safeCustomStartStr = customStartStr ? new Date(customStartStr) : undefined;
+                let safeCustomEndStr = customEndStr ? new Date(customEndStr) : undefined;
+                let safeCustomStart = safeCustomStartStr && !isNaN(safeCustomStartStr.getTime()) ? safeCustomStartStr : undefined;
+                let safeCustomEnd = safeCustomEndStr && !isNaN(safeCustomEndStr.getTime()) ? safeCustomEndStr : undefined;
+
+                if (range === 'custom') {
+                    if (safeCustomStart && safeCustomEnd) {
+                        start = safeCustomStart;
+                        end = safeCustomEnd;
+                    } else if (safeCustomStart) {
+                        start = safeCustomStart;
+                        end = endOfDay(safeCustomStart);
+                    } else if (safeCustomEnd) {
+                        start = startOfDay(safeCustomEnd);
+                        end = safeCustomEnd;
+                    } else {
+                        start = startOfDay(new Date());
+                        end = endOfDay(new Date());
+                    }
+                } else {
+                    start = startOfDay(new Date());
+                    end = endOfDay(new Date());
+                }
 
                 // Fetch Items for Cost Calculation
-                const allItems = await db.items.toArray();
-                const itemCostMap = new Map<number, number>();
-                allItems.forEach(item => {
+                const allItemsQuery = activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId);
+                const allItems = await (allItemsQuery as any).filter((i: any) => !i.deletedAt).toArray();
+                const itemCostMap = new Map<string, number>();
+                allItems.forEach((item: any) => {
                     if (item.id) itemCostMap.set(item.id, item.purchasePrice || 0);
                 });
 
@@ -49,30 +76,27 @@ export const useDayBookData = (selectedDate: Date) => {
                 const invoices = await db.invoices
                     .where('createdAt')
                     .between(start, end, true, true)
+                    .and((inv: any) => (activeBranch?.isMaster || inv.branchId === activeBranchId) && !inv.deletedAt)
                     .toArray();
 
-                invoices.forEach(inv => {
+                invoices.forEach((inv: any) => {
                     if (inv.status === 'cancelled') return;
 
                     const isReturn = inv.type === 'return';
                     const multiplier = isReturn ? -1 : 1;
 
                     // Profit Calculation
-                    // We calculate profit regardless of payment status (Accrual basis for profit, typically)
-                    // If user wants Cash Basis profit, we'd only count paid invoices, but usually 'Daily Profit' implies 'Sales Profit Today'
                     let invoiceCOGS = 0;
-                    inv.items.forEach(item => {
-                        const costPrice = itemCostMap.get(item.itemId) || 0;
+                    inv.items.forEach((item: any) => {
+                        // Priority: Line-level stored cost, inventory current cost
+                        const costPrice = item.purchasePrice !== undefined 
+                            ? item.purchasePrice 
+                            : (item.cost !== undefined ? item.cost : (itemCostMap.get(item.itemId) || 0));
                         invoiceCOGS += (costPrice * item.quantity);
                     });
 
-                    // Sales amount minus COGS
-                    // Note: grandTotal might include Tax. Pure profit should be Net Sales - COGS.
-                    // But for simplicity if we don't have separate Net Sales easily available without tax calc reverse:
-                    // If taxAmount is known, use subTotal? 
-                    // Let's use (inv.subTotal || inv.grandTotal) - invoiceCOGS?
-                    // Safe bet: inv.grandTotal - taxAmount - invoiceCOGS.
-                    const saleRevenue = inv.subTotal || inv.grandTotal; // subTotal is usually Ex Tax
+                    // Sales Revenue = GrandTotal - TaxAmount (Net Sales)
+                    const saleRevenue = (inv.grandTotal - (inv.taxAmount || 0));
 
                     const invoiceProfit = (saleRevenue - invoiceCOGS) * multiplier;
                     dailyGrossProfit += invoiceProfit;
@@ -111,13 +135,14 @@ export const useDayBookData = (selectedDate: Date) => {
                 const custPayments = await db.customerPayments
                     .where('date')
                     .between(start, end, true, true)
+                    .and((p: any) => (activeBranch?.isMaster || p.branchId === activeBranchId) && !p.deletedAt)
                     .toArray();
 
-                const customerIds = [...new Set(custPayments.map(p => p.customerId))];
-                const customers = await db.customers.where('id').anyOf(customerIds).toArray();
-                const custMap = new Map(customers.map(c => [c.id, c.name]));
+                const customerIds = [...new Set(custPayments.map((p: any) => p.customerId))].filter(Boolean) as string[];
+                const customers = await db.customers.where('id').anyOf(customerIds).and((c: any) => (activeBranch?.isMaster || c.branchId === activeBranchId) && !c.deletedAt).toArray();
+                const custMap = new Map<string, string>(customers.map((c: any) => [c.id as string, c.name]));
 
-                custPayments.forEach(pay => {
+                custPayments.forEach((pay: any) => {
                     dayBookItems.push({
                         id: `cpay-${pay.id}`,
                         originalId: pay.id,
@@ -134,9 +159,10 @@ export const useDayBookData = (selectedDate: Date) => {
                 const expenses = await db.expenses
                     .where('date')
                     .between(start, end, true, true)
+                    .and((exp: any) => (activeBranch?.isMaster || exp.branchId === activeBranchId) && !exp.deletedAt)
                     .toArray();
 
-                expenses.forEach(exp => {
+                expenses.forEach((exp: any) => {
                     dailyExpenses += exp.amount; // Add to expense total
 
                     dayBookItems.push({
@@ -151,13 +177,14 @@ export const useDayBookData = (selectedDate: Date) => {
                     });
                 });
 
-                // 4. Purchases (Money Out - Asset Acquisition, not Expense for Profit)
+                // 4. Purchases (Money Out - Asset Acquisition)
                 const purchases = await db.purchases
                     .where('date')
                     .between(start, end, true, true)
+                    .and((pur: any) => (activeBranch?.isMaster || pur.branchId === activeBranchId) && !pur.deletedAt)
                     .toArray();
 
-                purchases.forEach(pur => {
+                purchases.forEach((pur: any) => {
                     if (pur.status === 'cancelled') return;
                     if (pur.paidAmount && pur.paidAmount > 0) {
                         dayBookItems.push({
@@ -178,13 +205,14 @@ export const useDayBookData = (selectedDate: Date) => {
                     const purPayments = await db.purchasePayments
                         .where('date')
                         .between(start, end, true, true)
+                        .and((p: any) => (activeBranch?.isMaster || p.branchId === activeBranchId) && !p.deletedAt)
                         .toArray();
 
-                    const supplierIds = [...new Set(purPayments.map(p => p.supplierId))];
-                    const suppliers = await db.suppliers.where('id').anyOf(supplierIds).toArray();
-                    const supMap = new Map(suppliers.map(s => [s.id, s.name]));
+                    const supplierIds = [...new Set(purPayments.map((p: any) => p.supplierId))].filter(Boolean) as string[];
+                    const suppliers = await db.suppliers.where('id').anyOf(supplierIds).and((s: any) => (activeBranch?.isMaster || s.branchId === activeBranchId) && !s.deletedAt).toArray();
+                    const supMap = new Map<string, string>(suppliers.map((s: any) => [s.id as string, s.name]));
 
-                    purPayments.forEach(pay => {
+                    purPayments.forEach((pay: any) => {
                         dayBookItems.push({
                             id: `ppay-${pay.id}`,
                             originalId: pay.id,
@@ -203,13 +231,13 @@ export const useDayBookData = (selectedDate: Date) => {
                     const cashEntries = await db.cashEntries
                         .where('date')
                         .between(start, end, true, true)
+                        .and((e: any) => (activeBranch?.isMaster || e.branchId === activeBranchId) && !e.deletedAt)
                         .toArray();
 
-                    cashEntries.forEach(entry => {
-                        // Cash entries 'out' might be expenses? 
-                        // For now, let's assume they are NOT P&L expenses unless in Expenses table, 
-                        // OR we treat 'out' as generic expense if category suggests?
-                        // To be safe, let's NOT add to profit/loss unless user explicitly uses Expenses module.
+                    cashEntries.forEach((entry: any) => {
+                        if (entry.type === 'out') {
+                            dailyExpenses += entry.amount;
+                        }
 
                         dayBookItems.push({
                             id: `cash-${entry.id}`,
@@ -224,20 +252,20 @@ export const useDayBookData = (selectedDate: Date) => {
                     });
                 }
 
-                dayBookItems.sort((a, b) => b.date.getTime() - a.date.getTime());
+                dayBookItems.sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
 
-                const totalIn = dayBookItems.reduce((sum, item) => sum + item.moneyIn, 0);
-                const totalOut = dayBookItems.reduce((sum, item) => sum + item.moneyOut, 0);
+                const totalIn = dayBookItems.reduce((sum: any, item: any) => sum + item.moneyIn, 0);
+                const totalOut = dayBookItems.reduce((sum: any, item: any) => sum + item.moneyOut, 0);
 
                 // Net Profit = Gross Profit (Sales - COGS) - Operating Expenses
-                const dailyProfit = dailyGrossProfit - dailyExpenses;
+                const dailyProfitSummaryValue = dailyGrossProfit - dailyExpenses;
 
                 setTransactions(dayBookItems);
                 setSummary({
                     totalIn,
                     totalOut,
                     balance: totalIn - totalOut,
-                    dailyProfit,
+                    dailyProfit: dailyProfitSummaryValue,
                     cashInHand: 0
                 });
 
@@ -249,7 +277,7 @@ export const useDayBookData = (selectedDate: Date) => {
         };
 
         fetchData();
-    }, [selectedDate]);
+    }, [range, customStartStr, customEndStr, activeBranchId, activeBranch?.isMaster]);
 
     return { transactions, summary, loading };
 };

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { db, type Expense } from '../../services/db';
+import { db, type Expense, softDeleteMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Trash, DollarSign, Edit, Search, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +15,7 @@ const Expenses: React.FC = () => {
     const { t } = useTranslation();
     const { formatCurrency, formatDate } = useSettings();
     const { addToast } = useNotification();
-    const { hasPermission, isAdmin } = useAuth();
+    const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
 
     if (!hasPermission('expenses_view')) {
         return (
@@ -32,27 +32,35 @@ const Expenses: React.FC = () => {
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
 
-    const expenses = useLiveQuery(() => db.expenses.orderBy('date').reverse().toArray(), []);
+    const expenses = useLiveQuery(async () => {
+        const baseQuery = activeBranch?.isMaster ? db.expenses.reverse() : db.expenses.where('branchId').equals(activeBranchId).reverse();
+        const data = await baseQuery.sortBy('date');
+        return data.filter((e: any) => !e.deletedAt);
+    }, [activeBranchId, activeBranch?.isMaster]);
 
     const filteredExpenses = useMemo(() => {
         if (!expenses) return [];
-        return expenses.filter(exp => {
+        return expenses.filter((exp: any) => {
             const matchesSearch = exp.description.toLowerCase().includes(search.toLowerCase());
             const matchesCategory = categoryFilter === 'All' || exp.category === categoryFilter;
             return matchesSearch && matchesCategory;
         });
     }, [expenses, search, categoryFilter]);
 
-    const handleSave = async (data: Omit<Expense, 'id' | 'date'>) => {
+    const handleSave = async (data: Pick<Expense, 'description' | 'amount' | 'category' | 'notes'>) => {
         try {
+            const { createRecordMetadata, updateRecordMetadata } = await import('../../services/db');
             if (editingExpense && editingExpense.id) {
                 await db.expenses.update(editingExpense.id, {
-                    ...data
+                    ...data,
+                    ...updateRecordMetadata()
                 });
                 addToast(t('inventory.update_success'), 'success'); // Using generic success message
             } else {
                 await db.expenses.add({
+                    ...createRecordMetadata(),
                     ...data,
+                    branchId: activeBranchId || '',
                     date: new Date()
                 });
                 addToast(t('inventory.save_success'), 'success');
@@ -63,15 +71,15 @@ const Expenses: React.FC = () => {
         }
     };
 
-    const [expenseToDelete, setExpenseToDelete] = useState<number | null>(null);
+    const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
 
-    const handleDeleteClick = (id: number) => {
+    const handleDeleteClick = (id: string) => {
         setExpenseToDelete(id);
     };
 
     const handleConfirmDelete = async () => {
         if (expenseToDelete) {
-            await db.expenses.delete(expenseToDelete);
+            await db.expenses.update(expenseToDelete, softDeleteMetadata());
             setExpenseToDelete(null);
             addToast(t('expenses.expense_deleted'), 'info');
         }
@@ -87,7 +95,7 @@ const Expenses: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const totalStats = filteredExpenses?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+    const totalStats = filteredExpenses?.reduce((acc: any, curr: any) => acc + curr.amount, 0) || 0;
 
     return (
         <div className="space-y-6">
@@ -98,7 +106,7 @@ const Expenses: React.FC = () => {
                     <h1 className="text-2xl font-bold dark:text-white">{t('expenses.title')}</h1>
                     <p className="text-slate-500 dark:text-slate-400 text-sm">Track and manage your business expenditures</p>
                 </div>
-                {hasPermission('expenses_manage') && (
+                {hasPermission('expenses_add') && (
                     <button
                         onClick={openAddModal}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-blue-500/30 transition-all active:scale-95"
@@ -155,68 +163,70 @@ const Expenses: React.FC = () => {
 
             {/* Expenses List */}
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold tracking-wider">
-                        <tr>
-                            <th className="p-4">{t('expenses.description')}</th>
-                            <th className="p-4">{t('expenses.category')}</th>
-                            <th className="p-4">{t('expenses.date')}</th>
-                            <th className="p-4">{t('expenses.amount')}</th>
-                            <th className="p-4 text-right">{t('expenses.action')}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {filteredExpenses.map(exp => (
-                            <tr key={exp.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group transition-colors">
-                                <td className="p-4">
-                                    <div className="font-bold text-slate-800 dark:text-white">{exp.description}</div>
-                                    {exp.notes && <div className="text-xs text-slate-500 mt-1 line-clamp-1">{exp.notes}</div>}
-                                </td>
-                                <td className="p-4">
-                                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md text-xs font-semibold">
-                                        {exp.category}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-slate-500 text-sm font-medium">{formatDate(exp.date)}</td>
-                                <td className="p-4 font-bold text-slate-800 dark:text-white">{formatCurrency(exp.amount)}</td>
-                                <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        {hasPermission('expenses_manage') && (
-                                            <button
-                                                onClick={() => openEditModal(exp)}
-                                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                                                title={t('common.edit')}
-                                            >
-                                                <Edit size={18} />
-                                            </button>
-                                        )}
-                                        {isAdmin && (
-                                            <button
-                                                onClick={() => handleDeleteClick(exp.id!)}
-                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                                                title={t('common.delete')}
-                                            >
-                                                <Trash size={18} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                        {filteredExpenses.length === 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left whitespace-nowrap min-w-[700px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                             <tr>
-                                <td colSpan={5} className="p-12 text-center text-slate-500 dark:text-slate-400">
-                                    <div className="flex flex-col items-center justify-center gap-3">
-                                        <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
-                                            <DollarSign className="text-slate-300" size={32} />
-                                        </div>
-                                        <p className="font-medium">{t('expenses.no_expenses')}</p>
-                                    </div>
-                                </td>
+                                <th className="p-4 font-semibold">{t('expenses.description')}</th>
+                                <th className="p-4 font-semibold">{t('expenses.category')}</th>
+                                <th className="p-4 font-semibold">{t('expenses.date')}</th>
+                                <th className="p-4 font-semibold">{t('expenses.amount')}</th>
+                                <th className="p-4 font-semibold text-right">{t('expenses.action')}</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {filteredExpenses.map((exp: any) => (
+                                <tr key={exp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 group transition-colors">
+                                    <td className="p-4">
+                                        <div className="font-medium text-slate-800 dark:text-white text-sm">{exp.description}</div>
+                                        {exp.notes && <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{exp.notes}</div>}
+                                    </td>
+                                    <td className="p-4">
+                                        <span className="px-2 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md text-xs font-semibold border border-slate-200 dark:border-slate-600">
+                                            {exp.category}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-slate-500 text-sm">{formatDate(exp.date)}</td>
+                                    <td className="p-4 font-bold text-slate-800 dark:text-white text-sm">{formatCurrency(exp.amount)}</td>
+                                    <td className="p-4">
+                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+                                            {hasPermission('expenses_edit') && (
+                                                <button
+                                                    onClick={() => openEditModal(exp)}
+                                                    className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                                                    title={t('common.edit')}
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                            )}
+                                            {(isAdmin || hasPermission('expenses_delete')) && (
+                                                <button
+                                                    onClick={() => handleDeleteClick(exp.id!)}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                    title={t('common.delete')}
+                                                >
+                                                    <Trash size={18} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredExpenses.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="p-12 text-center text-slate-500 dark:text-slate-400">
+                                        <div className="flex flex-col items-center justify-center gap-3">
+                                            <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                                                <DollarSign className="text-slate-300 dark:text-slate-600" size={32} />
+                                            </div>
+                                            <p className="font-medium text-sm">{t('expenses.no_expenses')}</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <ExpenseModal

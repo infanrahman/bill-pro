@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Users, Trash2, Wallet, ShieldOff } from 'lucide-react';
-import { db, type Customer } from '../../services/db';
+import { db, type Customer, softDeleteMetadata } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
 import CustomerForm from './CustomerForm';
 import CustomerHistoryModal from './CustomerHistoryModal';
@@ -17,11 +17,11 @@ const CustomerList: React.FC = () => {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [showHistory, setShowHistory] = useState<number | null>(null);
+    const [showHistory, setShowHistory] = useState<string | null>(null);
     const [showPayment, setShowPayment] = useState<Customer | null>(null);
     const [editingCustomer, setEditingCustomer] = useState<Customer | undefined>(undefined);
     const { addToast } = useNotification();
-    const { hasPermission, isAdmin } = useAuth();
+    const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
 
     // Grid Nav
     const { getGridCellProps } = useGridNavigation({
@@ -31,7 +31,10 @@ const CustomerList: React.FC = () => {
 
     const fetchCustomers = React.useCallback(async () => {
         try {
-            const data = await db.customers.toArray();
+            const baseQuery = activeBranch?.isMaster ? db.customers : db.customers.where('branchId').equals(activeBranchId);
+            const data = await (baseQuery as any)
+                .filter((c: any) => !c.deletedAt)
+                .toArray();
             setCustomers(data);
         } catch (error) {
             console.error(error);
@@ -39,7 +42,7 @@ const CustomerList: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [addToast, t]);
+    }, [addToast, t, activeBranchId, activeBranch?.isMaster]);
 
     useEffect(() => {
         fetchCustomers();
@@ -55,16 +58,16 @@ const CustomerList: React.FC = () => {
         );
     }
 
-    const [customerToDelete, setCustomerToDelete] = useState<number | null>(null);
+    const [customerToDelete, setCustomerToDelete] = useState<string | null>(null);
 
-    const handleDeleteClick = (id: number) => {
+    const handleDeleteClick = (id: string) => {
         setCustomerToDelete(id);
     };
 
     const handleConfirmDelete = async () => {
         if (customerToDelete) {
             try {
-                await db.customers.delete(customerToDelete);
+                await db.customers.update(customerToDelete, softDeleteMetadata());
                 addToast(t('customers.delete_success'), 'success');
                 fetchCustomers();
             } catch {
@@ -94,7 +97,7 @@ const CustomerList: React.FC = () => {
                     <Users className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                     {t('customers.title')}
                 </h1>
-                {hasPermission('customers_manage') && (
+                {hasPermission('customers_add') && (
                     <button
                         onClick={() => setShowForm(true)}
                         className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
@@ -105,84 +108,87 @@ const CustomerList: React.FC = () => {
                 )}
             </div>
 
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-indigo-100 dark:border-slate-700 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-indigo-50 dark:bg-slate-700 border-b border-indigo-100 dark:border-slate-600">
-                        <tr>
-                            <th className="p-4 font-semibold text-indigo-900 dark:text-indigo-200">{t('customers.name')}</th>
-                            <th className="p-4 font-semibold text-indigo-900 dark:text-indigo-200">{t('customers.phone')}</th>
-                            <th className="p-4 font-semibold text-indigo-900 dark:text-indigo-200">{t('customers.total_spent')}</th>
-                            <th className="p-4 font-semibold text-indigo-900 dark:text-indigo-200">{t('customers.credit_balance')}</th>
-                            <th className="p-4 font-semibold text-indigo-900 dark:text-indigo-200 text-right">{t('customers.actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-indigo-50 dark:divide-slate-700">
-                        {loading ? (
-                            Array.from({ length: 5 }).map((_, i) => (
-                                <tr key={i} className="animate-pulse">
-                                    <td className="p-4"><Skeleton width={120} height={20} /></td>
-                                    <td className="p-4"><Skeleton width={100} height={20} /></td>
-                                    <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                    <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                    <td className="p-4"><Skeleton width={100} height={20} /></td>
-                                </tr>
-                            ))
-                        ) : customers.length === 0 ? (
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                             <tr>
-                                <td colSpan={5}>
-                                    <EmptyState
-                                        title={t('customers.no_customers')}
-                                        description={t('customers.no_customers_desc') || "No customers found. Add your first customer."}
-                                        icon={Users}
-                                        actionLabel={hasPermission('customers_manage') ? t('common.add') : undefined}
-                                        onAction={() => setShowForm(true)}
-                                    />
-                                </td>
+                                <th className="p-4 font-semibold">{t('customers.name')}</th>
+                                <th className="p-4 font-semibold">{t('customers.phone')}</th>
+                                <th className="p-4 font-semibold">{t('customers.total_spent')}</th>
+                                <th className="p-4 font-semibold">{t('customers.credit_balance')}</th>
+                                <th className="p-4 font-semibold text-right">{t('customers.actions')}</th>
                             </tr>
-                        ) : (
-                            customers.map((customer, rowIndex) => (
-                                <tr key={customer.id} className="hover:bg-indigo-50/50 dark:hover:bg-slate-700/50 transition-colors">
-                                    <td {...getGridCellProps(rowIndex, 0)} className="p-4 font-medium text-gray-900 dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-lg">{customer.name}</td>
-                                    <td {...getGridCellProps(rowIndex, 1)} className="p-4 text-gray-600 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{customer.phone}</td>
-                                    <td {...getGridCellProps(rowIndex, 2)} className="p-4 font-medium text-green-600 dark:text-green-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
-                                        ${(customer.totalSpent || 0).toFixed(2)}
-                                    </td>
-                                    <td {...getGridCellProps(rowIndex, 3)} className="p-4 font-bold outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
-                                        <span className={(customer.balance || 0) > 0 ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}>
-                                            ${(customer.balance || 0).toFixed(2)}
-                                        </span>
-                                    </td>
-                                    <td {...getGridCellProps(rowIndex, 4)} className="p-4 text-right flex justify-end gap-2 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-lg">
-                                        {(customer.balance || 0) > 0 && hasPermission('customers_manage') && (
-                                            <button
-                                                onClick={() => setShowPayment(customer)}
-                                                className="text-xs flex items-center gap-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded hover:bg-green-200 transition-colors"
-                                                title="Receive Payment"
-                                            >
-                                                <Wallet size={12} /> {t('customers.pay')}
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => setShowHistory(customer.id!)}
-                                            className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
-                                        >
-                                            {t('customers.history')}
-                                        </button>
-
-                                        {isAdmin && (
-                                            <button
-                                                onClick={() => customer.id && handleDeleteClick(customer.id)}
-                                                className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {loading ? (
+                                Array.from({ length: 5 }).map((_: any, i: any) => (
+                                    <tr key={i} className="animate-pulse">
+                                        <td className="p-4"><Skeleton width={120} height={20} /></td>
+                                        <td className="p-4"><Skeleton width={100} height={20} /></td>
+                                        <td className="p-4"><Skeleton width={80} height={20} /></td>
+                                        <td className="p-4"><Skeleton width={80} height={20} /></td>
+                                        <td className="p-4"><Skeleton width={100} height={20} /></td>
+                                    </tr>
+                                ))
+                            ) : customers.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5}>
+                                        <EmptyState
+                                            title={t('customers.no_customers')}
+                                            description={t('customers.no_customers_desc') || "No customers found. Add your first customer."}
+                                            icon={Users}
+                                            actionLabel={hasPermission('customers_manage') ? t('common.add') : undefined}
+                                            onAction={() => setShowForm(true)}
+                                        />
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                            ) : (
+                                customers.map((customer: any, rowIndex: any) => (
+                                    <tr key={customer.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                        <td {...getGridCellProps(rowIndex, 0)} className="p-4 font-medium text-slate-900 dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-lg text-sm">{customer.name}</td>
+                                        <td {...getGridCellProps(rowIndex, 1)} className="p-4 text-slate-600 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 font-mono text-xs">{customer.phone || '-'}</td>
+                                        <td {...getGridCellProps(rowIndex, 2)} className="p-4 font-medium text-slate-700 dark:text-slate-300 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 text-sm">
+                                            ${(customer.totalSpent || 0).toFixed(2)}
+                                        </td>
+                                        <td {...getGridCellProps(rowIndex, 3)} className="p-4 font-bold outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 text-sm">
+                                            <span className={(customer.balance || 0) > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-slate-500 dark:text-slate-400 font-normal'}>
+                                                ${(customer.balance || 0).toFixed(2)}
+                                            </span>
+                                        </td>
+                                        <td {...getGridCellProps(rowIndex, 4)} className="p-4 flex justify-end gap-2 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-lg">
+                                            {(customer.balance || 0) > 0 && hasPermission('customers_edit') && (
+                                                <button
+                                                    onClick={() => setShowPayment(customer)}
+                                                    className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                                                    title="Receive Payment"
+                                                >
+                                                    <Wallet size={18} />
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => setShowHistory(customer.id!)}
+                                                className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                            >
+                                                {t('customers.history')}
+                                            </button>
+
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => customer.id && handleDeleteClick(customer.id)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                    title={t('common.delete')}
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* History Modal */}

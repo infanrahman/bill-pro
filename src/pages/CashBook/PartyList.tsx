@@ -5,37 +5,39 @@ import { db } from '../../services/db';
 import { formatCurrency } from '../../utils/currency';
 import AddPartyModal from './AddPartyModal';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PartyListProps {
-    onSelect?: (id: number) => void;
+    onSelect?: (id: string) => void;
     filterType?: 'customer' | 'supplier' | 'other';
 }
 
 const PartyList: React.FC<PartyListProps> = ({ onSelect, filterType }) => {
     const { t } = useTranslation();
+    const { activeBranchId, activeBranch } = useAuth();
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddOpen, setIsAddOpen] = useState(false);
 
     const parties = useLiveQuery(() => {
+        const query = (activeBranch?.isMaster ? db.cashParties : db.cashParties.where('branchId').equals(activeBranchId)) as any;
         if (filterType) {
-            return db.cashParties.where('type').equals(filterType).toArray();
+            return query.filter((p: any) => !p.deletedAt && p.type === filterType).toArray();
         }
-        return db.cashParties.toArray();
-    }, [filterType]);
+        return query.filter((p: any) => !p.deletedAt).toArray();
+    }, [filterType, activeBranchId, activeBranch?.isMaster]);
 
     // Filtered Parties
-    const filteredParties = parties?.filter(p =>
+    const filteredParties = parties?.filter((p: any) =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.phone.includes(searchTerm)
     );
 
     // Calculate Net Stats
-    const totalToCollect = parties?.filter(p => p.openingBalance > 0).reduce((sum, p) => sum + p.openingBalance, 0) || 0;
-    const totalToPay = parties?.filter(p => p.openingBalance < 0).reduce((sum, p) => sum + Math.abs(p.openingBalance), 0) || 0;
+    const totalToCollect = parties?.filter((p: any) => p.openingBalance > 0).reduce((sum: any, p: any) => sum + p.openingBalance, 0) || 0;
+    const totalToPay = parties?.filter((p: any) => p.openingBalance < 0).reduce((sum: any, p: any) => sum + Math.abs(p.openingBalance), 0) || 0;
 
     return (
         <div className="space-y-6 animate-in fade-in">
-            {/* ... Rest of Header Cards ... */}
             {/* Header Cards */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2">
@@ -78,10 +80,10 @@ const PartyList: React.FC<PartyListProps> = ({ onSelect, filterType }) => {
             {/* List */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {filteredParties?.map(party => (
+                    {filteredParties?.map((party: any) => (
                         <div
                             key={party.id}
-                            onClick={() => onSelect && party.id && onSelect(party.id)}
+                            onClick={() => onSelect && party.id && onSelect(party.id as string)}
                             className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer flex justify-between items-center group"
                         >
                             <div className="flex items-center gap-4">

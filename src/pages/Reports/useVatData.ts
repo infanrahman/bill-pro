@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../services/db';
+import { useAuth } from '../../contexts/AuthContext';
 import { startOfWeek, startOfMonth, startOfYear, format, startOfDay, endOfDay } from 'date-fns';
 
 export type VatPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
@@ -13,6 +14,7 @@ export interface VatDataRow {
 }
 
 export const useVatData = (period: VatPeriod, customStart?: Date, customEnd?: Date) => {
+    const { activeBranchId, activeBranch } = useAuth();
     const [data, setData] = useState<VatDataRow[]>([]);
     const [totals, setTotals] = useState({ netSales: 0, vatAmount: 0, grossSales: 0 });
     const [loading, setLoading] = useState(true);
@@ -21,28 +23,59 @@ export const useVatData = (period: VatPeriod, customStart?: Date, customEnd?: Da
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch all invoices (paid/completed/partial) - exclude cancelled/draft
-                // For accurate VAT, we should probably look at completion date or create date. Using createdAt for now.
-                let query = db.invoices
-                    .where('status')
-                    .noneOf(['cancelled', 'draft']);
-
-                let allInvoices = await query.toArray();
-
-                // Start / End filtering if Custom
-                // Note: Dexie compound queries can be tricky with OR conditions (noneOf) + Range.
-                // Fetching all valid status first then filtering in memory is safer for this scale.
-                // Or if we had an index on createdAt, we could filter by date first.
-                // Given the user wants "Custom Calendar", memory filter is acceptable for < 10k items.
+                // Calculate date boundaries based on period
+                const now = new Date();
+                let queryStart: Date | undefined;
+                let queryEnd: Date | undefined;
 
                 if (customStart && customEnd) {
-                    const start = startOfDay(customStart);
-                    const end = endOfDay(customEnd);
-                    allInvoices = allInvoices.filter(inv => inv.createdAt >= start && inv.createdAt <= end);
+                    queryStart = startOfDay(customStart);
+                    queryEnd = endOfDay(customEnd);
+                } else {
+                    // For non-custom periods, we still need boundaries to limit the query
+                    // but since grouping handles the display, we load a reasonable range
+                    switch (period) {
+                        case 'daily':
+                            // Last 30 days
+                            queryStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                            queryEnd = endOfDay(now);
+                            break;
+                        case 'weekly':
+                            // Last 12 weeks
+                            queryStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 84);
+                            queryEnd = endOfDay(now);
+                            break;
+                        case 'monthly':
+                            // Last 12 months
+                            queryStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+                            queryEnd = endOfDay(now);
+                            break;
+                        case 'yearly':
+                            // Last 5 years
+                            queryStart = new Date(now.getFullYear() - 5, 0, 1);
+                            queryEnd = endOfDay(now);
+                            break;
+                    }
+                }
+
+                // Use createdAt index for efficient date-scoped query
+                let allInvoices;
+                if (queryStart && queryEnd) {
+                    allInvoices = await db.invoices
+                        .where('createdAt')
+                        .between(queryStart, queryEnd, true, true)
+                        .and((inv: any) => (activeBranch?.isMaster || inv.branchId === activeBranchId) && inv.status !== 'cancelled' && inv.status !== 'draft' && !inv.deletedAt)
+                        .toArray();
+                } else {
+                    // Fallback (shouldn't happen)
+                    const invoicesQuery = activeBranch?.isMaster ? db.invoices : db.invoices.where('branchId').equals(activeBranchId);
+                    allInvoices = await (invoicesQuery as any)
+                        .filter((inv: any) => inv.status !== 'cancelled' && inv.status !== 'draft' && !inv.deletedAt)
+                        .toArray();
                 }
 
                 // Sort by date descending
-                allInvoices.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                allInvoices.sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
 
                 let groupedData: VatDataRow[] = [];
                 let limit = 0;
@@ -76,7 +109,7 @@ export const useVatData = (period: VatPeriod, customStart?: Date, customEnd?: Da
                 // Grouping Logic
                 const groups = new Map<string, VatDataRow>();
 
-                allInvoices.forEach(inv => {
+                allInvoices.forEach((inv: any) => {
                     // Filter out very old data if needed, or just let the grouping handle it
                     // For now, process all and then slice? Or process dynamically.
                     // Let's use simple key generation based on period
@@ -112,25 +145,71 @@ export const useVatData = (period: VatPeriod, customStart?: Date, customEnd?: Da
                     const group = groups.get(key)!;
 
                     // Tax Calculation
-                    // Verify if taxAmount exists, if not calculate from items (legacy support)
-                    const tax = inv.taxAmount || 0;
-                    const total = inv.grandTotal || 0;
-                    const sub = inv.subTotal || (total - tax);
+                    const isReturn = inv.type === 'return';
+                    let invoiceTax = 0;
+                    let invoiceNet = 0;
+                    let invoiceGross = 0;
 
-                    group.netSales += sub;
-                    group.vatAmount += tax;
-                    group.grossSales += total;
+                    if (inv.items && inv.items.length > 0) {
+                        inv.items.forEach((item: any) => {
+                            const amount = (item.price || 0) * (item.quantity || 0);
+                            const rate = item.taxRate !== undefined ? item.taxRate : (inv.taxRate || 0);
+                            const type = item.taxType || (inv.taxType === 'inclusive' ? 'inclusive' : 'exclusive');
+
+                            let itemTax = 0;
+                            let itemNet = 0;
+                            let itemGross = 0;
+
+                            // Priority: 1. Stored taxAmount 2. Calculated fallback
+                            if (item.taxAmount !== undefined) {
+                                itemTax = item.taxAmount;
+                                itemGross = item.total || amount;
+                                itemNet = itemGross - itemTax;
+                            } else {
+                                if (type === 'inclusive') {
+                                    const base = amount / (1 + (rate / 100));
+                                    itemTax = Math.round((amount - base) * 100) / 100;
+                                    itemNet = Math.round(base * 100) / 100;
+                                    itemGross = Math.round(amount * 100) / 100;
+                                } else {
+                                    const tax = amount * (rate / 100);
+                                    itemTax = Math.round(tax * 100) / 100;
+                                    itemNet = Math.round(amount * 100) / 100;
+                                    itemGross = Math.round((amount + itemTax) * 100) / 100;
+                                }
+                            }
+
+                            invoiceTax += itemTax;
+                            invoiceNet += itemNet;
+                            invoiceGross += itemGross;
+                        });
+                    } else {
+                        // Fallback to header if items are missing (shouldn't happen)
+                        invoiceTax = inv.taxAmount || 0;
+                        invoiceGross = inv.grandTotal || 0;
+                        invoiceNet = inv.subTotal || (invoiceGross - invoiceTax);
+                    }
+
+                    if (isReturn) {
+                        group.netSales -= invoiceNet;
+                        group.vatAmount -= invoiceTax;
+                        group.grossSales -= invoiceGross;
+                    } else {
+                        group.netSales += invoiceNet;
+                        group.vatAmount += invoiceTax;
+                        group.grossSales += invoiceGross;
+                    }
                 });
 
                 // Convert to array and sort
                 groupedData = Array.from(groups.values())
-                    .sort((a, b) => b.date.getTime() - a.date.getTime())
+                    .sort((a: any, b: any) => b.date.getTime() - a.date.getTime())
                     .slice(0, limit);
 
                 setData(groupedData);
 
                 // Calculate Totals (of the viewed data)
-                const newTotals = groupedData.reduce((acc, curr) => ({
+                const newTotals = groupedData.reduce((acc: any, curr: any) => ({
                     netSales: acc.netSales + curr.netSales,
                     vatAmount: acc.vatAmount + curr.vatAmount,
                     grossSales: acc.grossSales + curr.grossSales
@@ -146,7 +225,7 @@ export const useVatData = (period: VatPeriod, customStart?: Date, customEnd?: Da
         };
 
         fetchData();
-    }, [period, customStart, customEnd]);
+    }, [period, customStart, customEnd, activeBranchId, activeBranch?.isMaster]);
 
     return { data, totals, loading };
 };

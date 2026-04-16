@@ -3,7 +3,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { Wallet, Printer } from 'lucide-react';
 import Modal from '../../components/UI/Modal';
 import { useNotification } from '../../contexts/NotificationContext';
-import { db } from '../../services/db';
+import { db, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import type { Customer } from '../../services/db';
 import { useTranslation } from 'react-i18next';
 import { printPaymentReceipt } from '../../services/invoiceGenerator';
@@ -33,6 +33,7 @@ const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({ customer, o
         try {
             // 1. Record Payment
             const paymentId = await db.customerPayments.add({
+                ...createRecordMetadata(),
                 customerId: customer.id!,
                 amount: payAmount,
                 date: new Date(),
@@ -44,6 +45,7 @@ const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({ customer, o
             const newBalance = (customer.balance || 0) - payAmount;
 
             await db.customers.update(customer.id!, {
+                ...updateRecordMetadata(),
                 balance: newBalance
             });
 
@@ -57,7 +59,7 @@ const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({ customer, o
                         date: new Date(),
                         mode: paymentMode,
                         note,
-                        id: Number(paymentId)
+                        id: paymentId as string
                     },
                     {
                         name: customer.name,
@@ -103,7 +105,7 @@ const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({ customer, o
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.payment_mode')}</label>
                     <div className="grid grid-cols-3 gap-2">
-                        {['cash', 'card', 'upi'].map(mode => (
+                        {['cash', 'card', 'upi'].map((mode: any) => (
                             <button
                                 key={mode}
                                 onClick={() => setPaymentMode(mode as any)}

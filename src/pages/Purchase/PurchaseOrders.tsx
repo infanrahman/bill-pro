@@ -1,8 +1,7 @@
 
 
 import { useState, useEffect } from 'react';
-import { db } from '../../services/db';
-import type { Item, Purchase, PurchaseItem } from '../../services/db';
+import { db, type Item, type Purchase, type PurchaseItem, type SyncEntity, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Search, Trash2, Save, FileText, ShoppingCart, RotateCcw, Edit, CheckCircle, Printer, Download, ShieldOff, CreditCard, Eye } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -13,20 +12,25 @@ import { getPurchaseHTML, printPurchase } from '../../services/invoiceGenerator'
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import ShareModal from '../../components/UI/ShareModal';
-import { Send } from 'lucide-react';
+import { Send, Wand2, QrCode } from 'lucide-react';
 import { useGridNavigation } from '../../hooks/useGridNavigation';
+import BarcodeModal from '../Inventory/BarcodeModal';
 
 import PurchaseDetailsModal from '../../components/UI/PurchaseDetailsModal';
 
 const PurchaseOrders = () => {
     const { addToast, addNotification } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
-    const { hasPermission, isAdmin } = useAuth();
+    const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
     const { t, i18n } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [selectedOrderForShare, setSelectedOrderForShare] = useState<Purchase | null>(null);
     const [viewOrder, setViewOrder] = useState<Purchase | null>(null);
+
+    // Barcode Printing State
+    const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+    const [selectedItemsForLabel, setSelectedItemsForLabel] = useState<Item[] | null>(null);
 
     if (!hasPermission('purchases_view')) {
         return (
@@ -43,9 +47,9 @@ const PurchaseOrders = () => {
 
     // Form State
     // Form State
-    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [originalPurchase, setOriginalPurchase] = useState<Purchase | null>(null); // For stock reversal
-    const [editSupplierId, setEditSupplierId] = useState<number | undefined>(undefined); // Linked Supplier ID
+    const [editSupplierId, setEditSupplierId] = useState<string | undefined>(undefined); // Linked Supplier ID
     const [supplier, setSupplier] = useState(''); // Name for display
     const [orderNumber, setOrderNumber] = useState('');
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
@@ -56,7 +60,7 @@ const PurchaseOrders = () => {
     const [paidAmount, setPaidAmount] = useState<string>(''); // Advance Amt
     const [paymentType, setPaymentType] = useState('cash');
     const [notes, setNotes] = useState('');
-    const [relatedOrderId, setRelatedOrderId] = useState<number | null>(null); // For linking
+    const [relatedOrderId, setRelatedOrderId] = useState<string | null>(null); // For linking
 
     // Inline Creation State
     const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
@@ -65,6 +69,7 @@ const PurchaseOrders = () => {
 
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
     const [newItemName, setNewItemName] = useState('');
+    const [newItemBarcode, setNewItemBarcode] = useState('');
     const [newItemCost, setNewItemCost] = useState(''); // Purchase Price
     const [newItemPrice, setNewItemPrice] = useState(''); // Selling Price
     const [newItemStock, setNewItemStock] = useState('');
@@ -111,17 +116,39 @@ const PurchaseOrders = () => {
         }
     };
 
+    const handlePrintLabels = async (po: Purchase) => {
+        try {
+            const fullItems: Item[] = [];
+            for (const pi of po.items) {
+                const dbItem = await db.items.get(pi.itemId);
+                if (dbItem) {
+                    // Override stock with the purchased quantity so BarcodeModal prints exactly 'pi.quantity' copies!
+                    fullItems.push({ ...dbItem, stock: pi.quantity, supplierNameFallback: po.supplierName } as any);
+                }
+            }
+            if (fullItems.length > 0) {
+                setSelectedItemsForLabel(fullItems);
+                setIsLabelModalOpen(true);
+            } else {
+                addToast(t('inventory.no_items_found') || 'No items found to print', 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            addToast(t('common.error'), 'error');
+        }
+    };
+
 
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
     // Fetch all purchases
-    const purchases = useLiveQuery(() => db.purchases.orderBy('date').reverse().toArray(), []);
-    const suppliers = useLiveQuery(() => db.suppliers.toArray(), []);
+    const purchases = useLiveQuery(() => activeBranch?.isMaster ? db.purchases.reverse().sortBy('date') : db.purchases.where('branchId').equals(activeBranchId).reverse().sortBy('date'), [activeBranchId, activeBranch?.isMaster]);
+    const suppliers = useLiveQuery(() => activeBranch?.isMaster ? db.suppliers.toArray() : db.suppliers.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
 
     // Filter by Tab & Date (Moved up for hook usage)
-    const filteredPurchases = purchases?.filter(po => {
+    const filteredPurchases = purchases?.filter((po: any) => {
         // Filter by Type
         const poType = po.type || 'bill'; // Default to bill for migration
         if (poType !== activeTab) return false;
@@ -130,15 +157,11 @@ const PurchaseOrders = () => {
         if (startDate) {
             const poDate = new Date(po.date);
             const start = new Date(startDate);
-            poDate.setHours(0, 0, 0, 0);
-            start.setHours(0, 0, 0, 0);
             if (poDate < start) return false;
         }
         if (endDate) {
             const poDate = new Date(po.date);
             const end = new Date(endDate);
-            poDate.setHours(0, 0, 0, 0);
-            end.setHours(0, 0, 0, 0);
             if (poDate > end) return false;
         }
         return true;
@@ -150,72 +173,81 @@ const PurchaseOrders = () => {
         cols: 7 // Date, Ref, Supplier, Items, Total, Status, Actions
     });
 
-    const inventoryItems = useLiveQuery(() => db.items.toArray(), []);
+    const inventoryItems = useLiveQuery(() => activeBranch?.isMaster ? db.items.toArray() : db.items.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
 
-    const filteredInventory = inventoryItems?.filter(i =>
+    const filteredInventory = inventoryItems?.filter((i: any) =>
         i.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const addToOrder = (item: Item) => {
         const existing = orderItems.find(i => i.itemId === item.id);
         if (existing) {
-            setOrderItems(orderItems.map(i =>
+            setOrderItems(orderItems.map((i: any) =>
                 i.itemId === item.id ? { ...i, quantity: i.quantity + 1 } : i
             ));
         } else {
+            // Default tax to 15% if 0, as requested by user
+            const defaultTaxRate = (item.taxRate && item.taxRate > 0) ? item.taxRate : 15;
+
             setOrderItems([...orderItems, {
                 itemId: item.id!,
                 name: item.name,
                 quantity: 1,
                 cost: item.purchasePrice,
                 unit: item.unit,
-                taxRate: item.taxRate,
-                taxType: item.taxType
+                taxRate: defaultTaxRate,
+                taxType: item.taxType || 'exclusive'
             }]);
         }
     };
 
-    const updateOrderItem = (itemId: number, field: string, value: string | number) => {
-        setOrderItems(orderItems.map(i =>
+    const updateOrderItem = (itemId: string, field: string, value: string | number) => {
+        setOrderItems(orderItems.map((i: any) =>
             i.itemId === itemId ? { ...i, [field]: value } : i
         ));
     };
 
-    const removeOrderItem = (itemId: number) => {
-        setOrderItems(orderItems.filter(i => i.itemId !== itemId));
+    const removeOrderItem = (itemId: string) => {
+        setOrderItems(orderItems.filter((i: any) => i.itemId !== itemId));
     };
 
     // Calculate Totals
     const calculateTotals = (items: PurchaseItem[]) => {
-        let subTotal = 0;
-        let taxTotal = 0;
-        let grandTotal = 0;
+        let subTotalSum = 0;
+        let taxTotalSum = 0;
+        let grandTotalSum = 0;
 
-        items.forEach(item => {
+        items.forEach((item: any) => {
             const qty = item.quantity;
             const cost = item.cost;
             const rate = item.taxRate || 0;
             const type = item.taxType || 'exclusive';
 
-            let itemTax = 0;
-            let itemTotal = 0;
+            let lineTax = 0;
+            let lineTotal = 0;
 
-            if (type === 'inclusive') {
-                const basePrice = cost / (1 + rate / 100);
-                itemTax = (cost - basePrice) * qty;
-                itemTotal = cost * qty;
-                subTotal += basePrice * qty;
+            if (settings.applyTax) {
+                if (type === 'inclusive') {
+                    const basePrice = cost / (1 + rate / 100);
+                    lineTax = Math.round(((cost - basePrice) * qty) * 100) / 100;
+                    lineTotal = Math.round((cost * qty) * 100) / 100;
+                    subTotalSum += Math.round((basePrice * qty) * 100) / 100;
+                } else {
+                    lineTax = Math.round(((cost * (rate / 100)) * qty) * 100) / 100;
+                    lineTotal = Math.round(((cost * qty) + lineTax) * 100) / 100;
+                    subTotalSum += Math.round((cost * qty) * 100) / 100;
+                }
             } else {
-                itemTax = (cost * (rate / 100)) * qty;
-                itemTotal = (cost * qty) + itemTax;
-                subTotal += cost * qty;
+                lineTax = 0;
+                lineTotal = Math.round((cost * qty) * 100) / 100;
+                subTotalSum += lineTotal;
             }
 
-            taxTotal += itemTax;
-            grandTotal += itemTotal;
+            taxTotalSum += lineTax;
+            grandTotalSum += lineTotal;
         });
 
-        return { subTotal, taxTotal, grandTotal };
+        return { subTotal: subTotalSum, taxTotal: taxTotalSum, grandTotal: grandTotalSum };
     };
 
     const { subTotal, taxTotal, grandTotal: totalAmount } = calculateTotals(orderItems);
@@ -238,7 +270,7 @@ const PurchaseOrders = () => {
     };
 
     // Stock Helpers
-    const applyStockEffect = async (items: PurchaseItem[], type: 'bill' | 'order' | 'return') => {
+    const applyStockEffect = async (items: PurchaseItem[], type: 'bill' | 'order' | 'return', currentSupplierId?: string) => {
         if (type === 'order') return; // Orders don't affect stock
 
         for (const orderItem of items) {
@@ -247,11 +279,19 @@ const PurchaseOrders = () => {
                 let newStock = item.stock;
                 if (type === 'bill') {
                     newStock += orderItem.quantity;
-                    // Update Cost Price only on new Bills
-                    await db.items.update(item.id!, { stock: newStock, purchasePrice: orderItem.cost });
+                    // Update Cost Price and Supplier only on new Bills
+                    await db.items.update(item.id!, { 
+                        ...updateRecordMetadata(),
+                        stock: newStock, 
+                        purchasePrice: orderItem.cost,
+                        ...(currentSupplierId ? { supplierId: currentSupplierId } : {})
+                    });
                 } else if (type === 'return') {
                     newStock -= orderItem.quantity;
-                    await db.items.update(item.id!, { stock: newStock });
+                    await db.items.update(item.id!, { 
+                        ...updateRecordMetadata(),
+                        stock: newStock 
+                    });
                 }
             }
         }
@@ -307,6 +347,7 @@ const PurchaseOrders = () => {
             await db.transaction('rw', [db.purchases, db.purchasePayments, db.suppliers], async () => {
                 // 1. Record Payment
                 await db.purchasePayments.add({
+                    ...createRecordMetadata(),
                     purchaseId: selectedBillForPayment.id,
                     supplierId: selectedBillForPayment.supplierId!,
                     amount,
@@ -320,6 +361,7 @@ const PurchaseOrders = () => {
                 const newStatus = newPaidAmount >= selectedBillForPayment.totalAmount ? 'completed' : 'pending';
 
                 await db.purchases.update(selectedBillForPayment.id!, {
+                    ...updateRecordMetadata(),
                     paidAmount: newPaidAmount,
                     status: newStatus
                 });
@@ -328,6 +370,7 @@ const PurchaseOrders = () => {
                 const supplier = await db.suppliers.get(selectedBillForPayment.supplierId!);
                 if (supplier) {
                     await db.suppliers.update(supplier.id!, {
+                        ...updateRecordMetadata(),
                         balance: supplier.balance - amount
                     });
                 }
@@ -348,32 +391,37 @@ const PurchaseOrders = () => {
         }
 
         // Prepare Items with calculated totals
-        const processedItems = orderItems.map(item => {
+        const processedItems = orderItems.map((item: any) => {
             const qty = item.quantity;
             const cost = item.cost;
             const rate = item.taxRate || 0;
             const type = item.taxType || 'exclusive';
 
-            let itemTax = 0;
-            let itemTotal = 0;
+            let lineTax = 0;
+            let lineTotal = 0;
 
-            if (type === 'inclusive') {
-                const basePrice = cost / (1 + rate / 100);
-                itemTax = (cost - basePrice) * qty;
-                itemTotal = cost * qty;
+            if (settings.applyTax) {
+                if (type === 'inclusive') {
+                    const basePrice = cost / (1 + rate / 100);
+                    lineTax = Math.round(((cost - basePrice) * qty) * 100) / 100;
+                    lineTotal = Math.round((cost * qty) * 100) / 100;
+                } else {
+                    lineTax = Math.round(((cost * (rate / 100)) * qty) * 100) / 100;
+                    lineTotal = Math.round(((cost * qty) + lineTax) * 100) / 100;
+                }
             } else {
-                itemTax = (cost * (rate / 100)) * qty;
-                itemTotal = (cost * qty) + itemTax;
+                lineTax = 0;
+                lineTotal = Math.round((cost * qty) * 100) / 100;
             }
 
             return {
                 ...item,
-                taxAmount: itemTax,
-                total: itemTotal
+                taxAmount: lineTax,
+                total: lineTotal
             };
         });
 
-        const purchaseData: Purchase = {
+        const purchaseData: Omit<Purchase, keyof SyncEntity | 'id'> = {
             orderNumber: orderNumber || `${activeTab === 'bill' ? 'BILL' : activeTab === 'return' ? 'RET' : 'PO'}-${Date.now()}`,
             supplierName: supplier,
             items: processedItems,
@@ -410,13 +458,14 @@ const PurchaseOrders = () => {
                             const oldEffect = originalPurchase.type === 'return' ? -oldNet : oldNet;
 
                             await db.suppliers.update(sup.id!, {
+                                ...updateRecordMetadata(),
                                 balance: sup.balance - oldEffect
                             });
                         }
                     }
 
-                    await db.purchases.update(editingId, purchaseData as any);
-                    await applyStockEffect(orderItems, activeTab); // Apply new stock
+                    await db.purchases.update(editingId, { ...purchaseData, ...updateRecordMetadata() } as any);
+                    await applyStockEffect(orderItems, activeTab, editSupplierId); // Apply new stock
 
                     // Apply New Supplier Balance Effect
                     if (editSupplierId) {
@@ -427,6 +476,7 @@ const PurchaseOrders = () => {
                             const newEffect = activeTab === 'return' ? -newNet : newNet;
 
                             await db.suppliers.update(sup.id!, {
+                                ...updateRecordMetadata(),
                                 balance: sup.balance + newEffect
                             });
                         }
@@ -435,8 +485,8 @@ const PurchaseOrders = () => {
                     addToast(t('purchases.updated'), 'success');
                 } else {
                     // CREATE MODE
-                    const id = await db.purchases.add(purchaseData);
-                    await applyStockEffect(orderItems, activeTab);
+                    const id = await db.purchases.add({ ...purchaseData, ...createRecordMetadata() } as Purchase);
+                    await applyStockEffect(orderItems, activeTab, editSupplierId);
 
                     // Update Supplier Balance
                     if (editSupplierId) {
@@ -451,10 +501,12 @@ const PurchaseOrders = () => {
                                 // Yes, let's treat 'advance' as payment.
 
                                 await db.suppliers.update(sup.id!, {
+                                    ...updateRecordMetadata(),
                                     balance: sup.balance + totalAmount - advance
                                 });
                             } else if (activeTab === 'return') {
                                 await db.suppliers.update(sup.id!, {
+                                    ...updateRecordMetadata(),
                                     balance: sup.balance - totalAmount
                                 });
                             }
@@ -463,7 +515,10 @@ const PurchaseOrders = () => {
 
                     // If this was a "Receive Order" action, update the original order status
                     if (relatedOrderId && activeTab === 'bill') {
-                        await db.purchases.update(relatedOrderId, { status: 'completed' });
+                        await db.purchases.update(relatedOrderId, { 
+                            ...updateRecordMetadata(),
+                            status: 'completed' 
+                        });
                     }
 
                     addToast(t('purchases.created'), 'success');
@@ -579,7 +634,7 @@ const PurchaseOrders = () => {
 
             {/* Actions Bar */}
             <div className="flex justify-between items-center">
-                {hasPermission('purchases_manage') ? (
+                {hasPermission('purchases_add') ? (
                     <button
                         onClick={() => { resetForm(); setIsModalOpen(true); }}
                         className={`flex items-center gap-2 text-white px-4 py-2 rounded-lg transition-colors shadow-sm ${activeTab === 'return' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
@@ -594,7 +649,7 @@ const PurchaseOrders = () => {
                     <div className="flex flex-col">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('purchases.from')}</label>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm"
@@ -603,7 +658,7 @@ const PurchaseOrders = () => {
                     <div className="flex flex-col">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('purchases.to')}</label>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
                             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm"
@@ -613,46 +668,46 @@ const PurchaseOrders = () => {
             </div>
 
             {/* List */}
-            <div className="bg-white dark:bg-slate-800 rounded-b-xl rounded-tr-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-slate-800 rounded-b-xl rounded-tr-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto">
+                <table className="w-full text-left whitespace-nowrap min-w-[900px]">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                         <tr>
-                            <th className="p-4 font-medium">{t('purchases.date')}</th>
-                            <th className="p-4 font-medium">{t('purchases.ref_no')}</th>
-                            <th className="p-4 font-medium">{t('purchases.supplier')}</th>
-                            <th className="p-4 font-medium">{t('purchases.items')}</th>
-                            <th className="p-4 font-medium">{t('purchases.total')}</th>
-                            <th className="p-4 font-medium">{activeTab === 'order' ? t('purchases.status') : t('purchases.balance')}</th>
-                            <th className="p-4 font-medium text-right">{t('purchases.actions')}</th>
+                            <th className="p-4 font-semibold">{t('purchases.date')}</th>
+                            <th className="p-4 font-semibold">{t('purchases.ref_no')}</th>
+                            <th className="p-4 font-semibold">{t('purchases.supplier')}</th>
+                            <th className="p-4 font-semibold">{t('purchases.items')}</th>
+                            <th className="p-4 font-semibold">{t('purchases.total')}</th>
+                            <th className="p-4 font-semibold">{activeTab === 'order' ? t('purchases.status') : t('purchases.balance')}</th>
+                            <th className="p-4 font-semibold text-right">{t('purchases.actions')}</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                        {filteredPurchases?.map((po, rowIndex) => {
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {filteredPurchases?.map((po: any, rowIndex: any) => {
                             const paid = po.paidAmount || 0;
                             const balance = po.totalAmount - paid;
                             return (
-                                <tr key={po.id || po.orderNumber} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                    <td {...getGridCellProps(rowIndex, 0)} className="p-4 dark:text-slate-300 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-lg">{formatDate(po.date)}</td>
-                                    <td {...getGridCellProps(rowIndex, 1)} className="p-4 font-medium dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.orderNumber}</td>
-                                    <td {...getGridCellProps(rowIndex, 2)} className="p-4 dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.supplierName}</td>
-                                    <td {...getGridCellProps(rowIndex, 3)} className="p-4 dark:text-slate-300 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{t('purchases.item_count', { count: po.items.length })}</td>
-                                    <td {...getGridCellProps(rowIndex, 4)} className={`p-4 font-bold outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 ${activeTab === 'return' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-white'}`}>
+                                <tr key={po.id || po.orderNumber} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                    <td {...getGridCellProps(rowIndex, 0)} className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-md">{formatDate(po.date)}</td>
+                                    <td {...getGridCellProps(rowIndex, 1)} className="p-4 font-mono text-xs text-slate-500 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.orderNumber}</td>
+                                    <td {...getGridCellProps(rowIndex, 2)} className="p-4 font-medium dark:text-white text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.supplierName}</td>
+                                    <td {...getGridCellProps(rowIndex, 3)} className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{t('purchases.item_count', { count: po.items.length })}</td>
+                                    <td {...getGridCellProps(rowIndex, 4)} className={`p-4 font-bold text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 ${activeTab === 'return' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-white'}`}>
                                         {formatCurrency(po.totalAmount)}
                                     </td>
                                     <td {...getGridCellProps(rowIndex, 5)} className="p-4 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
                                         {activeTab === 'order' ? (
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium uppercase ${po.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                            <span className={`px-2 py-1.5 border rounded-md text-xs font-semibold uppercase ${po.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
                                                 }`}>
                                                 {po.status === 'completed' ? t('purchases.status_completed') : t('purchases.status_pending')}
                                             </span>
                                         ) : (
                                             balance > 0.01 ?
-                                                <span className="text-red-500 font-medium">{formatCurrency(balance)}</span> :
-                                                <span className="text-green-500 font-medium">{t('purchases.settled')}</span>
+                                                <span className="text-red-500 dark:text-red-400 font-semibold text-sm">{formatCurrency(balance)}</span> :
+                                                <span className="text-green-600 dark:text-green-400 font-semibold text-sm">{t('purchases.settled')}</span>
                                         )}
                                     </td>
-                                    <td {...getGridCellProps(rowIndex, 6)} className="p-4 text-right outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-lg">
-                                        <div className="flex items-center justify-end gap-2">
+                                    <td {...getGridCellProps(rowIndex, 6)} className="p-4 text-right outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-md">
+                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
                                             {/* Action: View Details */}
                                             <button
                                                 onClick={() => setViewOrder(po)}
@@ -711,6 +766,16 @@ const PurchaseOrders = () => {
                                                 <Download size={18} />
                                             </button>
 
+                                            {activeTab === 'bill' && (
+                                                <button
+                                                    onClick={() => handlePrintLabels(po)}
+                                                    className="p-2 text-indigo-600 hover:bg-slate-100 dark:text-indigo-400 dark:hover:bg-slate-700 rounded-lg"
+                                                    title={t('inventory.print_label') || 'Print Labels'}
+                                                >
+                                                    <QrCode size={18} />
+                                                </button>
+                                            )}
+
                                             {settings.enableSharing && (
                                                 <button
                                                     onClick={() => {
@@ -724,7 +789,7 @@ const PurchaseOrders = () => {
                                                 </button>
                                             )}
 
-                                            {hasPermission('purchases_manage') && (
+                                            {hasPermission('purchases_edit') && (
                                                 <>
                                                     <button
                                                         onClick={() => handleEditPurchase(po)}
@@ -736,7 +801,7 @@ const PurchaseOrders = () => {
                                                 </>
                                             )}
 
-                                            {(isAdmin || hasPermission('purchases_manage')) && (
+                                            {(isAdmin || hasPermission('purchases_delete')) && (
                                                 <button
                                                     onClick={() => handleDeleteClick(po)}
                                                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
@@ -839,6 +904,12 @@ const PurchaseOrders = () => {
                 purchase={viewOrder}
             />
 
+            <BarcodeModal
+                isOpen={isLabelModalOpen}
+                onClose={() => setIsLabelModalOpen(false)}
+                items={selectedItemsForLabel}
+            />
+
             {/* Create Modal */}
             <Modal
                 isOpen={isModalOpen}
@@ -871,7 +942,7 @@ const PurchaseOrders = () => {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto space-y-2">
-                            {filteredInventory?.map(item => (
+                            {filteredInventory?.map((item: any) => (
                                 <button
                                     key={item.id}
                                     onClick={() => addToOrder(item)}
@@ -925,14 +996,14 @@ const PurchaseOrders = () => {
                                             className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
                                             value={editSupplierId || ''}
                                             onChange={e => {
-                                                const id = Number(e.target.value);
+                                                const id = e.target.value;
                                                 const s = suppliers?.find(sup => sup.id === id);
                                                 setEditSupplierId(id);
                                                 setSupplier(s ? s.name : '');
                                             }}
                                         >
                                             <option value="">{t('purchases.select_supplier')}</option>
-                                            {suppliers?.map(s => (
+                                            {suppliers?.map((s: any) => (
                                                 <option key={s.id} value={s.id}>{s.name}</option>
                                             ))}
                                         </select>
@@ -972,128 +1043,146 @@ const PurchaseOrders = () => {
                             <div className="space-y-3">
                                 <h3 className="font-semibold text-sm text-slate-500 uppercase tracking-wider">{t('purchases.items_header', { count: orderItems.length })}</h3>
 
-                                {/* Table Header */}
-                                <div className="hidden md:flex gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-t-lg font-semibold text-xs text-slate-600 dark:text-slate-300">
-                                    <div className="w-8 text-center">#</div>
-                                    <div className="flex-1">Item Name</div>
-                                    <div className="w-16 text-center">Unit</div>
-                                    <div className="w-16 text-center">Qty</div>
-                                    <div className="w-20 text-right">Cost</div>
-                                    <div className="w-16 text-center">Tax %</div>
-                                    <div className="w-20 text-right">Tax Amt</div>
-                                    <div className="w-20 text-right">Total</div>
-                                    <div className="w-6"></div>
-                                </div>
+                                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+                                    <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+                                        <thead className="bg-slate-50 dark:bg-slate-700/80 font-semibold text-xs text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                                            <tr>
+                                                <th className="px-3 py-3 text-center w-12">#</th>
+                                                <th className="px-3 py-3">Item Name</th>
+                                                <th className="px-3 py-3 text-center w-24">Unit</th>
+                                                <th className="px-3 py-3 text-center w-24">Qty</th>
+                                                <th className="px-3 py-3 text-right w-28">Cost</th>
+                                                <th className="px-3 py-3 text-center w-24">Tax %</th>
+                                                <th className="px-3 py-3 text-right w-28">Tax Amt</th>
+                                                <th className="px-3 py-3 text-right w-32">Total</th>
+                                                <th className="px-3 py-3 text-center w-12"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                            {orderItems.map((item: any, index: any) => {
+                                                // Calculate display total for the line item including tax
+                                                const qty = item.quantity || 0;
+                                                const cost = item.cost || 0;
+                                                const taxRate = item.taxRate || 0;
+                                                const taxType = item.taxType || 'exclusive';
 
-                                <div className="border rounded-b-lg divide-y dark:border-slate-700 dark:divide-slate-700">
-                                    {orderItems.map((item, index) => {
-                                        // Calculate display total for the line item including tax
-                                        const qty = item.quantity || 0;
-                                        const cost = item.cost || 0;
-                                        const taxRate = item.taxRate || 0;
-                                        const taxType = item.taxType || 'exclusive';
+                                                let lineTax = 0;
+                                                let lineTotal = 0;
 
-                                        let lineTax = 0;
-                                        let lineTotal = 0;
+                                                if (taxType === 'inclusive') {
+                                                    const basePrice = cost / (1 + taxRate / 100);
+                                                    lineTax = (cost - basePrice) * qty;
+                                                    lineTotal = cost * qty;
+                                                } else {
+                                                    lineTax = (cost * (taxRate / 100)) * qty;
+                                                    lineTotal = (cost * qty) + lineTax;
+                                                }
 
-                                        if (taxType === 'inclusive') {
-                                            const basePrice = cost / (1 + taxRate / 100);
-                                            lineTax = (cost - basePrice) * qty;
-                                            lineTotal = cost * qty;
-                                        } else {
-                                            lineTax = (cost * (taxRate / 100)) * qty;
-                                            lineTotal = (cost * qty) + lineTax;
-                                        }
-
-                                        return (
-                                            <div key={item.itemId} className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800">
-                                                <div className="w-8 text-center text-slate-400 text-xs font-mono">{index + 1}</div>
-                                                <div className="flex-1 min-w-[120px]">
-                                                    <p className="font-medium dark:text-white text-sm truncate" title={item.name}>{item.name}</p>
-                                                    <span className="text-[10px] text-slate-400 uppercase">{item.taxType}</span>
-                                                </div>
-                                                <div className="w-16">
-                                                    <input
-                                                        type="text"
-                                                        className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-900 border rounded text-center dark:text-white"
-                                                        value={item.unit || ''}
-                                                        onChange={e => updateOrderItem(item.itemId, 'unit', e.target.value)}
-                                                        placeholder={t('purchases.unit')}
-                                                    />
-                                                </div>
-                                                <div className="w-16">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-900 border rounded text-center dark:text-white"
-                                                        value={item.quantity}
-                                                        onChange={e => updateOrderItem(item.itemId, 'quantity', parseFloat(e.target.value))}
-                                                        placeholder={t('purchases.qty')}
-                                                    />
-                                                </div>
-                                                <div className="w-20">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-900 border rounded text-right dark:text-white"
-                                                        value={item.cost}
-                                                        onChange={e => updateOrderItem(item.itemId, 'cost', parseFloat(e.target.value))}
-                                                        placeholder={t('purchases.cost')}
-                                                    />
-                                                </div>
-                                                <div className="w-16">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-900 border rounded text-center dark:text-white"
-                                                        value={item.taxRate || 0}
-                                                        onChange={e => updateOrderItem(item.itemId, 'taxRate', parseFloat(e.target.value))}
-                                                        placeholder="Tax%"
-                                                    />
-                                                </div>
-                                                <div className="w-20 text-right text-xs text-slate-500">
-                                                    {formatCurrency(lineTax)}
-                                                </div>
-                                                <div className="w-20 text-right font-medium dark:text-white text-sm">
-                                                    {formatCurrency(lineTotal)}
-                                                </div>
-                                                <div className="w-6 flex justify-center">
-                                                    <button onClick={() => removeOrderItem(item.itemId)} className="text-red-500 hover:text-red-700">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                    {orderItems.length === 0 && (
-                                        <div className="p-4 text-center text-slate-400 text-sm">{t('purchases.no_items_added')}</div>
-                                    )}
+                                                return (
+                                                    <tr key={item.itemId} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
+                                                        <td className="px-3 py-2 text-center text-slate-400 text-xs font-mono">{index + 1}</td>
+                                                        <td className="px-3 py-2">
+                                                            <p className="font-medium dark:text-white text-sm truncate max-w-[200px]" title={item.name}>{item.name}</p>
+                                                            <span className="text-[10px] text-slate-400 uppercase">{item.taxType}</span>
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                type="text"
+                                                                className="w-full min-w-[60px] p-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-center dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow"
+                                                                value={item.unit || ''}
+                                                                onChange={e => updateOrderItem(item.itemId, 'unit', e.target.value)}
+                                                                placeholder={t('purchases.unit')}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full min-w-[60px] p-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-center dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow"
+                                                                value={item.quantity}
+                                                                onChange={e => updateOrderItem(item.itemId, 'quantity', parseFloat(e.target.value))}
+                                                                placeholder={t('purchases.qty')}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full min-w-[70px] p-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-right dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow font-medium"
+                                                                value={item.cost}
+                                                                onChange={e => updateOrderItem(item.itemId, 'cost', parseFloat(e.target.value))}
+                                                                placeholder={t('purchases.cost')}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full min-w-[60px] p-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-center dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-shadow"
+                                                                value={item.taxRate || 0}
+                                                                onChange={e => updateOrderItem(item.itemId, 'taxRate', parseFloat(e.target.value))}
+                                                                placeholder="Tax%"
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2 text-right text-xs text-slate-500 font-medium w-28">
+                                                            {formatCurrency(lineTax)}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-right font-medium dark:text-white text-sm bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-transparent transition-colors w-32">
+                                                            {formatCurrency(lineTotal)}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-center w-12">
+                                                            <button onClick={() => removeOrderItem(item.itemId)} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
+                                            {orderItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={9} className="p-10 text-center text-slate-400">
+                                                        <div className="flex flex-col items-center justify-center space-y-3">
+                                                            <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full">
+                                                                <ShoppingCart size={24} className="text-slate-400 dark:text-slate-500" />
+                                                            </div>
+                                                            <span className="text-sm font-medium">{t('purchases.no_items_added')}</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
 
                             {/* Financials & Payment */}
-                            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl space-y-4">
-                                <div className="flex justify-between items-center text-lg font-bold">
-                                    <span className="dark:text-white">{t('purchases.total_amount')}</span>
-                                    <span className={activeTab === 'return' ? 'text-amber-600' : 'dark:text-white'}>
+                            <div className="bg-slate-50 dark:bg-slate-800/60 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-5 mt-4">
+                                <div className="flex justify-between items-center pb-4 border-b border-slate-200 dark:border-slate-700/70 border-dashed">
+                                    <span className="text-slate-500 dark:text-slate-400 font-medium tracking-wider uppercase text-xs sm:text-sm">{t('purchases.total_amount')}</span>
+                                    <span className={`text-2xl sm:text-3xl font-bold tracking-tight ${activeTab === 'return' ? 'text-amber-600' : 'text-slate-800 dark:text-white'}`}>
                                         {formatCurrency(totalAmount)}
                                     </span>
                                 </div>
 
                                 {/* Only show Payment for Bills. For Returns it implies refund/credit. For Orders it implies advance. */}
-                                <div className="grid grid-cols-2 gap-4 items-center">
-                                    <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 items-center">
+                                    <label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                                         {activeTab === 'return' ? t('purchases.refund_received') : t('purchases.paid_amount')}
                                     </label>
-                                    <input
-                                        type="number"
-                                        className="p-2 rounded border dark:bg-slate-900 dark:border-slate-600 dark:text-white text-right"
-                                        placeholder={t('common.placeholder_amount')}
-                                        value={paidAmount}
-                                        onChange={e => setPaidAmount(e.target.value)}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            className="w-full py-2.5 px-3 rounded-lg border border-slate-300 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-right sm:text-lg font-medium shadow-inner focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                            placeholder={t('common.placeholder_amount')}
+                                            value={paidAmount}
+                                            onChange={e => setPaidAmount(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className={`flex justify-between items-center font-bold ${activeTab === 'return' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                    <span>{activeTab === 'return' ? t('purchases.balance_credit') : t('purchases.balance_due')}</span>
-                                    <span>{formatCurrency(balanceDue)}</span>
+                                <div className={`flex justify-between items-center font-bold px-4 py-3.5 rounded-lg shadow-sm border ${activeTab === 'return'
+                                    ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-700/50 dark:text-amber-400'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:text-emerald-400'
+                                    }`}>
+                                    <span className="text-sm uppercase tracking-wider">{activeTab === 'return' ? t('purchases.balance_credit') : t('purchases.balance_due')}</span>
+                                    <span className="text-lg sm:text-xl">{formatCurrency(balanceDue)}</span>
                                 </div>
                             </div>
 
@@ -1208,6 +1297,7 @@ const PurchaseOrders = () => {
                                 }
                                 try {
                                     const id = await db.suppliers.add({
+                                        ...createRecordMetadata(),
                                         name: newSupplierName,
                                         phone: newSupplierPhone || '',
                                         email: '',
@@ -1218,9 +1308,7 @@ const PurchaseOrders = () => {
                                     setIsAddSupplierOpen(false);
                                     setNewSupplierName('');
                                     setNewSupplierPhone('');
-                                    setEditSupplierId(Number(id));
-                                    setSupplier(newSupplierName);
-                                    setEditSupplierId(Number(id));
+                                    setEditSupplierId(id as string);
                                     setSupplier(newSupplierName);
                                     addToast(t('purchases.supplier_added'), 'success');
                                 } catch (error) {
@@ -1253,6 +1341,26 @@ const PurchaseOrders = () => {
                             onChange={e => setNewItemName(e.target.value)}
                             placeholder={t('sales.item_name_placeholder')}
                         />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.barcode') || 'Barcode'}</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="flex-1 p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
+                                value={newItemBarcode}
+                                onChange={e => setNewItemBarcode(e.target.value)}
+                                placeholder={t('inventory.barcode_placeholder') || 'Enter or scan barcode'}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setNewItemBarcode(Math.floor(10000000 + Math.random() * 90000000).toString())}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 rounded-lg flex items-center gap-2"
+                                title="Auto-generate"
+                            >
+                                <Wand2 size={18} className="text-purple-500" />
+                            </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1364,7 +1472,8 @@ const PurchaseOrders = () => {
                                     const stock = parseInt(newItemStock) || 0;
 
                                     // Add to DB
-                                    const id = await db.items.add({
+                                    const newId = await db.items.add({
+                                        ...createRecordMetadata(),
                                         name: newItemName,
                                         purchasePrice: cost,
                                         salePrice: parseFloat(newItemPrice) || cost,
@@ -1373,12 +1482,14 @@ const PurchaseOrders = () => {
                                         taxType: newItemTaxType as 'inclusive' | 'exclusive',
                                         taxRate: newItemTaxRate,
                                         unit: newItemUnit,
-                                        barcode: ''
+                                        barcode: newItemBarcode,
+                                        supplierId: editSupplierId
                                     });
 
                                     // Add to current order list directly
                                     addToOrder({
-                                        id: Number(id),
+                                        ...createRecordMetadata(),
+                                        id: newId as string,
                                         name: newItemName,
                                         purchasePrice: cost,
                                         stock: stock,
@@ -1387,12 +1498,13 @@ const PurchaseOrders = () => {
                                         taxType: newItemTaxType as 'inclusive' | 'exclusive',
                                         taxRate: newItemTaxRate,
                                         unit: newItemUnit,
-                                        barcode: ''
-                                    });
+                                        barcode: newItemBarcode
+                                    } as Item);
 
                                     setIsAddItemOpen(false);
                                     // Reset Form
                                     setNewItemName('');
+                                    setNewItemBarcode('');
                                     setNewItemCost('');
                                     setNewItemPrice('');
                                     setNewItemStock('');

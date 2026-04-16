@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, User, Phone, DollarSign, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
-import { db, type CashParty } from '../../services/db';
+import { db, type CashParty, createRecordMetadata } from '../../services/db';
 import { useTranslation } from 'react-i18next';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -42,6 +42,7 @@ const AddPartyModal: React.FC<AddPartyModalProps> = ({ isOpen, onClose, onSave, 
             }
 
             const newParty: CashParty = {
+                ...createRecordMetadata(),
                 name,
                 phone,
                 openingBalance: bal,

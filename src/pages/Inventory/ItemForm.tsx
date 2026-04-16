@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { db } from '../../services/db';
-import type { Item } from '../../services/db';
+import { db, createRecordMetadata, updateRecordMetadata } from '../../services/db';
+import type { Item, Supplier, Category } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
 import { Save, ArrowLeft, ScanBarcode, ShieldOff, Upload, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,8 +16,10 @@ const ItemForm: React.FC = () => {
     const { hasPermission } = useAuth();
     const { settings } = useSettings();
     const isEdit = !!id;
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
 
-    if (!hasPermission('inventory_manage')) {
+    if (!hasPermission(isEdit ? 'inventory_edit' : 'inventory_add')) {
         return (
             <div className="flex flex-col items-center justify-center h-screen text-center p-8">
                 <ShieldOff size={48} className="text-slate-300 mb-4" />
@@ -34,7 +36,11 @@ const ItemForm: React.FC = () => {
     }
 
     const [formData, setFormData] = useState<Item>({
+        id: '',
+        branchId: '',
+        updatedAt: new Date(),
         name: '',
+        arabicName: '',
         barcode: '',
         salePrice: 0,
         purchasePrice: 0,
@@ -43,7 +49,8 @@ const ItemForm: React.FC = () => {
         stock: 0,
         minStock: 5,
         location: '',
-        unit: 'pc'
+        unit: 'pc',
+        itemCode: ''
     });
 
     useEffect(() => {
@@ -62,18 +69,34 @@ const ItemForm: React.FC = () => {
                 }
             }
         }
+
+        // Fetch Suppliers and Categories
+        const fetchData = async () => {
+            const allSuppliers = await db.suppliers.toArray();
+            setSuppliers(allSuppliers);
+
+            const allCategories = await db.categories.toArray();
+            setCategories(allCategories);
+        };
+        fetchData();
     }, [isEdit]);
 
     useEffect(() => {
         if (isEdit) {
-            db.items.get(Number(id)).then((item) => {
+            db.items.get(id!).then((item) => {
                 if (item) setFormData(item);
             });
         }
     }, [id, isEdit]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const value = e.target.type === 'number' ? parseFloat(e.target.value) : e.target.value;
+        let value: any = e.target.type === 'number' ? parseFloat(e.target.value) : e.target.value;
+        if (value === '') {
+            // Nullify optional ID fields when cleared
+            if (e.target.name === 'supplierId' || e.target.name === 'categoryId') {
+                value = undefined;
+            }
+        }
         setFormData({ ...formData, [e.target.name]: value });
     };
 
@@ -81,10 +104,12 @@ const ItemForm: React.FC = () => {
         e.preventDefault();
         try {
             if (isEdit) {
-                await db.items.update(Number(id), formData);
+                const updatedItem = { ...formData, ...updateRecordMetadata() };
+                await db.items.update(id!, updatedItem);
                 addToast(t('inventory.update_success'), 'success');
             } else {
-                await db.items.add(formData);
+                const newItem = { ...formData, ...createRecordMetadata() };
+                await db.items.add(newItem);
                 addToast(t('inventory.save_success'), 'success');
             }
             navigate('/inventory');
@@ -129,6 +154,58 @@ const ItemForm: React.FC = () => {
                 </div>
 
                 <div className="col-span-2 md:col-span-1">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.arabic_name') || 'Arabic Name'}</label>
+                    <input
+                        type="text"
+                        name="arabicName"
+                        value={formData.arabicName || ''}
+                        onChange={handleChange}
+                        className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        dir="rtl"
+                        placeholder="الاسم العربي"
+                    />
+                </div>
+
+                <div className="col-span-2 md:col-span-1">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('purchases.supplier') || 'Supplier'}</label>
+                    <select
+                        name="supplierId"
+                        value={formData.supplierId || ''}
+                        onChange={handleChange}
+                        className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="">-- {t('common.select') || 'Select Supplier'} --</option>
+                        {suppliers.map((sup: any) => (
+                            <option key={`sup-${sup.id}`} value={sup.id}>
+                                {sup.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Cafe Mode Category Selection */}
+                {settings.cafeMode && (
+                    <div className="col-span-2 md:col-span-1">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            {t('inventory.category') || 'Category'}
+                        </label>
+                        <select
+                            name="categoryId"
+                            value={formData.categoryId || ''}
+                            onChange={handleChange}
+                            className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="">-- {t('common.select') || 'Select Category'} --</option>
+                            {categories.map((cat: any) => (
+                                <option key={`cat-${cat.id}`} value={cat.id}>
+                                    {cat.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="col-span-2 md:col-span-1">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.unit')}</label>
                     <select
                         name="unit"
@@ -151,8 +228,8 @@ const ItemForm: React.FC = () => {
                 {/* Pricing */}
                 <div className="col-span-2 border-t border-slate-100 dark:border-slate-700 pt-4 mt-2">
                     <h3 className="font-semibold text-slate-900 dark:text-white mb-4">{t('inventory.pricing_tax')}</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="col-span-2 md:col-span-1">
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.sale_price')}</label>
                             <input
                                 type="number"
@@ -165,7 +242,7 @@ const ItemForm: React.FC = () => {
                                 required
                             />
                         </div>
-                        <div>
+                        <div className="col-span-2 md:col-span-1">
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.purchase_price')}</label>
                             <input
                                 type="number"
@@ -178,7 +255,31 @@ const ItemForm: React.FC = () => {
                                 required
                             />
                         </div>
-
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.tax_type') || 'Tax Type'}</label>
+                            <select
+                                name="taxType"
+                                value={formData.taxType}
+                                onChange={handleChange}
+                                className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
+                            >
+                                <option value="exclusive">{t('common.exclusive') || 'Exclusive'}</option>
+                                <option value="inclusive">{t('common.inclusive') || 'Inclusive'}</option>
+                            </select>
+                        </div>
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.tax_rate') || 'Tax Rate (%)'}</label>
+                            <input
+                                type="number"
+                                name="taxRate"
+                                value={formData.taxRate || 0}
+                                onChange={handleChange}
+                                step="0.1"
+                                min="0"
+                                className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
+                                required
+                            />
+                        </div>
                     </div>
 
                 </div>
@@ -244,6 +345,20 @@ const ItemForm: React.FC = () => {
                             <ScanBarcode size={20} />
                         </button>
                     </div>
+                </div>
+
+                {/* Item Code (PLU) */}
+                <div className="col-span-2 border-t border-slate-100 dark:border-slate-700 pt-4">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('inventory.item_code') || 'Item Code / Scale PLU'}</label>
+                    <input
+                        type="text"
+                        name="itemCode"
+                        value={formData.itemCode || ''}
+                        onChange={handleChange}
+                        placeholder={t('inventory.item_code_placeholder') || 'E.g. 00010'}
+                        className="w-full md:w-1/2 p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Use this for weighing scale PLU matching.</p>
                 </div>
 
                 {/* Image Upload (Cafe Mode Only) */}

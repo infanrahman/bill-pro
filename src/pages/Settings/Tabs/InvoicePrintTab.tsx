@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Printer, RefreshCw } from 'lucide-react';
+import { Save, Printer, RefreshCw, Archive } from 'lucide-react';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
 
@@ -24,6 +24,24 @@ export interface PrinterConfig {
         printerName: string;
         copies: number;
     };
+
+    kitchen: {
+        enabled: boolean;
+        printerName: string;
+        paperSize: '80mm' | '58mm';
+        copies: number;
+    };
+
+    // Barcode Printer Settings
+    enableBarcodePrinter: boolean;
+    barcode: {
+        printerName: string;
+        labelWidth: string; // e.g. '50mm'
+        labelHeight: string; // e.g. '25mm'
+        copies: number;
+        orientation: 'portrait' | 'landscape';
+        numberMapping: Record<string, string>; // '0'-'9' -> single letter
+    };
 }
 
 const InvoicePrintTab: React.FC = () => {
@@ -39,11 +57,22 @@ const InvoicePrintTab: React.FC = () => {
         printCompanyName: true,
         printToken: false,
         thermal: { printerName: '', copies: 1, paperSize: '80mm', customPaperWidth: '80mm' },
-        regular: { printerName: '', copies: 1 }
+        regular: { printerName: '', copies: 1 },
+        kitchen: { enabled: false, printerName: '', paperSize: '80mm', copies: 1 },
+        enableBarcodePrinter: false,
+        barcode: {
+            printerName: '',
+            labelWidth: '50mm',
+            labelHeight: '25mm',
+            copies: 1,
+            orientation: 'portrait',
+            numberMapping: { '1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '0': '' }
+        }
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [printers, setPrinters] = useState<any[]>([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     useEffect(() => {
         const saved = localStorage.getItem('printerConfig');
@@ -55,19 +84,33 @@ const InvoicePrintTab: React.FC = () => {
                     ...parsed,
                     // Merge/Repair structure if needed
                     thermal: { ...prev.thermal, ...(parsed.thermal || {}) },
-                    regular: { ...prev.regular, ...(parsed.regular || {}) }
+                    regular: { ...prev.regular, ...(parsed.regular || {}) },
+                    kitchen: { ...prev.kitchen, ...(parsed.kitchen || {}) },
+                    barcode: { ...prev.barcode, ...(parsed.barcode || {}) }
                 }));
             } catch (e) {
                 console.error("Failed to parse settings", e);
             }
         }
         fetchPrinters();
+
+        // Refresh printers when window gains focus (e.g. after adding a printer in system settings)
+        const onFocus = () => fetchPrinters();
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
     }, []);
 
     const fetchPrinters = async () => {
         if (window.electron && window.electron.getPrinters) {
-            const list = await window.electron.getPrinters();
-            setPrinters(list);
+            setIsRefreshing(true);
+            try {
+                const list = await window.electron.getPrinters();
+                setPrinters(list);
+            } catch (error) {
+                console.error("Failed to fetch printers:", error);
+            } finally {
+                setTimeout(() => setIsRefreshing(false), 500); // Small delay for visual feedback
+            }
         }
     };
 
@@ -76,7 +119,7 @@ const InvoicePrintTab: React.FC = () => {
         setConfig(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleSubChange = (type: 'thermal' | 'regular', key: string, value: any) => {
+    const handleSubChange = (type: 'thermal' | 'regular' | 'barcode' | 'kitchen', key: string, value: any) => {
         setConfig(prev => ({
             ...prev,
             [type]: {
@@ -86,9 +129,48 @@ const InvoicePrintTab: React.FC = () => {
         }));
     };
 
+    const handleNumberMappingChange = (digit: string, value: string) => {
+        // Only allow single letter a-z
+        const filteredValue = value.replace(/[^a-zA-Z]/g, '').toLowerCase().slice(0, 1);
+        setConfig(prev => ({
+            ...prev,
+            barcode: {
+                ...prev.barcode,
+                numberMapping: {
+                    ...(prev.barcode.numberMapping || {}),
+                    [digit]: filteredValue
+                }
+            }
+        }));
+    };
+
     const handleSave = () => {
         localStorage.setItem('printerConfig', JSON.stringify(config));
         addToast(t('print.saved_success'), 'success');
+    };
+
+    const handleTestCashDrawer = async () => {
+        if (!config.thermal.printerName) {
+            addToast('Please select a thermal printer first', 'error');
+            return;
+        }
+
+        if (window.electron && window.electron.openCashDrawer) {
+            try {
+                addToast('Sending open command to drawer...', 'info');
+                const success = await window.electron.openCashDrawer(config.thermal.printerName);
+                if (success) {
+                    addToast('Drawer opened successfully', 'success');
+                } else {
+                    addToast('Failed to open drawer. Check printer connection.', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                addToast('Error sending drawer command', 'error');
+            }
+        } else {
+            addToast('Cash drawer feature requires desktop app', 'error');
+        }
     };
 
     return (
@@ -122,7 +204,13 @@ const InvoicePrintTab: React.FC = () => {
                     <h3 className="font-semibold dark:text-white">
                         {config.printerType === 'regular' ? t('print.regular_settings') : t('print.thermal_settings')}
                     </h3>
-                    <button onClick={fetchPrinters} className="text-blue-500 hover:text-blue-600"><RefreshCw size={18} /></button>
+                    <button 
+                        onClick={fetchPrinters} 
+                        className={`text-blue-500 hover:text-blue-600 transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+                        title={t('common.refresh')}
+                    >
+                        <RefreshCw size={18} />
+                    </button>
                 </div>
 
                 <div>
@@ -199,6 +287,224 @@ const InvoicePrintTab: React.FC = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {config.printerType === 'thermal' && (
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-700 mt-4">
+                        <button
+                            onClick={handleTestCashDrawer}
+                            disabled={!config.thermal.printerName}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Archive size={18} />
+                            Test Cash Drawer
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Kitchen Printer Settings */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4 mb-4">
+                    <div>
+                        <h3 className="font-semibold text-lg dark:text-white flex items-center gap-2">
+                            {t('print.kitchen_title') || 'Kitchen Printer'}
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {t('print.kitchen_desc') || 'Automatically print order tickets to the kitchen'}
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={config.kitchen.enabled}
+                            onChange={(e) => handleSubChange('kitchen', 'enabled', e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                {config.kitchen.enabled && (
+                    <div className="space-y-4 animation-fadeIn">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('print.select_printer')}
+                            </label>
+                            <select
+                                value={config.kitchen.printerName}
+                                onChange={(e) => handleSubChange('kitchen', 'printerName', e.target.value)}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                            >
+                                <option value="">-- Select Printer --</option>
+                                {printers.map((p: any) => (
+                                    <option key={p.name} value={p.name}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('print.paper_size') || 'Paper Size'}
+                            </label>
+                            <select
+                                value={config.kitchen.paperSize}
+                                onChange={(e) => handleSubChange('kitchen', 'paperSize', e.target.value)}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white mb-2"
+                            >
+                                <option value="80mm">80mm</option>
+                                <option value="58mm">58mm</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('print.copies') || 'Copies'}
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                max="5"
+                                value={config.kitchen.copies || 1}
+                                onChange={(e) => handleSubChange('kitchen', 'copies', parseInt(e.target.value) || 1)}
+                                className="w-24 px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Barcode Printer Settings */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4 mb-4">
+                    <div>
+                        <h3 className="font-semibold text-lg dark:text-white flex items-center gap-2">
+                            {t('print.barcode_title') || 'Barcode Printer'}
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {t('print.barcode_desc') || 'Configure dedicated printer for product labels'}
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={config.enableBarcodePrinter}
+                            onChange={(e) => handleChange('enableBarcodePrinter', e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                {config.enableBarcodePrinter && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex justify-between items-center">
+                            <h4 className="font-medium dark:text-slate-200">
+                                {t('print.barcode_settings') || 'Label Printer Configuration'}
+                            </h4>
+                            <button 
+                                onClick={fetchPrinters} 
+                                className={`text-blue-500 hover:text-blue-600 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all ${isRefreshing ? 'animate-spin' : ''}`} 
+                                title="Refresh Printers"
+                            >
+                                <RefreshCw size={18} />
+                            </button>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('print.select_barcode_printer') || 'Select Barcode Printer'}
+                            </label>
+                            <select
+                                value={(config.barcode as any).printerName || ''}
+                                onChange={(e) => handleSubChange('barcode', 'printerName', e.target.value)}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                                <option value="">-- {t('print.select_printer') || 'Select a printer'} --</option>
+                                {printers.map((p: any) => (
+                                    <option key={`barcode-${p.name}`} value={p.name}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {t('print.label_width') || 'Label Width (e.g. 50mm)'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={(config.barcode as any).labelWidth || '50mm'}
+                                    onChange={(e) => handleSubChange('barcode', 'labelWidth', e.target.value)}
+                                    placeholder="50mm"
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {t('print.label_height') || 'Label Height (e.g. 25mm)'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={(config.barcode as any).labelHeight || '25mm'}
+                                    onChange={(e) => handleSubChange('barcode', 'labelHeight', e.target.value)}
+                                    placeholder="25mm"
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {t('print.barcode_copies') || 'Default Copies per Item'}
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    value={(config.barcode as any).copies || 1}
+                                    onChange={(e) => handleSubChange('barcode', 'copies', parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {t('print.label_orientation') || 'Orientation'}
+                                </label>
+                                <select
+                                    value={(config.barcode as any).orientation || 'portrait'}
+                                    onChange={(e) => handleSubChange('barcode', 'orientation', e.target.value)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                >
+                                    <option value="portrait">{t('print.portrait') || 'Portrait'}</option>
+                                    <option value="landscape">{t('print.landscape') || 'Landscape'}</option>
+                                </select>
+                            </div>
+
+                            {/* Number to Letter Mapping for Cost Codes */}
+                            <div className="pt-6 border-t border-slate-200 dark:border-slate-700 mt-4">
+                                <h4 className="text-md font-medium text-slate-800 dark:text-white mb-2">
+                                    {t('print.cost_code_mapping') || 'Cost Code Letter Mapping'}
+                                </h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                                    {t('print.cost_code_mapping_desc') || 'Assign a single letter (a-z) to each number. This will convert item Purchase Prices into a secret letter code printed on the barcode label (e.g., 23.99 becomes 23 -> ab).'}
+                                </p>
+                                <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
+                                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit: any) => (
+                                        <div key={digit} className="flex flex-col items-center">
+                                            <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">{digit}</label>
+                                            <input
+                                                type="text"
+                                                maxLength={1}
+                                                value={config.barcode.numberMapping?.[digit] || ''}
+                                                onChange={(e) => handleNumberMappingChange(digit, e.target.value)}
+                                                className="w-10 h-10 text-center uppercase font-bold text-blue-600 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

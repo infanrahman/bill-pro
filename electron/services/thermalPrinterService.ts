@@ -62,8 +62,8 @@ export class ThermalPrinterService {
 
             // 3. Items
             this.printer.tableCustom([
-                { text: "Item", align: "LEFT", width: 0.45 },
-                { text: "Qty", align: "CENTER", width: 0.15 },
+                { text: "Item", align: "LEFT", width: 0.42 },
+                { text: "Qty/Wt", align: "CENTER", width: 0.18 },
                 { text: "T", align: "RIGHT", width: 0.25 }
             ]);
             this.printer.drawLine();
@@ -71,8 +71,8 @@ export class ThermalPrinterService {
             if (data.items && Array.isArray(data.items)) {
                 data.items.forEach((item: any) => {
                     this.printer.tableCustom([
-                        { text: item.name, align: "LEFT", width: 0.45 },
-                        { text: item.qty.toString(), align: "CENTER", width: 0.15 },
+                        { text: item.name, align: "LEFT", width: 0.42 },
+                        { text: (item.qty || item.quantity || 1).toString() + (item.unit === 'kg' ? ' kg' : ''), align: "CENTER", width: 0.18 },
                         { text: item.total, align: "RIGHT", width: 0.25 }
                     ]);
                 });
@@ -106,6 +106,21 @@ export class ThermalPrinterService {
             return success;
         } catch (error) {
             console.error('Thermal Print Failed:', error);
+            return false;
+        }
+    }
+
+    async openCashDrawer(printerName: string) {
+        try {
+            this.printer.clear();
+            // ESC p m t1 t2 - standard open drawer command
+            // m = 0 (drawer 1), t1 = pulse ON time, t2 = pulse OFF time
+            this.printer.openCashDrawer();
+            const buffer = this.printer.getBuffer();
+            const success = await this.sendToPrinter(buffer, printerName);
+            return success;
+        } catch (error) {
+            console.error('Open Cash Drawer Failed:', error);
             return false;
         }
     }

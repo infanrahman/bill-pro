@@ -19,7 +19,7 @@ const NotificationBell: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleMarkRead = (id: number) => {
+    const handleMarkRead = (id: string) => {
         markAsRead(id);
     };
 

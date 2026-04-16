@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, Phone, Building, ShieldOff } from 'lucide-react';
-import { db, type Supplier } from '../../services/db';
+import { Plus, Trash2, Edit, Phone, Building, ShieldOff, Search } from 'lucide-react';
+import { db, type Supplier, type SyncEntity, createRecordMetadata, updateRecordMetadata, softDeleteMetadata } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../../components/UI/Modal';
 import ConfirmationModal from '../../components/UI/ConfirmationModal';
@@ -12,9 +12,10 @@ const Suppliers: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const { addToast } = useNotification();
-    const { hasPermission, isAdmin } = useAuth();
+    const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
 
     if (!hasPermission('suppliers_view')) {
         return (
@@ -35,7 +36,10 @@ const Suppliers: React.FC = () => {
 
     const fetchSuppliers = async () => {
         try {
-            const data = await db.suppliers.toArray();
+            const baseQuery = activeBranch?.isMaster ? db.suppliers : db.suppliers.where('branchId').equals(activeBranchId);
+            const data = await (baseQuery as any)
+                .filter((s: any) => !s.deletedAt)
+                .toArray();
             setSuppliers(data);
         } catch (error) {
             console.error(error);
@@ -47,7 +51,7 @@ const Suppliers: React.FC = () => {
 
     useEffect(() => {
         fetchSuppliers();
-    }, []);
+    }, [activeBranchId, activeBranch?.isMaster]);
 
     const resetForm = () => {
         setName('');
@@ -68,16 +72,16 @@ const Suppliers: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const [supplierToDelete, setSupplierToDelete] = useState<number | null>(null);
+    const [supplierToDelete, setSupplierToDelete] = useState<string | null>(null);
 
-    const handleDeleteClick = (id: number) => {
+    const handleDeleteClick = (id: string) => {
         setSupplierToDelete(id);
     };
 
     const handleConfirmDelete = async () => {
         if (supplierToDelete) {
             try {
-                await db.suppliers.delete(supplierToDelete);
+                await db.suppliers.update(supplierToDelete, softDeleteMetadata());
                 addToast(t('suppliers.delete_success'), 'success');
                 fetchSuppliers();
             } catch {
@@ -95,7 +99,7 @@ const Suppliers: React.FC = () => {
             return;
         }
 
-        const supplierData: Supplier = {
+        const supplierData: Omit<Supplier, keyof SyncEntity> = {
             name,
             phone,
             email,
@@ -106,10 +110,10 @@ const Suppliers: React.FC = () => {
 
         try {
             if (editingSupplier && editingSupplier.id) {
-                await db.suppliers.update(editingSupplier.id, supplierData);
+                await db.suppliers.update(editingSupplier.id, { ...supplierData, ...updateRecordMetadata() });
                 addToast(t('suppliers.update_success'), 'success');
             } else {
-                await db.suppliers.add(supplierData);
+                await db.suppliers.add({ ...supplierData, ...createRecordMetadata() });
                 addToast(t('suppliers.add_success'), 'success');
             }
             setIsModalOpen(false);
@@ -122,26 +126,46 @@ const Suppliers: React.FC = () => {
 
     if (loading) return <div className="p-6 dark:text-white">{t('common.loading')}</div>;
 
+    const filteredSuppliers = suppliers.filter((supplier: any) =>
+        !supplier.deletedAt && (
+            supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            supplier.phone.includes(searchQuery) ||
+            (supplier.taxNumber && supplier.taxNumber.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+    );
+
     return (
         <div className="p-6 space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold flex items-center gap-2 dark:text-white">
-                    <Building className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <h1 className="text-xl font-bold flex items-center gap-2 dark:text-white">
+                    <Building className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     {t('suppliers.title')}
                 </h1>
-                {hasPermission('suppliers_manage') && (
-                    <button
-                        onClick={() => { resetForm(); setIsModalOpen(true); }}
-                        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                    >
-                        <Plus className="w-4 h-4" />
-                        {t('common.add')}
-                    </button>
-                )}
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-64">
+                        <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder={t('common.search') || 'Search suppliers...'}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                        />
+                    </div>
+                    {hasPermission('suppliers_add') && (
+                        <button
+                            onClick={() => { resetForm(); setIsModalOpen(true); }}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span className="hidden sm:inline">{t('common.add')}</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {suppliers.map(supplier => (
+                {filteredSuppliers.map((supplier: any) => (
                     <div
                         key={supplier.id}
                         onClick={() => window.location.hash = `#/suppliers/${supplier.id}`}
@@ -157,12 +181,14 @@ const Suppliers: React.FC = () => {
                                     <p className="text-xs text-slate-500">{supplier.taxNumber ? `${t('suppliers.tax_id')}: ${supplier.taxNumber}` : t('suppliers.no_tax_id')}</p>
                                 </div>
                             </div>
-                            {hasPermission('suppliers_manage') && (
+                            {(hasPermission('suppliers_edit') || isAdmin) && (
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 absolute top-4 right-4" onClick={e => e.stopPropagation()}>
-                                    <button onClick={() => handleEdit(supplier)} className="p-1.5 text-slate-400 hover:text-blue-500 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                                        <Edit size={16} />
-                                    </button>
-                                    {isAdmin && (
+                                    {hasPermission('suppliers_edit') && (
+                                        <button onClick={() => handleEdit(supplier)} className="p-1.5 text-slate-400 hover:text-blue-500 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                            <Edit size={16} />
+                                        </button>
+                                    )}
+                                    {(isAdmin || hasPermission('suppliers_delete')) && (
                                         <button onClick={() => handleDeleteClick(supplier.id!)} className="p-1.5 text-slate-400 hover:text-red-500 bg-slate-50 dark:bg-slate-700 rounded-lg">
                                             <Trash2 size={16} />
                                         </button>

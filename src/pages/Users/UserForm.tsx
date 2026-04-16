@@ -46,7 +46,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSave }) => {
         setFormData(prev => {
             const currentPerms = prev.permissions || [];
             if (currentPerms.includes(permId)) {
-                return { ...prev, permissions: currentPerms.filter(p => p !== permId) };
+                return { ...prev, permissions: currentPerms.filter((p: any) => p !== permId) };
             } else {
                 return { ...prev, permissions: [...currentPerms, permId] };
             }
@@ -56,8 +56,12 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSave }) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const { createRecordMetadata, updateRecordMetadata } = await import('../../services/db');
             if (user?.id) {
-                await db.users.update(user.id, formData);
+                await db.users.update(user.id, {
+                    ...formData,
+                    ...updateRecordMetadata()
+                });
                 addToast(t('users.user_updated'), 'success');
             } else {
                 const existing = await db.users.where('username').equals(formData.username!).first();
@@ -65,7 +69,10 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSave }) => {
                     addToast(t('users.username_exists'), 'error');
                     return;
                 }
-                await db.users.add(formData as User);
+                await db.users.add({
+                    ...createRecordMetadata(),
+                    ...formData
+                } as User);
                 addToast(t('users.user_created'), 'success');
             }
             onSave();
@@ -132,7 +139,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSave }) => {
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                         <label className="block text-sm font-medium text-gray-700 mb-3">{t('users.permissions')}</label>
                         <div className="grid grid-cols-2 gap-3">
-                            {AVAILABLE_PERMISSIONS.map(perm => (
+                            {AVAILABLE_PERMISSIONS.map((perm: any) => (
                                 <div key={perm.id} className="flex items-center gap-2">
                                     <input
                                         type="checkbox"

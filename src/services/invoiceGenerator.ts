@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import QRCode from 'qrcode';
 import { generateZatcaQR, formatZatcaDate } from './zatca';
 import type { Invoice, Purchase } from './db';
 import { printContent } from './printerService';
@@ -67,8 +68,8 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
     // or return null if we want to force native thermal handling (which we might not want for download).
 
     const isBilingual = printLanguage === 'bilingual';
-    const t = (en: string, ar: string) => isBilingual ? `<div class="bilingual-text"><span class="en">${en}</span><span class="ar">${ar}</span></div>` : en;
-    const tLabel = (en: string, ar: string) => isBilingual ? `${en} / <span class="ar">${ar}</span>` : en;
+    const isRtl = printLanguage === 'arabic' || printLanguage === 'ar';
+    const tLabel = (en: string, ar: string) => isBilingual ? `${en} / <span class="ar">${ar}</span>` : (isRtl ? ar : en);
 
     const appliedTaxRate = invoice.taxRate ?? (business.taxRate || 15);
 
@@ -93,16 +94,28 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
     if (vatNumber && showVatColumn) {
         try {
             if (isZatcaPhase2) {
-                // Import Dynamically to avoid circular deps or heavy load
-                const { generateZatcaXML } = await import('./zatcaXml');
-                const { qr } = await generateZatcaXML(invoice, {
-                    ...business,
-                    gstin: vatNumber // Ensure mapped correctly
-                }, zatcaConfig.privateKey);
+                try {
+                    // Import Dynamically to avoid circular deps or heavy load
+                    const { generateZatcaXML } = await import('./zatcaXml');
+                    const { qr } = await generateZatcaXML(invoice, {
+                        ...business,
+                        gstin: vatNumber // Ensure mapped correctly
+                    }, zatcaConfig.privateKey);
 
-                // Convert Base64 TLV to QR Image
-                const QRCode = (await import('qrcode')).default;
-                qrImg = await QRCode.toDataURL(qr);
+                    // Convert Base64 TLV to QR Image
+                    const QRCode = (await import('qrcode')).default;
+                    qrImg = await QRCode.toDataURL(qr);
+                } catch (ph2Error) {
+                    console.error("ZATCA Phase 2 QR Generation Failed, falling back to Phase 1:", ph2Error);
+                    // Standard Fallback (Phase 1)
+                    qrImg = await generateZatcaQR(
+                        business.name,
+                        vatNumber,
+                        formatZatcaDate(new Date(invoice.createdAt)),
+                        invoice.grandTotal.toFixed(2),
+                        invoice.taxAmount.toFixed(2)
+                    );
+                }
             } else {
                 // Phase 1 (Standard)
                 qrImg = await generateZatcaQR(
@@ -114,7 +127,7 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
                 );
             }
         } catch (e) {
-            console.error("QR Generation Failed", e);
+            console.error("QR Generation Failed Completely", e);
         }
     }
 
@@ -127,203 +140,90 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
             @media print {
                 @page { size: ${config.pageSize === 'letter' ? 'Letter' : 'A4'} ${config.orientation === 'landscape' ? 'landscape' : 'portrait'}; margin: 0; }
                 body { margin: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                
-                /* FORCE HIGH CONTRAST FOR THERMAL / BLACK & WHITE PRINTERS */
-                * {
-                    text-shadow: none !important;
-                    box-shadow: none !important;
-                    background-image: none !important; /* Remove gradients */
-                }
-                body, .header, .meta-box, .invoice-table th, .invoice-table td, .total-row, .footer, .terms {
-                    background-color: white !important;
-                    color: black !important;
-                }
-                .company-name, .meta-title, .invoice-table th {
-                    -webkit-text-fill-color: black !important;
-                    color: black !important;
-                }
-                .header { border-bottom: 2px solid black !important; padding-bottom: 15px !important; }
-                .meta-box { border: 2px solid black !important; }
-                .invoice-table th { border-bottom: 2px solid black !important; font-weight: 900 !important; color: black !important; }
-                .invoice-table td { border-bottom: 1px solid #000 !important; }
-                .total-row { border-bottom: 1px dashed black !important; }
-                .total-row.final { 
-                    border-top: 2px solid black !important; 
-                    border-bottom: 2px solid black !important;
-                    background: none !important;
-                }
-                /* Ensure small text is readable */
-                .meta-row, .invoice-table td { font-weight: 600 !important; color: black !important; }
+                * { text-shadow: none !important; box-shadow: none !important; }
+                body, .invoice-table th, .invoice-table td, .total-row, .footer, .terms { background-color: white !important; color: black !important; }
+                .invoice-table th { border-bottom: 2px solid black !important; font-weight: 900 !important; background: #eee !important; }
+                .invoice-table td { border-bottom: 1px solid #ccc !important; }
+                .total-row.final { border: 2px solid black !important; background: #f3f4f6 !important; color: black !important; }
             }
-            body { 
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                color: #1e293b;
-                background: #fff;
-                padding: 20px;
-            }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; background: #fff; padding: 25px; max-width: 800px; margin: 0 auto; }
             .ar { font-family: 'Tahoma', sans-serif; direction: rtl; }
-            .header { 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: flex-start; 
-                margin-bottom: 30px; 
-                border-bottom: 4px solid #3b82f6; 
-                padding-bottom: 20px;
-                background: linear-gradient(135deg, #dbeafe 0%, #f0f9ff 100%);
-                padding: 20px;
-                border-radius: 12px 12px 0 0;
-            }
-            .logo-section img { max-height: 80px; max-width: 200px; filter: grayscale(0%); }
-            @media print { .logo-section img { filter: grayscale(100%) contrast(150%); } } /* Improve Logo Print */
-            
-            .company-info { text-align: right; }
-            .company-name { 
-                font-size: 26px; 
-                font-weight: bold; 
-                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                margin-bottom: 5px; 
-            }
-            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .meta-box { 
-                border: 3px solid #3b82f6; 
-                border-radius: 12px; 
-                padding: 15px; 
-                background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #dbeafe 100%);
-                box-shadow: 0 4px 6px rgba(59, 130, 246, 0.1);
-            }
-            .meta-title { 
-                font-size: 13px; 
-                text-transform: uppercase; 
-                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                margin-bottom: 10px; 
-                font-weight: 800; 
-                letter-spacing: 0.8px; 
-            }
-            .meta-row { 
-                display: flex; 
-                justify-content: space-between; 
-                margin-bottom: 5px; 
-                font-size: 14px; 
-                color: #0f172a;
-                font-weight: 500;
-            }
-            .invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; border-radius: 12px; overflow: hidden; }
-            .invoice-table th { 
-                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%); 
-                text-align: left; 
-                padding: 14px; 
-                font-size: 13px; 
-                font-weight: 800; 
-                text-transform: uppercase; 
-                border-bottom: 3px solid #1e40af; 
-                color: #ffffff;
-                letter-spacing: 0.5px;
-            }
-            .invoice-table td { 
-                padding: 12px; 
-                border-bottom: 2px solid #bfdbfe; 
-                font-size: 14px; 
-                color: #0f172a;
-                font-weight: 500;
-                background: linear-gradient(to right, #f8fafc 0%, #ffffff 50%, #f8fafc 100%);
-            }
-            .invoice-table tr:hover td {
-                background: linear-gradient(to right, #dbeafe 0%, #eff6ff 50%, #dbeafe 100%);
-            }
+            .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1e40af; padding-bottom: 15px; margin-bottom: 5px; }
+            .inv-header .logo img { max-height: 70px; max-width: 180px; }
+            .inv-header .company { text-align: right; }
+            .inv-header .company-name { font-size: 22px; font-weight: 800; color: #1e40af; margin-bottom: 3px; }
+            .inv-header .company div { font-size: 12px; color: #475569; line-height: 1.6; }
+            .inv-header .company strong { color: #1e293b; }
+            .inv-title { text-align: center; padding: 8px 0; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
+            .inv-title h2 { margin: 0; font-size: 16px; font-weight: 700; color: #1e40af; letter-spacing: 1px; text-transform: uppercase; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+            .meta-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; }
+            .meta-box .title { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #1e40af; margin-bottom: 8px; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+            .meta-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; color: #334155; }
+            .meta-row strong { color: #0f172a; }
+            .invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .invoice-table th { background: #1e40af; color: #fff; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+            .invoice-table th.right { text-align: right; }
+            .invoice-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b; }
             .invoice-table td.right { text-align: right; }
-            .totals-container { display: flex; justify-content: flex-end; }
-            .totals-box { width: 320px; }
-            .total-row { 
-                display: flex; 
-                justify-content: space-between; 
-                padding: 10px 15px; 
-                border-bottom: 2px dashed #60a5fa; 
-                color: #0f172a;
-                font-weight: 600;
-                font-size: 14px;
-                background: linear-gradient(to right, #f0f9ff 0%, #ffffff 100%);
-                margin-bottom: 2px;
-            }
-            .total-row.final { 
-                border-top: 4px solid #3b82f6; 
-                border-bottom: 4px solid #10b981; 
-                font-weight: 800; 
-                font-size: 18px; 
-                margin-top: 10px; 
-                padding: 18px 15px; 
-                background: linear-gradient(135deg, #6366f1 0%, #3b82f6 50%, #10b981 100%);
-                color: #ffffff;
-                border-radius: 8px;
-                box-shadow: 0 6px 12px rgba(59, 130, 246, 0.3);
-            }
-            .footer { 
-                margin-top: 50px; 
-                text-align: center; 
-                color: #0f172a; 
-                font-size: 13px; 
-                border-top: 3px solid #3b82f6; 
-                padding-top: 20px;
-                background: linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%);
-                padding: 20px;
-                border-radius: 8px;
-                font-weight: 600;
-            }
-            .terms { 
-                background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #dbeafe 100%); 
-                padding: 18px; 
-                border-radius: 12px; 
-                font-size: 13px; 
-                color: #0f172a; 
-                margin-top: 30px; 
-                border: 3px solid #3b82f6;
-                font-weight: 500;
-                box-shadow: 0 4px 8px rgba(59, 130, 246, 0.15);
-            }
+            .invoice-table tbody tr:nth-child(even) td { background: #f8fafc; }
+            .totals-container { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+            .totals-box { width: 300px; }
+            .total-row { display: flex; justify-content: space-between; padding: 7px 12px; font-size: 13px; color: #334155; border-bottom: 1px solid #e2e8f0; }
+            .total-row.final { background: #1e40af; color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 6px; margin-top: 8px; border: none; }
+            .total-row.discount { color: #dc2626; }
+            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+            .terms { background: #f8fafc; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin-top: 20px; border: 1px solid #e2e8f0; }
+            .qr-section { text-align: center; margin-top: 15px; }
+            .qr-section img { width: 120px; height: 120px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; }
             .bilingual-text { display: flex; align-items: baseline; gap: 5px; }
-            .qr-float { float: left; margin-top: 10px; width: 100px; height: 100px; border: 3px solid #3b82f6; border-radius: 8px; padding: 5px; background: white; }
-            @media print { .qr-float { border: 2px solid black !important; } }
         </style>
     </head>
     <body>
-        <div class="header">
-            <div class="logo-section">
+        <!-- HEADER -->
+        <div class="inv-header">
+            <div class="logo">
                 ${business.logoUrl ? `<img src="${business.logoUrl}" />` : ''}
-                ${qrImg ? `<div class="qr-float"><img src="${qrImg}" style="width:100%" /></div>` : ''}
             </div>
-            <div class="company-info">
+            <div class="company">
                 ${printCompanyName ? `<div class="company-name">${business.name}</div>` : ''}
-                <div>${business.address} ${business.pincode ? `- ${business.pincode}` : ''}</div>
+                <div>${business.address}${business.pincode ? ` - ${business.pincode}` : ''}</div>
                 ${business.phone ? `<div>${tLabel('Tel', 'هاتف')}: ${business.phone}</div>` : ''}
-                ${business.email ? `<div>${tLabel('Email', 'بريد إلكتروني')}: ${business.email}</div>` : ''}
-                ${vatNumber ? `<div><strong>${tLabel('VAT Number', 'الرقم الضريبي')}: ${vatNumber}</strong></div>` : ''}
-                ${business.crNo ? `<div>${tLabel('CR Number', 'سجل تجاري')}: ${business.crNo}</div>` : ''}
+                ${business.email ? `<div>${tLabel('Email', 'بريد')}: ${business.email}</div>` : ''}
+                ${vatNumber ? `<div><strong>${tLabel('VAT Reg No', 'الرقم الضريبي')}: ${vatNumber}</strong></div>` : ''}
+                ${business.crNo ? `<div>${tLabel('CR No', 'سجل تجاري')}: ${business.crNo}</div>` : ''}
             </div>
         </div>
 
+        <!-- INVOICE TITLE (ZATCA Mandatory) -->
+        <div class="inv-title">
+            <h2>${tLabel('Simplified Tax Invoice', 'فاتورة ضريبية مبسطة')}</h2>
+        </div>
+
+        <!-- META -->
         <div class="meta-grid">
             <div class="meta-box">
-                <div class="meta-title">${t('Invoice Details', 'تفاصيل الفاتورة')}</div>
+                <div class="title">${tLabel('Invoice Details', 'تفاصيل الفاتورة')}</div>
                 <div class="meta-row">
                     <span>${tLabel('Invoice No', 'رقم الفاتورة')}</span>
                     <strong>${invoice.invoiceNumber || invoice.id || '-'}</strong>
                 </div>
-                ${invoice.tokenNumber ? `<div class="meta-row">
-                    <span>${tLabel('Token No', 'رقم الطلب')}</span>
-                    <strong style="font-size: 1.2em; color: #3b82f6;">#${invoice.tokenNumber}</strong>
+                ${invoice.tokenNumber ? `
+                <div style="text-align: center; margin: 10px 0;">
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #1e40af;">${tLabel('Token Number', 'رقم الطلب')}</div>
+                    <div style="font-size: 32px; font-weight: 900; color: #1e40af;">#${invoice.tokenNumber}</div>
                 </div>` : ''}
                 <div class="meta-row">
                     <span>${tLabel('Date & Time', 'التاريخ والوقت')}</span>
                     <span>${formatDate(new Date(invoice.createdAt))}</span>
                 </div>
+                ${invoice.orderType ? `<div class="meta-row">
+                    <span>${tLabel('Order Type', 'نوع الطلب')}</span>
+                    <strong>${invoice.orderType === 'dine_in' ? tLabel('DINE-IN', 'محلي') : invoice.orderType === 'parcel' ? tLabel('PARCEL', 'سفري') : invoice.orderType === 'pickup' ? tLabel('PICKUP', 'استلام') : tLabel('DELIVERY', 'توصيل')}</strong>
+                </div>` : ''}
                 <div class="meta-row">
-                    <span>${tLabel('Payment Mode', 'طريقة الدفع')}</span>
-                    <span style="text-transform: uppercase">${invoice.paymentMode}</span>
+                    <span>${tLabel('Payment', 'طريقة الدفع')}</span>
+                    <span style="text-transform:uppercase">${invoice.paymentMode}</span>
                 </div>
                 ${invoice.dueDate ? `<div class="meta-row">
                     <span>${tLabel('Due Date', 'تاريخ الاستحقاق')}</span>
@@ -332,7 +232,7 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
             </div>
             
             <div class="meta-box">
-                <div class="meta-title">${t('Bill To', 'فاتورة إلى')}</div>
+                <div class="title">${tLabel('Bill To', 'فاتورة إلى')}</div>
                 <div class="meta-row">
                     <span>${tLabel('Customer', 'العميل')}</span>
                     <strong>${invoice.customerName}</strong>
@@ -352,65 +252,45 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
             </div>
         </div>
 
+        <!-- ITEMS TABLE -->
         <table class="invoice-table">
             <thead>
                 <tr>
-                    <th>${tLabel('Item', 'الصنف')}</th>
+                    <th>#</th>
+                    <th>${tLabel('Description', 'الوصف')}</th>
                     <th class="right">${tLabel('Qty', 'الكمية')}</th>
-                    <th class="right">${tLabel('Price', 'السعر')}</th>
-                    ${showVatColumn ? `<th class="right">${tLabel('VAT', 'الضريبة')}</th>` : ''}
+                    <th class="right">${tLabel('Unit Price', 'سعر الوحدة')}</th>
+                    ${showVatColumn ? `<th class="right">${tLabel('Taxable Amt', 'المبلغ الخاضع للضريبة')}</th>` : ''}
+                    ${showVatColumn ? `<th class="right">${tLabel('VAT ' + appliedTaxRate + '%', 'ضريبة ' + appliedTaxRate + '%')}</th>` : ''}
                     <th class="right">${tLabel('Total', 'الإجمالي')}</th>
                 </tr>
             </thead>
             <tbody>
-                ${invoice.items.map(item => {
-        const itemNominalTotal = item.price * item.quantity;
-        const rate = item.taxRate ?? appliedTaxRate;
-        const type = item.taxType || 'exclusive';
-
-        // Calculate tax for display
-        let itemTax = 0;
-        let itemRowTotal = itemNominalTotal;
-
-        if (type === 'inclusive') {
-            // Tax is inside price
-            const base = itemNominalTotal / (1 + (rate / 100));
-            itemTax = itemNominalTotal - base;
-            itemRowTotal = itemNominalTotal;
-        } else {
-            // Exclusive
-            // Check if tax was applied?
-            // Since we don't store per-line tax verdict, we rely on the global fact:
-            // If invoice has tax, and this is exclusive, did we separate it?
-            // Actually, "User Choice" is global for the cart in checkout generally (single toggle).
-            // But if we had mixed items + tax enabled...
-            // Simplest inference:
-            // If ShowVatColumn is true, then we show calculated tax for exclusive items too.
-            if (showVatColumn) {
-                itemTax = itemNominalTotal * (rate / 100);
-                itemRowTotal = itemNominalTotal + itemTax;
-            } else {
-                itemTax = 0;
-                itemRowTotal = itemNominalTotal;
-            }
-        }
+                ${invoice.items.map((item, idx) => {
+        const grossTotal = item.price * item.quantity;
+        const lineDiscount = item.discountAmount ?? 0;
+        const taxableAmount = item.netAmount ?? (grossTotal - lineDiscount);
+        const itemTax = item.taxAmount ?? 0;
+        const lineTotal = item.total ?? (taxableAmount + itemTax);
 
         return `
                 <tr>
+                    <td>${idx + 1}</td>
                     <td>
                         ${item.name}
-                        ${isBilingual && item.nameAr ? `<div class="ar">${item.nameAr}</div>` : ''}
+                        ${isBilingual && (item.arabicName || item.nameAr) ? `<div class="ar">${item.arabicName || item.nameAr}</div>` : ''}
                     </td>
-                    <td class="right">${item.quantity}</td>
+                    <td class="right">${item.quantity}${item.unit === 'kg' ? ' kg' : ''}</td>
                     <td class="right">${formatCurrency(item.price)}</td>
-                    ${showVatColumn ? `<td class="right">${formatCurrency(itemTax)}</td>` : ''}
-                    <td class="right">${formatCurrency(itemRowTotal)}</td>
-                </tr>
-                `;
+                    ${showVatColumn ? `<td class="right">${formatCurrency(taxableAmount)}</td>` : ''}
+                    ${showVatColumn ? `<td class="right">${appliedTaxRate}%</td>` : ''}
+                    <td class="right">${formatCurrency(lineTotal)}</td>
+                </tr>`;
     }).join('')}
             </tbody>
         </table>
 
+        <!-- TOTALS -->
         <div class="totals-container">
             <div class="totals-box">
                 <div class="total-row">
@@ -418,37 +298,45 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
                     <span>${formatCurrency(displayBase)}</span>
                 </div>
                 
-                 ${showVatColumn ? `
-                <div class="total-row">
-                    <span>${tLabel('VAT Amount', 'مبلغ الضريبة')} (${appliedTaxRate}%)</span>
-                    <span>${formatCurrency(displayTax)}</span>
+                ${(invoice.discountAmount || 0) > 0 ? `
+                <div class="total-row discount">
+                    <span>${tLabel('Discount', 'الخصم')}</span>
+                    <span>-${formatCurrency(invoice.discountAmount)}</span>
+                </div>
+                <div class="total-row" style="font-weight:700;">
+                    <span>${tLabel('Taxable Amount', 'المبلغ الخاضع للضريبة')}</span>
+                    <span>${formatCurrency(displayBase - invoice.discountAmount)}</span>
                 </div>
                 ` : ''}
                 
-                ${invoice.discountAmount > 0 ? `
+                ${showVatColumn ? `
                 <div class="total-row">
-                    <span>${tLabel('Discount', 'الخصم')}</span>
-                    <span>-${formatCurrency(invoice.discountAmount)}</span>
-                </div>` : ''}
+                    <span>${tLabel('VAT (' + appliedTaxRate + '%)', 'الضريبة ' + appliedTaxRate + '%')}</span>
+                    <span>${formatCurrency(displayTax)}</span>
+                </div>
+                ` : ''}
 
                 <div class="total-row final">
-                    <span>${tLabel('Grand Total', 'الإجمالي النهائي')}</span>
+                    <span>${tLabel('Total Amount Due', 'المبلغ المستحق')}</span>
                     <span>${formatCurrency(displayNet)}</span>
                 </div>
                 
                 ${invoice.paidAmount !== undefined ? `
-                <div class="total-row" style="background:none; border:none; margin-top:5px; font-size: 14px;">
-                     <span>${tLabel('Paid Amount', 'المبلغ المدفوع')}</span>
+                <div class="total-row" style="border:none; margin-top:5px; font-size:13px;">
+                     <span>${tLabel('Paid', 'المدفوع')}</span>
                      <span>${formatCurrency(invoice.paidAmount)}</span>
                 </div>
                 ${invoice.remainingAmount > 0 ? `
-                <div class="total-row" style="background:none; border:none; color: #ef4444;">
+                <div class="total-row" style="border:none; color:#dc2626; font-weight:700;">
                      <span>${tLabel('Balance Due', 'المبلغ المتبقي')}</span>
                      <span>${formatCurrency(invoice.remainingAmount)}</span>
                 </div>` : ''}
                 ` : ''}
             </div>
         </div>
+
+        <!-- QR CODE -->
+        ${qrImg ? `<div class="qr-section"><img src="${qrImg}" /></div>` : ''}
 
         ${showTerms && termsContent ? `
         <div class="terms">
@@ -458,12 +346,14 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
         ` : ''}
 
         <div class="footer">
-            <p>Thank you for your business!</p>
+            <p>Thank you for your business! / شكراً لتعاملكم معنا</p>
         </div>
     </body>
     </html>
     `;
 };
+
+
 
 // --- THERMAL HTML GENERATOR (Monoscope / Receipt Style) ---
 export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDetails | null): Promise<string | null> => {
@@ -474,43 +364,59 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
     const savedAppSettings = localStorage.getItem('appSettings');
     const appSettings = savedAppSettings ? JSON.parse(savedAppSettings) : { currency: 'SAR', decimals: 2, dateFormat: 'dd/MM/yyyy' };
 
+    const savedConfig = localStorage.getItem('printerConfig');
+    const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+    const printLanguage = fullConfig.printLanguage || 'english';
+    const isBilingual = printLanguage === 'bilingual';
+    const isRtl = printLanguage === 'arabic' || printLanguage === 'ar';
+    const t = (en: string, ar: string) => isBilingual ? `${en} / <span dir="rtl" style="font-family: Arial, sans-serif;">${ar}</span>` : (isRtl ? ar : en);
 
 
-    const formatDate = (date: Date) => {
-        try {
-            // Simple DD/MM/YYYY HH:MM
-            return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        } catch (e) { return date.toISOString().split('T')[0]; }
-    };
 
-    // --- QR CODE ---
-    let qrImg = '';
-    // Consolidate all possible VAT fields (Same as A4)
-    const vatNumber = business.gstin || business.vatNo || (business as any).vat || (business as any).taxRegNo;
-    const savedZatcaConfig = localStorage.getItem('zatca_config');
-    const zatcaConfig = savedZatcaConfig ? JSON.parse(savedZatcaConfig) : null;
-    const isZatcaPhase2 = zatcaConfig && zatcaConfig.status === 'LIVE' && zatcaConfig.privateKey;
+    try {
+        const formatDate = (date: Date) => {
+            try {
+                // Simple DD/MM/YYYY HH:MM
+                return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            } catch (e) { return date.toISOString().split('T')[0]; }
+        };
 
-    if (vatNumber) {
-        try {
-            if (isZatcaPhase2) {
-                const { generateZatcaXML } = await import('./zatcaXml');
-                const { qr } = await generateZatcaXML(invoice, { ...business, gstin: vatNumber }, zatcaConfig.privateKey);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const QRCode = (await import('qrcode')).default;
-                qrImg = await QRCode.toDataURL(qr, { margin: 0 });
-            } else {
-                const { generateZatcaQR, formatZatcaDate } = await import('./zatca');
-                qrImg = await generateZatcaQR(
-                    business.name,
-                    vatNumber,
-                    formatZatcaDate(new Date(invoice.createdAt)),
-                    invoice.grandTotal.toFixed(2),
-                    invoice.taxAmount.toFixed(2)
-                );
-            }
-        } catch (e) { console.error("QR Code Error", e); }
-    }
+        // --- QR CODE ---
+        let qrImg = '';
+        // Consolidate all possible VAT fields (Same as A4)
+        const vatNumber = business.gstin || business.vatNo || (business as any).vat || (business as any).taxRegNo;
+        const savedZatcaConfig = localStorage.getItem('zatca_config');
+        const zatcaConfig = savedZatcaConfig ? JSON.parse(savedZatcaConfig) : null;
+        const isZatcaPhase2 = zatcaConfig && zatcaConfig.status === 'LIVE' && zatcaConfig.privateKey;
+
+        if (vatNumber) {
+            try {
+                if (isZatcaPhase2) {
+                    try {
+                        const { generateZatcaXML } = await import('./zatcaXml');
+                        const { qr } = await generateZatcaXML(invoice, { ...business, gstin: vatNumber }, zatcaConfig.privateKey);
+                        qrImg = await QRCode.toDataURL(qr, { margin: 0 });
+                    } catch (ph2Error) {
+                        console.error("ZATCA Phase 2 QR Generation Failed (Thermal), falling back to Phase 1:", ph2Error);
+                        qrImg = await generateZatcaQR(
+                            business.name,
+                            vatNumber,
+                            formatZatcaDate(new Date(invoice.createdAt)),
+                            invoice.grandTotal.toFixed(2),
+                            invoice.taxAmount.toFixed(2)
+                        );
+                    }
+                } else {
+                    qrImg = await generateZatcaQR(
+                        business.name,
+                        vatNumber,
+                        formatZatcaDate(new Date(invoice.createdAt)),
+                        invoice.grandTotal.toFixed(2),
+                        invoice.taxAmount.toFixed(2)
+                    );
+                }
+            } catch (e) { console.error("QR Code Error in Thermal", e); }
+        }
 
     return `
     <!DOCTYPE html>
@@ -518,55 +424,63 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
     <head>
         <meta charset="UTF-8">
         <style>
-            @page { margin: 0; size: auto; }
-            * { box-sizing: border-box; }
+            @page { margin: 0; padding: 0; size: 80mm auto; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
             
             body {
                 font-family: 'Courier New', Courier, monospace;
-                width: 64mm; /* SAFE ZONE: 80mm paper - ~8mm margins/side */
+                width: 72mm;
+                max-width: 72mm;
                 margin: 0 auto;
-                padding: 10px 0;
+                padding: 2mm 4mm;
                 background: #fff;
-                color: #000;
+                color: #000000 !important;
+                font-weight: 900 !important;
                 font-size: 11px;
                 line-height: 1.2;
-                overflow: hidden; /* ABSOLUTELY PREVENT OVERFLOW */
-                word-wrap: break-word; /* Force wrapping */
+                overflow: hidden;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
 
             .container {
                 width: 100%;
-                padding: 0 2mm; /* Tiny padding from edge */
+                max-width: 100%;
+                padding: 0;
+                overflow: hidden;
             }
 
             .center { text-align: center; }
             .right { text-align: right; }
-            .bold { font-weight: bold; }
+            .bold { font-weight: 900 !important; font-size: 13px !important; }
             
             /* Spacers */
             .hr { border-bottom: 1px dashed #000; margin: 5px 0; width: 100%; }
             .spacer { margin-bottom: 5px; }
 
             /* Header Section */
-            .header-title { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; }
-            .header-info { font-size: 11px; color: #000; }
+            .header-title { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; word-break: break-word; }
+            .header-info { font-size: 11px; color: #000; word-break: break-word; }
 
             /* Grid Layout for Rows */
-            .row { display: flex; justify-content: space-between;width: 100%; }
-            .col { flex: 1; }
+            .row { display: flex; justify-content: space-between; width: 100%; max-width: 100%; overflow: hidden; gap: 4px; }
+            .col { flex: 1; min-width: 0; }
             
             /* Items */
-            .item-line { margin-bottom: 2px; }
-            .item-name { width: 100%; display: block; font-weight: bold; }
-            .item-meta { display: flex; justify-content: space-between; font-size: 10px; margin-left: 5px; }
-            .item-calc { color: #000; } /* 2 x 50.00 */
+            .item-line { margin-bottom: 2px; max-width: 100%; overflow: hidden; }
+            .item-name { width: 100%; display: block; font-weight: 900 !important; font-size: 12px; word-break: break-word; overflow-wrap: break-word; }
+            .item-meta { display: flex; justify-content: space-between; font-size: 11px; margin-left: 5px; font-weight: 800; max-width: 100%; }
+            .item-calc { color: #000000 !important; font-weight: 900; white-space: nowrap; }
 
             /* Totals */
-            .totals-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-            .grand-total { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin: 5px 0; font-size: 14px; font-weight: bold; }
+            .totals-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-weight: 900; font-size: 12px; max-width: 100%; overflow: hidden; }
+            .totals-row span { min-width: 0; }
+            .grand-total { border-top: 2px dashed #000; border-bottom: 2px dashed #000; padding: 5px 0; margin: 5px 0; font-size: 15px; font-weight: 900 !important; }
             
             /* QR */
-            .qr-code { display: block; margin: 10px auto; width: 100px; height: 100px; }
+            .qr-code { display: block; margin: 10px auto; width: 90px; height: 90px; }
             
             /* Footer */
             .footer { text-align: center; font-size: 10px; margin-top: 10px; color: #000; }
@@ -579,6 +493,7 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
                 ${business.logoUrl ? `<img src="${business.logoUrl}" style="max-height: 50px; margin-bottom: 5px;" />` : ''}
                 <div class="header-title">${business.name}</div>
                 <div class="header-info">${business.address}</div>
+                ${business.crNo ? `<div class="header-info">${t('CR No', 'سجل تجاري')}: ${business.crNo}</div>` : ''}
                 ${vatNumber ? `<div class="header-info">VAT: ${vatNumber}</div>` : ''}
                 ${business.phone ? `<div class="header-info">Tel: ${business.phone}</div>` : ''}
                 ${business.email ? `<div class="header-info">${business.email}</div>` : ''}
@@ -588,71 +503,88 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
 
             <!-- Invoice Meta -->
             <div class="row">
-                <span>Inv: ${invoice.invoiceNumber}</span>
+                <span>${t('Inv', 'فاتورة')}: ${invoice.invoiceNumber}</span>
                 <span>${formatDate(new Date(invoice.createdAt))}</span>
             </div>
-            ${invoice.tokenNumber ? `<div style="text-align: center; font-size: 24px; font-weight: bold; margin: 10px 0; padding: 8px; background: #3b82f6; color: white; border-radius: 8px;">TOKEN #${invoice.tokenNumber}</div>` : ''}
+            ${invoice.tokenNumber ? `<div style="text-align: center; margin: 10px 0; line-height: 1.1;">
+                <div style="font-size: 12px; font-weight: bold; text-transform: uppercase;">${t('TOKEN NUMBER', 'رقم الطلب')}</div>
+                <div style="font-size: 36px; font-weight: 900;">#${invoice.tokenNumber}</div>
+            </div>` : ''}
+            ${invoice.orderType ? `<div style="text-align: center; font-size: 18px; font-weight: bold; margin: 5px 0; padding: 4px; border: 2px solid #000; border-radius: 4px; text-transform: uppercase;">${invoice.orderType === 'dine_in' ? t('DINE-IN', 'محلي') : invoice.orderType === 'parcel' ? t('PARCEL', 'سفري') : invoice.orderType === 'pickup' ? t('PICKUP', 'استلام') : t('DELIVERY', 'توصيل')}</div>` : ''}
             
             <!-- Customer -->
              ${invoice.customerName ? `
             <div class="hr"></div>
-            <div>Cust: ${invoice.customerName}</div>
-            ${invoice.customerPhone ? `<div>Tel : ${invoice.customerPhone}</div>` : ''}
-            ${invoice.customerVatNumber ? `<div>VAT : ${invoice.customerVatNumber}</div>` : ''}
+            <div>${t('Cust', 'العميل')}: ${invoice.customerName}</div>
+            ${invoice.customerPhone ? `<div>${t('Tel', 'جوال')}: ${invoice.customerPhone}</div>` : ''}
+            ${invoice.customerVatNumber ? `<div>${t('VAT', 'الرقم الضريبي')}: ${invoice.customerVatNumber}</div>` : ''}
             ` : ''}
 
             <div class="hr"></div>
 
             <!-- Items Header (Simple) -->
             <div class="row" style="margin-bottom: 3px; font-size: 10px; font-weight: bold; text-decoration: underline;">
-                <span style="flex:2">ITEM</span>
-                <span style="flex:1; text-align:right">TOTAL</span>
+                <span style="flex:2">${t('ITEM / WT', 'الصنف / الوزن')}</span>
+                <span style="flex:1; text-align:right">${t('TOTAL', 'المجموع')}</span>
             </div>
 
             <!-- Items -->
-            ${invoice.items.map(item => `
+            ${invoice.items.map(item => {
+                // Use pre-calculated fields if available, fallback to basic math if not (for legacy compatibility)
+                const lineTotal = item.total ?? (item.price * item.quantity);
+
+                return `
             <div class="item-line">
                 <div class="item-name">${item.name}</div>
-                ${item.nameAr ? `<div style="font-size: 10px; margin-bottom:1px;">${item.nameAr}</div>` : ''}
+                ${(isBilingual && (item.arabicName || item.nameAr)) ? `<div style="font-size: 10px; margin-bottom:1px;">${item.arabicName || item.nameAr}</div>` : ''}
                 <div class="item-meta">
-                    <span class="item-calc">${item.quantity} x ${Number(item.price).toFixed(2)}</span>
-                    <span>${Number(item.total).toFixed(2)}</span>
+                    <span class="item-calc">${item.quantity}${item.unit === 'kg' ? 'kg' : ''} x ${Number(item.price).toFixed(2)}</span>
+                    <span>${Number(lineTotal).toFixed(2)}</span>
                 </div>
             </div>
-            `).join('')}
+            `;
+            }).join('')}
 
             <div class="hr"></div>
 
             <!-- Totals -->
             <div class="totals-row">
-                <span>Subtotal</span>
+                <span>${t('Gross Total', 'المجموع الإجمالي')}</span>
                 <span>${Number(invoice.subTotal).toFixed(2)}</span>
             </div>
             
-            ${invoice.discountAmount > 0 ? `
-            <div class="totals-row">
-                <span>Discount</span>
+            ${(invoice.discountAmount || 0) > 0 ? `
+            <div class="totals-row" style="color: #666;">
+                <span>${t('Discount', 'إجمالي الخصم')}</span>
                 <span>-${Number(invoice.discountAmount).toFixed(2)}</span>
-            </div>` : ''}
+            </div>
+            ` : ''}
 
-            <div class="totals-row">
-                <span>VAT (15%)</span>
-                <span>${Number(invoice.taxAmount).toFixed(2)}</span>
+            ${(invoice.taxAmount || 0) > 0 ? `
+            <div class="totals-row" style="font-weight:bold; border-top: 1px dashed #000; padding-top: 2px;">
+                <span>${t('Net (Pre-VAT)', 'الإجمالي بعد الخصم')}</span>
+                <span>${Number(invoice.subTotal - (invoice.discountAmount || 0)).toFixed(2)}</span>
             </div>
 
-            <div class="row grand-total">
-                <span>TOTAL</span>
+            <div class="totals-row">
+                <span>${t('VAT', 'ضريبة')} (${invoice.taxRate ?? (business.taxRate || 15)}%)</span>
+                <span>${Number(invoice.taxAmount).toFixed(2)}</span>
+            </div>
+            ` : ''}
+
+            <div class="row grand-total" style="margin-top: 5px; padding-top: 5px; font-size: 15px;">
+                <span>${t('TOTAL', 'الإجمالي')}</span>
                 <span>${appSettings.currency} ${Number(invoice.grandTotal).toFixed(2)}</span>
             </div>
 
-            <div class="totals-row" style="font-size: 11px;">
-                <span>Paid</span>
+            <div class="totals-row" style="font-size: 11px; margin-top: 10px;">
+                <span>${t('Paid', 'المدفوع')}</span>
                 <span>${Number(invoice.paidAmount || invoice.grandTotal).toFixed(2)}</span>
             </div>
 
             ${(invoice.remainingAmount || 0) > 0 ? `
             <div class="totals-row" style="font-weight:bold;">
-                <span>Balance Due</span>
+                <span>${t('Balance Due', 'المتبقي')}</span>
                 <span>${Number(invoice.remainingAmount).toFixed(2)}</span>
             </div>`: ''}
             
@@ -666,6 +598,40 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
         </div>
     </body>
     </html>
+    `;
+    } catch (fatalError) {
+        console.error("FATAL ERROR in Thermal HTML generation, returning fallback:", fatalError);
+        return getMinimalThermalReceiptHTML(invoice, business);
+    }
+};
+
+/**
+ * A fail-safe, minimal HTML receipt if the main generator crashes.
+ * Contains only critical data to ensure a receipt is ALWAYS printed.
+ */
+const getMinimalThermalReceiptHTML = (invoice: Invoice, business: BusinessDetails) => {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><style>
+        body { font-family: monospace; width: 72mm; margin: 0 auto; padding: 5mm; }
+        .center { text-align: center; }
+        .hr { border-bottom: 1px dashed #000; margin: 5px 0; }
+        .bold { font-weight: bold; font-size: 14px; }
+    </style></head>
+    <body>
+        <div class="center">
+            <div class="bold">${business.name}</div>
+            <div>${business.phone || ''}</div>
+            <div class="hr"></div>
+            <div>INVOICE: ${invoice.invoiceNumber}</div>
+            <div>DATE: ${new Date(invoice.createdAt).toLocaleString()}</div>
+            <div class="hr"></div>
+            <div style="font-size: 24px; font-weight: bold; margin: 10px 0;">TOTAL: SAR ${Number(invoice.grandTotal).toFixed(2)}</div>
+            <div class="hr"></div>
+            <div style="font-size: 10px;">Fallback Receipt Generated due to error.</div>
+        </div>
+    </body></html>
     `;
 };
 
@@ -706,12 +672,18 @@ export const generateInvoicePDF = async (invoice: Invoice, businessRaw: Business
         return;
     }
 
-    // 3. Print (HTML Fallback or A4)
+    // 3. Print — respect copies from config
+    const copies = useThermal
+        ? (fullConfig.thermal?.copies || 1)
+        : (fullConfig.regular?.copies || 1);
+
+    console.log(`Printing customer receipt: printer="${printerName}", copies=${copies}, pageSize=${pageSize}`);
+
     await printContent(html, {
         selectedPrinter: printerName,
         silent: true,
         pageSize: pageSize,
-        copies: 1
+        copies: copies
     });
 };
 
@@ -739,7 +711,7 @@ export const downloadInvoicePDF = async (invoice: Invoice, businessRaw: Business
 
 // --- PAYMENT RECEIPT HTML GENERATOR ---
 export const getPaymentReceiptHTML = async (
-    payment: { amount: number, date: Date, mode: string, note?: string, id?: number },
+    payment: { amount: number, date: Date, mode: string, note?: string, id?: string | number },
     customer: { name: string, phone?: string, balance?: number },
     businessRaw: BusinessDetails | null
 ): Promise<string | null> => {
@@ -1112,7 +1084,7 @@ export const printPurchase = async (
 
 
 export const printPaymentReceipt = async (
-    payment: { amount: number, date: Date, mode: string, note?: string, id?: number },
+    payment: { amount: number, date: Date, mode: string, note?: string, id?: string | number },
     customer: { name: string, phone?: string, balance?: number },
     businessRaw: BusinessDetails | null
 ) => {
@@ -1147,4 +1119,141 @@ export const printPaymentReceipt = async (
             copies: 1
         });
     }
+};
+
+// --- KITCHEN PRINTER (SIMPLIFIED THERMAL) ---
+export const getKitchenTicketHTML = async (invoice: Invoice) => {
+    // 1. App Settings (Language/Format)
+    const savedConfig = localStorage.getItem('printerConfig');
+    const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+
+    const savedAppSettings = localStorage.getItem('appSettings');
+    const appSettings = savedAppSettings ? JSON.parse(savedAppSettings) : { dateFormat: 'dd/MM/yyyy' };
+
+    const formatDate = (date: Date) => {
+        try {
+            return format(date, appSettings.dateFormat + ' hh:mm a');
+        } catch (e) { return date.toISOString(); }
+    };
+
+    // --- LANGUAGE & RTL ---
+    const printLanguage = fullConfig.printLanguage || 'english';
+    const isBilingual = printLanguage === 'bilingual';
+    const isRtl = printLanguage === 'arabic' || printLanguage === 'ar';
+    const t = (en: string, ar: string) => isBilingual ? `${en} / <span dir="rtl" style="font-family: Arial, sans-serif;">${ar}</span>` : (isRtl ? ar : en);
+
+    // CSS specifically for Kitchen (usually 80mm)
+    const css = `
+        @page { margin: 0; size: 80mm auto; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, sans-serif; 
+            font-size: 13px; 
+            margin: 0; padding: 3mm 2mm; width: 64mm; 
+            color: #000;
+            direction: ${isRtl ? 'rtl' : 'ltr'};
+        }
+        .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 5px; margin-bottom: 10px; }
+        .ticket-title { font-size: 16px; font-weight: 900; text-transform: uppercase; margin-bottom: 2px; }
+        .order-no { font-size: 13px; font-weight: bold; }
+        .meta { font-size: 11px; margin-bottom: 2px; }
+        
+        .item-line { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed #ccc; display: flex; justify-content: space-between; align-items: start;}
+        .item-details { flex: 1; padding-right: 5px; }
+        .item-name { font-weight: 900; font-size: 14px; line-height: 1.1; }
+        .item-name-ar { font-weight: bold; font-size: 12px; line-height: 1.1; margin-top: 2px; }
+        .item-qty { font-weight: 900; font-size: 18px; text-align: center; white-space: nowrap; padding-left: 8px; border-left: 2px solid #000; min-width: 40px; }
+        
+        .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+    `;
+
+    return `
+    <!DOCTYPE html>
+    <html dir="${isRtl ? 'rtl' : 'ltr'}">
+    <head>
+        <meta charset="UTF-8">
+        <style>${css}</style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="ticket-title">${t('KITCHEN TICKET', 'تذكرة المطبخ')}</div>
+            ${invoice.tokenNumber ? `<div style="text-align: center; margin: 5px 0; line-height: 1.1;">
+                <div style="font-size: 11px; font-weight: bold; text-transform: uppercase;">${t('TOKEN NUMBER', 'رقم الطلب')}</div>
+                <div style="font-size: 32px; font-weight: 900;">#${invoice.tokenNumber}</div>
+            </div>` : ''}
+            <div class="order-no" style="${invoice.tokenNumber ? 'font-size:11px; font-weight:normal;' : ''}">
+                ${t('Order', 'الطلب')} #${invoice.invoiceNumber}
+            </div>
+            ${invoice.orderType ? `<div style="margin: 8px 0; padding: 4px; font-size: 18px; font-weight: 900; border: 2px dashed #000; text-transform: uppercase;">${invoice.orderType === 'dine_in' ? t('DINE-IN', 'محلي') : invoice.orderType === 'parcel' ? t('PARCEL', 'سفري') : invoice.orderType === 'pickup' ? t('PICKUP', 'استلام') : t('DELIVERY', 'توصيل')}</div>` : ''}
+            <div class="meta">${t('Date', 'التاريخ')}: ${formatDate(new Date(invoice.createdAt))}</div>
+            ${invoice.customerName && invoice.customerName !== 'Walk-in Customer' && invoice.customerName !== 'عميل نقدي' ?
+            `<div class="meta">Cust: ${invoice.customerName}</div>` : ''}
+        </div>
+
+        <div>
+            <!-- Items Header -->
+            <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; text-decoration: underline; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #000;">
+                <span>${t('ITEM', 'الصنف')}</span>
+                <span>${t('QTY/WT', 'الكمية/الوزن')}</span>
+            </div>
+
+            ${invoice.items.map(item => `
+            <div class="item-line">
+                <div class="item-details">
+                    <div class="item-name">${item.name}</div>
+                    ${(isBilingual && (item.arabicName || item.nameAr)) ? `<div class="item-name-ar">${item.arabicName || item.nameAr}</div>` : ''}
+                </div>
+                <div class="item-qty">${item.quantity}${item.unit === 'kg' ? '<span style="font-size: 14px; margin-left: 2px;">kg</span>' : ''}</div>
+            </div>
+            `).join('')}
+        </div>
+
+        ${invoice.notes ? `
+        <div style="margin-top: 15px; padding-top: 10px; border-top: 2px dashed #000;">
+            <div style="font-weight: bold; font-size: 14px; text-decoration: underline; margin-bottom: 5px;">${t('NOTES', 'ملاحظات')}:</div>
+            <div style="font-size: 16px; font-weight: bold; white-space: pre-wrap;">${invoice.notes}</div>
+        </div>
+        ` : ''}
+
+        <div class="footer">
+            --- End of Ticket ---
+        </div>
+    </body>
+    </html>
+    `;
+};
+
+export const generateKitchenTicketPDF = async (invoice: Invoice) => {
+    // 1. Load Config
+    const savedConfig = localStorage.getItem('printerConfig');
+    const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+
+    // 2. Strict Check for Kitchen Printing
+    if (!fullConfig.kitchen?.enabled) {
+        console.log("Kitchen printing skipped: Disabled in settings.");
+        return;
+    }
+
+    // 3. Kitchen printer MUST be specified — never fall back to main printer
+    const kitchenPrinterName = fullConfig.kitchen?.printerName;
+    if (!kitchenPrinterName) {
+        console.error("Kitchen printing skipped: No kitchen printer configured. Configure one in Settings > Print > Kitchen Printer.");
+        return;
+    }
+
+    const paperSize = fullConfig.kitchen?.paperSize || '80mm';
+    const copies = fullConfig.kitchen?.copies || 1;
+
+    console.log(`Generating Kitchen Ticket — Printer: "${kitchenPrinterName}", Copies: ${copies}, Paper: ${paperSize}`);
+    
+    // 4. Generate HTML
+    const html = await getKitchenTicketHTML(invoice);
+    if (!html) return;
+
+    // 5. Send ONLY to kitchen printer (never falls to system default / main)
+    await printContent(html, {
+        selectedPrinter: kitchenPrinterName,
+        silent: true,
+        pageSize: paperSize,
+        copies: copies
+    });
 };

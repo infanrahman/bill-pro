@@ -97,11 +97,17 @@ const InvoiceDetailsModal: React.FC<InvoiceDetailsModalProps> = ({ invoice, isOp
                                     {t(`common.${invoice.paymentStatus}`)}
                                 </span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">{t('payment.payment_mode')}</span>
-                                <span className="capitalize">{t(`payment.${invoice.paymentMode}`)}</span>
-                            </div>
-                        </div>
+                             <div className="flex justify-between">
+                                 <span className="text-slate-500">{t('payment.payment_mode')}</span>
+                                 <span className="capitalize">{t(`payment.${invoice.paymentMode}`)}</span>
+                             </div>
+                             {invoice.tokenNumber && (
+                                 <div className="mt-4 text-center">
+                                     <div className="text-[10px] uppercase font-bold text-slate-400">{t('pos.token_number')}</div>
+                                     <div className="text-3xl font-black text-blue-600 dark:text-blue-400">#{invoice.tokenNumber}</div>
+                                 </div>
+                             )}
+                         </div>
                     </div>
 
                     {/* Customer Info */}
@@ -169,8 +175,7 @@ const InvoiceDetailsModal: React.FC<InvoiceDetailsModalProps> = ({ invoice, isOp
                                         {showVatColumn && (
                                             <td className={`p-3 text-slate-500 text-right`}>
                                                 <div className="flex flex-col items-end">
-                                                    <span>{formatCurrency(itemTax)}</span>
-                                                    <span className="text-[10px] text-slate-400">({rate}%)</span>
+                                                    <span>{rate}%</span>
                                                 </div>
                                             </td>
                                         )}

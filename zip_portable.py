@@ -1,7 +1,7 @@
 import shutil
 import os
 
-source_dir = "dist/win-unpacked"
+source_dir = "release/win-unpacked"
 output_filename = "dist/Billing-App-Portable"
 
 print(f"Zipping {source_dir} to {output_filename}.zip...")

@@ -3,20 +3,22 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../services/db';
 import { format } from 'date-fns';
 import { Search, Shield } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const ActivityLogTab: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
+    const { activeBranchId, activeBranch } = useAuth();
 
     // Fetch last 100 logs
-    const logs = useLiveQuery(() =>
-        db.activityLogs
-            .orderBy('id')
+    const logs = useLiveQuery(() => {
+        const query = activeBranch?.isMaster ? db.activityLogs : db.activityLogs.where('branchId').equals(activeBranchId);
+        return (query as any)
             .reverse()
             .limit(100)
-            .toArray()
-        , []);
+            .toArray();
+    }, [activeBranchId, activeBranch?.isMaster]);
 
-    const filteredLogs = logs?.filter(log =>
+    const filteredLogs = logs?.filter((log: any) =>
         log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (log.details && log.details.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -59,7 +61,7 @@ const ActivityLogTab: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {filteredLogs?.map((log) => (
+                            {filteredLogs?.map((log: any) => (
                                 <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                     <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap">
                                         {format(new Date(log.timestamp), 'MMM dd, HH:mm:ss')}

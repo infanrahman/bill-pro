@@ -6,9 +6,10 @@ import { ImageOff } from 'lucide-react';
 interface ItemCardProps {
     item: Item;
     onClick: (item: Item) => void;
+    showArabicName?: boolean;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, showArabicName }) => {
     const { settings } = useSettings();
     const formatCurrency = (amount: number) => settings.currency + amount.toFixed(settings.decimals);
 
@@ -52,6 +53,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick }) => {
                 <h3 className="font-semibold text-sm text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                     {item.name}
                 </h3>
+                {showArabicName && item.arabicName && (
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate" dir="rtl">{item.arabicName}</div>
+                )}
                 <div className="flex items-center justify-between mt-2">
                     <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
                         {formatCurrency(item.salePrice)}

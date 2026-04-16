@@ -15,11 +15,9 @@ const BillProfitReport: React.FC = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    const start = startDate ? new Date(startDate) : undefined;
-    const end = endDate ? new Date(endDate) : undefined;
     const activeRange = (startDate && endDate) ? 'custom' : range;
 
-    const { data, loading, totals } = useBillProfitData(activeRange, start, end);
+    const { data, loading, totals } = useBillProfitData(activeRange, startDate, endDate);
 
     const ranges: { id: DateRange; label: string }[] = [
         { id: 'today', label: t('reports.period_daily') },
@@ -79,7 +77,7 @@ const BillProfitReport: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-3">
                     <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex">
-                        {ranges.map((r) => (
+                        {ranges.map((r: any) => (
                             <button
                                 key={r.id}
                                 onClick={() => handleRangeChange(r.id)}
@@ -96,17 +94,17 @@ const BillProfitReport: React.FC = () => {
                     <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg px-2">
                         <Calendar size={16} className="text-slate-400" />
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={startDate}
                             onChange={(e) => { setStartDate(e.target.value); setRange('custom'); }}
-                            className="bg-transparent border-0 p-0 text-sm w-28 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
                         />
                         <span className="text-slate-400">-</span>
                         <input
-                            type="date"
+                            type="datetime-local"
                             value={endDate}
                             onChange={(e) => { setEndDate(e.target.value); setRange('custom'); }}
-                            className="bg-transparent border-0 p-0 text-sm w-28 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+                            className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
                         />
                     </div>
 
@@ -184,7 +182,7 @@ const BillProfitReport: React.FC = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                data.map((row) => (
+                                data.map((row: any) => (
                                     <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                                             {format(row.date, 'dd MMM yyyy')}

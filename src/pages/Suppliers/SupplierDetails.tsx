@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom'; // Assuming react-router-dom is used, typically via hash routing in Electron
-import { db } from '../../services/db';
+import { db, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, Phone, Mail, MapPin, Building, FileText, RotateCcw, CreditCard } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -13,7 +13,7 @@ const SupplierDetails = () => {
     const { t } = useTranslation();
     const { formatCurrency, formatDate } = useSettings();
     const { addToast } = useNotification();
-    const supplierId = Number(id);
+    const supplierId = id!;
 
     const supplier = useLiveQuery(() => db.suppliers.get(supplierId), [supplierId]);
 
@@ -28,7 +28,7 @@ const SupplierDetails = () => {
 
     // Merge and Sort
     const history = React.useMemo(() => {
-        return [...(purchases || []), ...(payments || [])].sort((a, b) =>
+        return [...(purchases || []), ...(payments || [])].sort((a: any, b: any) =>
             new Date(b.date).getTime() - new Date(a.date).getTime()
         );
     }, [purchases, payments]);
@@ -65,6 +65,7 @@ const SupplierDetails = () => {
             await db.transaction('rw', [db.purchases, db.purchasePayments, db.suppliers], async () => {
                 // 1. Record Payment linked to Bill
                 await db.purchasePayments.add({
+                    ...createRecordMetadata(),
                     purchaseId: selectedBill.id,
                     supplierId: supplierId,
                     amount: amount,
@@ -79,6 +80,7 @@ const SupplierDetails = () => {
                 const newStatus = newPaid >= selectedBill.totalAmount - 0.01 ? 'completed' : 'pending'; // Tolerance
 
                 await db.purchases.update(selectedBill.id, {
+                    ...updateRecordMetadata(),
                     paidAmount: newPaid,
                     status: newStatus
                 });
@@ -87,6 +89,7 @@ const SupplierDetails = () => {
                 const currentSup = await db.suppliers.get(supplierId);
                 if (currentSup) {
                     await db.suppliers.update(supplierId, {
+                        ...updateRecordMetadata(),
                         balance: currentSup.balance - amount
                     });
                 }
@@ -103,7 +106,7 @@ const SupplierDetails = () => {
     if (!supplier) return <div className="p-8 text-center">{t('common.loading')}</div>;
 
     // Filter for Tabs
-    const outstandingBills = purchases?.filter(p => !p.type || p.type === 'bill').filter(p => {
+    const outstandingBills = purchases?.filter((p: any) => !p.type || p.type === 'bill').filter((p: any) => {
         const paid = p.paidAmount || 0;
         return (p.totalAmount - paid) > 0.01;
     }) || [];
@@ -182,7 +185,7 @@ const SupplierDetails = () => {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                             {outstandingBills.length === 0 ? (
                                 <tr><td colSpan={6} className="p-8 text-center text-slate-500">{t('purchases.no_outstanding_bills')}</td></tr>
-                            ) : outstandingBills.map(bill => {
+                            ) : outstandingBills.map((bill: any) => {
                                 const paid = bill.paidAmount || 0;
                                 const due = bill.totalAmount - paid;
                                 return (

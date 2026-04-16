@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import { LicenseService } from './services/licenseService';
 import { GoogleDriveService } from './services/googleDriveService';
 import { ThermalPrinterService } from './services/thermalPrinterService';
+import { ScaleDirectService } from './services/scaleDirectService';
 
 // __dirname is natively available in CommonJS
 const licenseService = new LicenseService();
@@ -139,6 +140,10 @@ ipcMain.handle('print-thermal-raw', async (_, { data, printerName }) => {
   return await thermalPrinterService.printReceipt(data, printerName);
 });
 
+ipcMain.handle('printer:open-drawer', async (_, { printerName }) => {
+  return await thermalPrinterService.openCashDrawer(printerName);
+});
+
 // Unified Print Handler
 ipcMain.handle('print', async (_, content: string, options: { printerName?: string; silent?: boolean; copies?: number; pageSize?: string; landscape?: boolean, margins?: any } = {}) => {
   const { printerName, silent = true, copies = 1, pageSize = 'A4', landscape = false, margins = { marginType: 'printableArea' } } = options;
@@ -242,9 +247,9 @@ ipcMain.handle('print', async (_, content: string, options: { printerName?: stri
         printOptions.deviceName = printer.name;
       } else {
         console.error(`Main Process: Printer '${printerName}' NOT FOUND. Available: ${printers.map(p => p.name).join(', ')}`);
-        // Fallback: Show dialog if specific printer missing
-        console.warn('Main Process: Falling back to system dialog (silent=false)');
-        printOptions.silent = false;
+        // Fallback: IF a specific printer was asked for and not found, do NOT show dialog to avoid
+        // accidental printing to wrong printer (e.g. kitchen ticket on main printer).
+        throw new Error(`Printer '${printerName}' not found. Please check printer settings.`);
       }
     } else {
       console.log('Main Process: No specific printer requested, using default/dialog.');
@@ -270,19 +275,28 @@ ipcMain.handle('print', async (_, content: string, options: { printerName?: stri
       console.error("Main Process: Failed to save debug PDF:", debugErr);
     }
 
-    // Execute Print
-    await new Promise<void>((resolve, reject) => {
-      if (!printWin) return reject("Window closed before print");
-      printWin.webContents.print(printOptions, (success, failureReason) => {
-        if (success) {
-          console.log('Main Process: Print callback SUCCESS');
-          resolve();
-        } else {
-          console.error('Main Process: Print callback FAILED:', failureReason);
-          reject(new Error(failureReason));
+    // Execute Print (Electron sometimes ignores 'copies', we do manual multiple triggers)
+    const numCopies = printOptions.copies || 1;
+    printOptions.copies = 1; // Reset to 1 for manual looping
+    for (let i = 0; i < numCopies; i++) {
+        await new Promise<void>((resolve, reject) => {
+          if (!printWin) return reject("Window closed before print");
+          printWin.webContents.print(printOptions, (success, failureReason) => {
+            if (success) {
+              console.log(`Main Process: Print callback SUCCESS (Copy ${i + 1}/${numCopies})`);
+              resolve();
+            } else {
+              console.error(`Main Process: Print callback FAILED (Copy ${i + 1}/${numCopies}):`, failureReason);
+              reject(new Error(failureReason));
+            }
+          });
+        });
+
+        // Add a small delay between copies for the spooler to process
+        if (i < numCopies - 1) {
+          await new Promise(r => setTimeout(r, 500));
         }
-      });
-    });
+    }
 
     console.log('Print completed successfully.');
     return true;
@@ -392,6 +406,140 @@ ipcMain.handle('open-external', async (_, url: string) => {
     return false;
   }
 });
+
+import os from 'os';
+import net from 'net';
+
+ipcMain.handle('scan-network-scales', async (_, targetPort: number = 5005) => {
+  console.log(`Main Process: Initiating Network Scale Scan on port ${targetPort}...`);
+  const interfaces = os.networkInterfaces();
+  const addresses: string[] = [];
+
+  // Find local IPv4
+  for (const k in interfaces) {
+    for (const address of interfaces[k]!) {
+      if (address.family === 'IPv4' && !address.internal) {
+        addresses.push(address.address);
+      }
+    }
+  }
+
+  if (addresses.length === 0) {
+    return [];
+  }
+
+  // Build list of target IP networks to scan
+  // Always include the current subnet, plus common ones (192.168.0.x, 192.168.1.x)
+  const targetSubnets = new Set<string>();
+
+  const parts = addresses[0].split('.');
+  const baseIp = `${parts[0]}.${parts[1]}.${parts[2]}.`;
+  targetSubnets.add(baseIp);
+
+  if (parts[0] === '192' && parts[1] === '168') {
+    targetSubnets.add('192.168.0.');
+    targetSubnets.add('192.168.1.');
+  }
+
+  const foundScales: { ip: string, port: number }[] = [];
+  const promises: Promise<void>[] = [];
+
+  for (const subnet of Array.from(targetSubnets)) {
+    for (let i = 1; i < 255; i++) {
+      const targetIp = `${subnet}${i}`;
+      promises.push(new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(800); // Fast timeout for LAN scan
+
+        socket.on('connect', () => {
+          foundScales.push({ ip: targetIp, port: targetPort });
+          socket.destroy();
+          resolve();
+        });
+
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve();
+        });
+
+        socket.on('error', () => {
+          socket.destroy();
+          resolve();
+        });
+
+        socket.connect(targetPort, targetIp);
+      }));
+    }
+  }
+
+  await Promise.all(promises);
+  console.log(`Main Process: Network scan completed. Found ${foundScales.length} scales.`);
+  return foundScales;
+});
+
+ipcMain.handle('test-scale-connection', async (_, { ip, port }) => {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(2000); // 2 second timeout for explicit test
+
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.on('error', () => {
+      resolve(false);
+    });
+
+    socket.connect(port, ip);
+  });
+});
+
+ipcMain.handle('scale:connect', async (_, { ip, port }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.connect();
+});
+
+ipcMain.handle('scale:sync-time', async (_, { ip, port, timeStr }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.syncTime(timeStr);
+});
+
+ipcMain.handle('scale:upload-plu', async (_, { ip, port, product }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.uploadPLU(product);
+});
+
+ipcMain.handle('scale:delete-plu', async (_, { ip, port, pluNumber }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.deletePLU(pluNumber);
+});
+
+ipcMain.handle('scale:download-plu', async (_, { ip, port }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.downloadPLU();
+});
+
+ipcMain.handle('scale:full-sync', async (_, { ip, port, products }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.fullSync(products);
+});
+
+ipcMain.handle('scale:incremental-sync', async (_, { ip, port, products }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.incrementalSync(products);
+});
+
+ipcMain.handle('scale:sync-hotkeys', async (_, { ip, port, hotkeys }) => {
+  const service = new ScaleDirectService(ip, port);
+  return await service.syncHotkeys(hotkeys);
+});
+
 
 function createWindow() {
   const win = new BrowserWindow({

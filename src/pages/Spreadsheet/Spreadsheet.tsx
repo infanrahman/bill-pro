@@ -5,7 +5,7 @@ import SheetEditor from './SheetEditor';
 const Spreadsheet: React.FC = () => {
     // viewMode: 'list' | 'editor'
     // activeSheetId: number | 'new' | null
-    const [activeSheetId, setActiveSheetId] = useState<number | 'new' | null>(null);
+    const [activeSheetId, setActiveSheetId] = useState<string | 'new' | null>(null);
 
     if (activeSheetId !== null) {
         return (
