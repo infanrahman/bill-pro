@@ -8,23 +8,23 @@ import bn from './locales/bn.json';
 import ar from './locales/ar.json';
 
 i18n
-    .use(LanguageDetector)
-    .use(initReactI18next)
-    .init({
-        resources: {
-            en: { translation: en },
-            hi: { translation: hi },
-            bn: { translation: bn },
-            ar: { translation: ar },
-        },
-        fallbackLng: 'en',
-        interpolation: {
-            escapeValue: false, // not needed for react as it escapes by default
-        },
-        detection: {
-            order: ['localStorage', 'navigator'],
-            caches: ['localStorage'],
-        }
-    });
+ .use(LanguageDetector)
+ .use(initReactI18next)
+ .init({
+ resources: {
+ en: { translation: en },
+ hi: { translation: hi },
+ bn: { translation: bn },
+ ar: { translation: ar },
+ },
+ fallbackLng: 'en',
+ interpolation: {
+ escapeValue: false, // not needed for react as it escapes by default
+ },
+ detection: {
+ order: ['localStorage', 'navigator'],
+ caches: ['localStorage'],
+ }
+ });
 
 export default i18n;

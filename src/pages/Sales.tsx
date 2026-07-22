@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { db, createRecordMetadata } from '../services/db';
 import type { Invoice, InvoiceItem, Item } from '../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Search, Trash2, FileText, ShoppingCart, RotateCcw, DollarSign, Save, Printer, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
+import { Plus, Search, Trash2, FileText, ShoppingCart, RotateCcw, DollarSign, Save, Printer, ShieldCheck, ShieldAlert, Clock, ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNotification } from '../contexts/NotificationContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -299,19 +299,13 @@ const Sales = () => {
                 <div className="flex gap-2">
 
                     <button
-                        onClick={() => {
-                            setActiveTab('order');
-                            setIsModalOpen(true);
-                        }}
+                        onClick={() => navigate('/sales/new?type=order')}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
                     >
                         <Plus size={20} /> {t('sales.new_order')}
                     </button>
                     <button
-                        onClick={() => {
-                            setActiveTab('return');
-                            setIsModalOpen(true);
-                        }}
+                        onClick={() => navigate('/sales/new?type=return')}
                         className="px-4 py-2 bg-amber-600 text-white rounded-lg flex items-center gap-2 hover:bg-amber-700"
                     >
                         <RotateCcw size={20} /> {t('sales.create_return')}

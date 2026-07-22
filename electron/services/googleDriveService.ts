@@ -129,7 +129,10 @@ export class GoogleDriveService {
                     // If 3000 is busy, this might fail, but it's standard.
                 }
 
-                // Actually, let's re-listen on 3000 for stability with Console settings
+            // Fix #14: Port 3000 is hardcoded here to match Google Console redirect URIs.
+                    // WARNING: If port 3000 is in use (e.g., another app), this will throw EADDRINUSE
+                    // and OAuth will permanently fail. For production, consider using a custom URL scheme
+                    // (e.g., myapp://oauth2callback) registered via app.setAsDefaultProtocolClient().
                 server.close();
                 server.listen(3000, () => {
                     // Generate Auth URL
@@ -150,17 +153,35 @@ export class GoogleDriveService {
     }
 
     /**
-     * Check if we have valid tokens loaded.
+     * Check if we have valid, non-expired tokens loaded.
+     * Fix #13: validates expiry_date and attempts a refresh before giving up.
      */
     async checkconnection(): Promise<boolean> {
         try {
             if (fs.existsSync(TOKEN_PATH) && this.oAuth2Client) {
                 const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8'));
                 this.oAuth2Client.setCredentials(tokens);
+
+                // Check if the access token is expired (or will expire within 60s)
+                const expiresAt = tokens.expiry_date as number | undefined;
+                const isExpired = expiresAt ? Date.now() >= expiresAt - 60_000 : false;
+
+                if (isExpired && tokens.refresh_token) {
+                    console.log('Google Drive: Access token expired, refreshing...');
+                    const { credentials } = await this.oAuth2Client.refreshAccessToken();
+                    this.oAuth2Client.setCredentials(credentials);
+                    fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials));
+                    console.log('Google Drive: Token refreshed successfully.');
+                } else if (isExpired) {
+                    // No refresh token — user must re-authenticate
+                    console.warn('Google Drive: Token expired and no refresh_token present. Re-auth required.');
+                    return false;
+                }
+
                 return true;
             }
         } catch (error) {
-            console.error('Error loading tokens', error);
+            console.error('Error loading/refreshing tokens', error);
         }
         return false;
     }
@@ -176,7 +197,8 @@ export class GoogleDriveService {
      */
     async uploadFile(filename: string, content: string): Promise<boolean> {
         try {
-            if (!this.checkconnection() || !this.oAuth2Client) {
+            // Fix #4: was missing `await` — auth check was being bypassed entirely
+            if (!(await this.checkconnection()) || !this.oAuth2Client) {
                 throw new Error("Not authenticated");
             }
 

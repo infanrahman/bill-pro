@@ -1,27 +1,29 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
   --font-arabic: 'Tahoma', 'Segoe UI', sans-serif;
+  
   --animate-kenburns: kenburns 20s infinite alternate;
-  --animate-fade-in-up: fadeInUp 1s ease-out forwards;
-  --animate-shimmer: shimmer 4s infinite linear;
+  --animate-fade-in-up: fadeInUp 0.5s ease-out forwards;
+  --animate-shimmer: shimmer 2s infinite linear;
+  --animate-float: float 3s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
 
   @keyframes kenburns {
-    0% {
-      transform: scale(1.0);
-    }
-
-    100% {
-      transform: scale(1.2);
-    }
+    0% { transform: scale(1.0); }
+    100% { transform: scale(1.1); }
   }
 
   @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateY(20px);
+      transform: translateY(15px);
     }
-
     to {
       opacity: 1;
       transform: translateY(0);
@@ -29,12 +31,49 @@
   }
 
   @keyframes shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+}
 
-    100% {
-      transform: translateX(100%);
-    }
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .glass-dark {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .premium-gradient {
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 50%, #60a5fa 100%);
+  }
+
+  .premium-shadow {
+    box-shadow: 
+      0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+      0 2px 4px -1px rgba(0, 0, 0, 0.06),
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 0 0 1px rgba(0, 0, 0, 0.02);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
   }
 }

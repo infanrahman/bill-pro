@@ -2,168 +2,168 @@
 
 
 interface BusinessDetails {
-    name?: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    logoUrl?: string;
-    [key: string]: any;
+ name?: string;
+ address?: string;
+ phone?: string;
+ email?: string;
+ logoUrl?: string;
+ [key: string]: any;
 }
 
 interface ReportColumn {
-    header: string;
-    accessor: string | ((row: any) => string | number);
-    align?: 'left' | 'right' | 'center';
-    width?: string;
+ header: string;
+ accessor: string | ((row: any) => string | number);
+ align?: 'left' | 'right' | 'center';
+ width?: string;
 }
 
 interface ReportConfig {
-    title: string;
-    period: string;
-    columns: ReportColumn[];
-    data: any[];
-    totals?: { label: string; value: string | number; color?: string }[];
-    businessRaw: BusinessDetails | null;
-    orientation?: 'portrait' | 'landscape';
+ title: string;
+ period: string;
+ columns: ReportColumn[];
+ data: any[];
+ totals?: { label: string; value: string | number; color?: string }[];
+ businessRaw: BusinessDetails | null;
+ orientation?: 'portrait' | 'landscape';
 }
 
 export const generateGenericReportHTML = (config: ReportConfig): string => {
-    const { title, period, columns, data, totals, businessRaw, orientation = 'portrait' } = config;
+ const { title, period, columns, data, totals, businessRaw, orientation = 'portrait' } = config;
 
-    // Default Business Details
-    const business = businessRaw || { name: 'Business Name', address: '', phone: '' };
+ // Default Business Details
+ const business = businessRaw || { name: 'Business Name', address: '', phone: '' };
 
-    // Current Time
-    const today = new Date().toLocaleString();
+ // Current Time
+ const today = new Date().toLocaleString();
 
-    // Styles (Reused from VatReport for consistency)
-    const css = `
-        @page { size: A4 ${orientation}; margin: 0; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #1e293b;
-            background: #fff;
-            margin: 0;
-            padding: 15mm;
-            line-height: 1.3;
-            -webkit-print-color-adjust: exact;
-        }
+ // Styles (Reused from VatReport for consistency)
+ const css =`
+ @page { size: A4 ${orientation}; margin: 0; }
+ body { 
+ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+ color: #1e293b;
+ background: #fff;
+ margin: 0;
+ padding: 15mm;
+ line-height: 1.3;
+ -webkit-print-color-adjust: exact;
+ }
 
-        /* Header */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 20px;
-            border-bottom: 3px solid #2563eb;
-            margin-bottom: 20px;
-        }
-        .logo { max-height: 60px; max-width: 200px; object-fit: contain; }
-        .company-name { font-size: 24px; font-weight: bold; color: #2563eb; margin: 0; }
-        .business-details { text-align: right; font-size: 12px; color: #475569; }
-        .detail-row { margin-bottom: 2px; }
+ /* Header */
+ .header {
+ display: flex;
+ justify-content: space-between;
+ align-items: center;
+ padding-bottom: 20px;
+ border-bottom: 3px solid #2563eb;
+ margin-bottom: 20px;
+ }
+ .logo { max-height: 60px; max-width: 200px; object-fit: contain; }
+ .company-name { font-size: 24px; font-weight: bold; color: #2563eb; margin: 0; }
+ .business-details { text-align: right; font-size: 12px; color: #475569; }
+ .detail-row { margin-bottom: 2px; }
 
-        /* Title & Period */
-        .report-heading { text-align: center; margin-bottom: 25px; }
-        h1 { margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; }
-        .period-badge { display: inline-block; background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-top: 8px; border: 1px solid #dbeafe; }
+ /* Title & Period */
+ .report-heading { text-align: center; margin-bottom: 25px; }
+ h1 { margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; }
+ .period-badge { display: inline-block; background: #eff6ff; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-top: 8px; border: 1px solid #dbeafe; }
 
-        /* Table */
-        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
-        th { text-align: left; padding: 8px; background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 11px; }
-        td { padding: 8px; border-bottom: 1px solid #f1f5f9; color: #334155; }
-        tr:nth-child(even) { background-color: #fcfcfc; }
-        
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .text-left { text-align: left; }
+ /* Table */
+ table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+ th { text-align: left; padding: 8px; background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 11px; }
+ td { padding: 8px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+ tr:nth-child(even) { background-color: #fcfcfc; }
+ 
+ .text-right { text-align: right; }
+ .text-center { text-align: center; }
+ .text-left { text-align: left; }
 
-        /* Totals */
-        .totals-section { 
-            margin-top: 20px; 
-            background: #f8fafc; 
-            padding: 15px; 
-            border-radius: 8px; 
-            display: flex; 
-            justify-content: flex-end; 
-            gap: 30px;
-            page-break-inside: avoid;
-        }
-        .total-item { text-align: right; }
-        .total-label { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-        .total-value { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+ /* Totals */
+ .totals-section { 
+ margin-top: 20px; 
+ background: #f8fafc; 
+ padding: 15px; 
+ border-radius: 8px; 
+ display: flex; 
+ justify-content: flex-end; 
+ gap: 30px;
+ page-break-inside: avoid;
+ }
+ .total-item { text-align: right; }
+ .total-label { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+ .total-value { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
 
-        /* Footer */
-        .footer { position: fixed; bottom: 10mm; left: 0; right: 0; text-align: center; font-size: 10px; color: #94a3b8; }
-    `;
+ /* Footer */
+ .footer { position: fixed; bottom: 10mm; left: 0; right: 0; text-align: center; font-size: 10px; color: #94a3b8; }
+`;
 
-    // Generate Rows
-    const tableHeader = columns.map(col => `
-        <th class="text-${col.align || 'left'}" style="${col.width ? `width: ${col.width}` : ''}">${col.header}</th>
-    `).join('');
+ // Generate Rows
+ const tableHeader = columns.map(col =>`
+ <th class="text-${col.align || 'left'}"style="${col.width ?`width: ${col.width}`: ''}">${col.header}</th>
+`).join('');
 
-    const tableBody = data.map(row => `
-        <tr>
-            ${columns.map(col => {
-        const val = typeof col.accessor === 'function' ? col.accessor(row) : row[col.accessor];
-        return `<td class="text-${col.align || 'left'}">${val}</td>`;
-    }).join('')}
-        </tr>
-    `).join('');
+ const tableBody = data.map(row =>`
+ <tr>
+ ${columns.map(col => {
+ const val = typeof col.accessor === 'function' ? col.accessor(row) : row[col.accessor];
+ return`<td class="text-${col.align || 'left'}">${val}</td>`;
+ }).join('')}
+ </tr>
+`).join('');
 
-    // Generate Totals
-    const totalsHtml = totals ? `
-        <div class="totals-section">
-            ${totals.map(t => `
-                <div class="total-item">
-                    <div class="total-label">${t.label}</div>
-                    <div class="total-value" style="${t.color ? `color: ${t.color}` : ''}">${t.value}</div>
-                </div>
-            `).join('')}
-        </div>
-    ` : '';
+ // Generate Totals
+ const totalsHtml = totals ?`
+ <div class="totals-section">
+ ${totals.map(t =>`
+ <div class="total-item">
+ <div class="total-label">${t.label}</div>
+ <div class="total-value"style="${t.color ?`color: ${t.color}`: ''}">${t.value}</div>
+ </div>
+`).join('')}
+ </div>
+`: '';
 
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>${title}</title>
-        <style>${css}</style>
-    </head>
-    <body>
-        <div class="header">
-            <div class="brand-section">
-                ${business.logoUrl ? `<img src="${business.logoUrl}" class="logo" />` : `<div class="company-name">${business.name}</div>`}
-            </div>
-            <div class="business-details">
-                <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">${business.name}</div>
-                <div class="detail-row">${business.address || ''}</div>
-                ${business.phone ? `<div class="detail-row">Tel: ${business.phone}</div>` : ''}
-                ${business.email ? `<div class="detail-row">${business.email}</div>` : ''}
-            </div>
-        </div>
+ return`
+ <!DOCTYPE html>
+ <html>
+ <head>
+ <meta charset="UTF-8">
+ <title>${title}</title>
+ <style>${css}</style>
+ </head>
+ <body>
+ <div class="header">
+ <div class="brand-section">
+ ${business.logoUrl ?`<img src="${business.logoUrl}"class="logo"/>`:`<div class="company-name">${business.name}</div>`}
+ </div>
+ <div class="business-details">
+ <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">${business.name}</div>
+ <div class="detail-row">${business.address || ''}</div>
+ ${business.phone ?`<div class="detail-row">Tel: ${business.phone}</div>`: ''}
+ ${business.email ?`<div class="detail-row">${business.email}</div>`: ''}
+ </div>
+ </div>
 
-        <div class="report-heading">
-            <h1>${title}</h1>
-            <div class="period-badge">${period}</div>
-        </div>
+ <div class="report-heading">
+ <h1>${title}</h1>
+ <div class="period-badge">${period}</div>
+ </div>
 
-        <table>
-            <thead>
-                <tr>${tableHeader}</tr>
-            </thead>
-            <tbody>
-                ${tableBody}
-            </tbody>
-        </table>
+ <table>
+ <thead>
+ <tr>${tableHeader}</tr>
+ </thead>
+ <tbody>
+ ${tableBody}
+ </tbody>
+ </table>
 
-        ${totalsHtml}
+ ${totalsHtml}
 
-        <div class="footer">
-            Generated by Billing Pro &bull; ${today}
-        </div>
-    </body>
-    </html>
-    `;
+ <div class="footer">
+ Generated by Billing Pro &bull; ${today}
+ </div>
+ </body>
+ </html>
+`;
 };

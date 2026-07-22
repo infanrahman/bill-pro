@@ -4,151 +4,416 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billing App - Key Generator</title>
+    <title>Billing App - Secure Key Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #1e1b4b 100%);
+            --card-bg: rgba(17, 24, 39, 0.7);
+            --card-border: rgba(255, 255, 255, 0.06);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --input-bg: rgba(31, 41, 55, 0.5);
+            --input-border: rgba(255, 255, 255, 0.08);
+            --input-focus: #818cf8;
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --success-border: rgba(16, 185, 129, 0.2);
+            --error: #f87171;
+            --error-bg: rgba(239, 68, 68, 0.1);
+            --error-border: rgba(239, 68, 68, 0.2);
+            --info: #3b82f6;
+            --info-bg: rgba(59, 130, 246, 0.1);
+            --info-border: rgba(59, 130, 246, 0.2);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #f3f4f6;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 868px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
         }
 
         .card {
-            background: white;
-            padding: 2rem;
-            rounded: 1rem;
-            width: 100%;
-            max-width: 500px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border-radius: 12px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 2.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            border: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 25px 30px -5px rgba(99, 102, 241, 0.05), 0 10px 15px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        h1, h2 {
+            margin-top: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #c7d2fe 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+            letter-spacing: -0.025em;
         }
 
         h1 {
-            margin-top: 0;
-            color: #1f2937;
+            font-size: 1.8rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 15px;
+            margin-bottom: 25px;
         }
 
         .form-group {
             margin-bottom: 1.5rem;
+            position: relative;
         }
 
         label {
             display: block;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.6rem;
             font-weight: 500;
-            color: #374151;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            letter-spacing: 0.025em;
+        }
+
+        .input-wrapper {
+            display: flex;
+            position: relative;
+        }
+
+        .input-wrapper input {
+            flex-grow: 1;
         }
 
         input,
-        select {
+        select,
+        textarea {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
-            border-radius: 0.5rem;
-            font-size: 1rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid var(--input-border);
+            border-radius: 0.75rem;
+            font-size: 0.95rem;
             box-sizing: border-box;
+            background: var(--input-bg);
+            color: var(--text-main);
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--input-focus);
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+            background: rgba(31, 41, 55, 0.7);
+        }
+
+        textarea {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            height: 110px;
+            resize: vertical;
+            line-height: 1.4;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.4;
+        }
+
+        .alert-info {
+            background: var(--info-bg);
+            color: #60a5fa;
+            border: 1px solid var(--info-border);
+        }
+
+        .alert-success {
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid var(--success-border);
+        }
+
+        .alert-error {
+            background: var(--error-bg);
+            color: var(--error);
+            border: 1px solid var(--error-border);
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
         }
 
         button {
-            wudth: 100%;
             width: 100%;
-            background: #2563eb;
+            background: var(--primary);
             color: white;
             border: none;
-            padding: 0.75rem;
-            font-size: 1rem;
-            border-radius: 0.5rem;
+            padding: 0.85rem 1.25rem;
+            font-size: 0.95rem;
+            border-radius: 0.75rem;
             cursor: pointer;
             font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        button:hover {
-            background: #1d4ed8;
+        button:hover:not(:disabled) {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px -1px rgba(99, 102, 241, 0.3);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            background: rgba(156, 163, 175, 0.15);
+            color: rgba(156, 163, 175, 0.4);
+            box-shadow: none;
+            cursor: not-allowed;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+        }
+
+        .btn-paste {
+            padding: 0 1rem;
+            border-radius: 0 0.75rem 0.75rem 0;
+            border-left: none;
+            white-space: nowrap;
+            width: auto;
+            font-size: 0.85rem;
+        }
+
+        input.has-btn {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .result-container {
+            margin-top: 1.8rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 1.5rem;
         }
 
         .result {
-            margin-top: 2rem;
-            background: #f9fafb;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            border: 1px solid #e5e7eb;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 1.2rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
             word-break: break-all;
-            font-family: monospace;
-            font-size: 0.875rem;
-            color: #111827;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: #a5b4fc;
+            cursor: pointer;
+            max-height: 120px;
+            overflow-y: auto;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .result:hover {
+            border-color: var(--primary);
+            background: rgba(15, 23, 42, 0.95);
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
 
-        .error {
-            color: #dc2626;
-            margin-top: 0.5rem;
-            font-size: 0.875rem;
+        .label-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            background: var(--primary);
+            color: white;
+            border-radius: 4px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
         }
     </style>
 </head>
 
 <body>
 
-    <div class="card">
-        <h1>License Key Generator</h1>
+    <div class="container">
+        <!-- Card 1: License Generator -->
+        <div class="card">
+            <div>
+                <h1>Secure License Generator</h1>
 
-        <div class="form-group">
-            <label for="machineId">Client Machine ID</label>
-            <input type="text" id="machineId" placeholder="e.g. 8c4a-..." required>
+                <div class="alert alert-info">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span><strong>Security:</strong> Licenses are signed using RSA-PSS. You must load your <code>license_private_key.pem</code> (PKCS#8 format) to sign license payloads.</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="privateKeyFile">1. Load Private Key (.pem)</label>
+                    <input type="file" id="privateKeyFile" accept=".pem" onchange="handleFileSelect(event)" style="margin-bottom: 10px;">
+                    <textarea id="privateKeyArea" placeholder="Or paste -----BEGIN PRIVATE KEY----- contents here..." oninput="validateKeyState()"></textarea>
+                </div>
+
+                <div id="keyStatus" class="alert hidden"></div>
+
+                <div class="form-group">
+                    <label for="machineId">2. Client Machine ID</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="machineId" class="has-btn" placeholder="e.g. 8c4a-..." required>
+                        <button type="button" class="btn-paste btn-secondary" onclick="pasteMachineId()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                            Paste
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="uType">3. License Type</label>
+                    <select id="uType">
+                        <option value="pro">Full PRO Version</option>
+                        <option value="trial">Extended Trial</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="expiryDays">4. Valid For (Days)</label>
+                    <input type="number" id="expiryDays" value="365" oninput="updateDatePreview()">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">
+                        Expires on: <strong id="datePreview" style="color: var(--input-focus)">--</strong>
+                    </p>
+                </div>
+            </div>
+
+            <div>
+                <button id="genBtn" onclick="generateKey()" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Generate & Sign License Key
+                </button>
+
+                <div id="resultArea" class="result-container hidden">
+                    <label>Generated License Key (Click to Copy):</label>
+                    <div class="result" id="outputKey" onclick="copyToClipboard(this.textContent)"></div>
+                    <p style="font-size: 0.75rem; color: var(--success); margin-top: 6px; text-align: center;">This key contains the payload and a cryptographic signature.</p>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label for="uType">License Type</label>
-            <select id="uType">
-                <option value="pro">Full PRO Version</option>
-                <option value="trial">Extended Trial</option>
-            </select>
-        </div>
+        <!-- Card 2: Developer Key Pair Utilities -->
+        <div class="card">
+            <div>
+                <h2>RSA-PSS Key Pair Generator</h2>
+                <div class="alert alert-info">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    <span>Need a new secure signature key pair? Generate an RSA-2048 key pair directly in your browser.</span>
+                </div>
 
-        <div class="form-group">
-            <label for="expiryDays">Valid For (Days)</label>
-            <input type="number" id="expiryDays" value="365" oninput="updateDatePreview()">
-            <p style="font-size: 0.8rem; color: #6b7280; margin-top: 4px;">
-                Expires on: <strong id="datePreview" style="color: #2563eb">--</strong>
-            </p>
-            <p style="font-size: 0.8rem; color: #6b7280; margin-top: 4px;">Enter 9999 for Lifetime</p>
-        </div>
+                <button class="btn-secondary" onclick="generateNewKeyPair()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    Generate New Key Pair
+                </button>
 
-        <button onclick="generateKey()">Generate Key</button>
+                <div id="keyPairResult" class="hidden" style="margin-top: 1.5rem;">
+                    <div class="form-group">
+                        <label>Private Key <span class="label-badge">license_private_key.pem</span></label>
+                        <textarea id="genPrivKeyArea" readonly onclick="this.select()"></textarea>
+                        <div class="btn-container">
+                            <button type="button" class="btn-secondary" style="font-size:0.8rem; padding: 0.5rem;" onclick="downloadPemFile(document.getElementById('genPrivKeyArea').value, 'license_private_key.pem')">
+                                Download Private Key
+                            </button>
+                            <button type="button" id="loadIntoGenBtn" style="font-size:0.8rem; padding: 0.5rem;" onclick="loadGeneratedPrivateKey()">
+                                Use in Generator
+                            </button>
+                        </div>
+                    </div>
 
-        <div id="resultArea" class="hidden">
-            <label>Generated License Key:</label>
-            <div class="result" id="outputKey" onclick="copyToClipboard(this.innerText)"></div>
-            <p style="font-size: 0.8rem; color: #10b981; margin-top: 4px; text-align: center;">Click key to copy</p>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>Public Key <span class="label-badge">public_key.pem</span></label>
+                        <textarea id="genPubKeyArea" readonly onclick="this.select()"></textarea>
+                        <div class="btn-container">
+                            <button type="button" class="btn-secondary" style="font-size:0.8rem; padding: 0.5rem;" onclick="downloadPemFile(document.getElementById('genPubKeyArea').value, 'public_key.pem')">
+                                Download Public Key
+                            </button>
+                        </div>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
+                            <strong>Note:</strong> Update the hardcoded <code>PUBLIC_KEY</code> in <code>electron/services/licenseService.ts</code> with this public key.
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
+    <div class="footer">
+        Secure Offline Licensing Utility &bull; Private &amp; Confidential
+    </div>
+
     <script>
-        // --- CRYPTO LOGIC (Must match Electron App) ---
-        // In a real browser environment without Node.js 'crypto' module, we use Web Crypto API.
-        // However, Node's aes-256-cbc matches Web Crypto's AES-CBC.
-        // We need to derive a key from "your-secret-key-32-chars-exactly!!" using scrypt (or just raw bytes if simplified).
-        // In the Electron app I used: crypto.scryptSync(APP_SECRET, 'salt', 32); 
-        // Implementing scrypt in pure JS for this single file without deps is hard.
-
-        // SIMPLIFICATION FOR THIS ADMIN TOOL:
-        // We will assume the user has a modern browser.
-        // Actually, to ensure exact compatibility with Node's `scryptSync` + `createDecipheriv`, 
-        // it is safer to use a simple helper script or just CryptoJS.
-        // BUT since I cannot easily import libraries here in a single file without CDN...
-        // I will use a simple PBKDF2 which is standard in Web Crypto, but Node used scrypt.
-
-        // REFACTOR DECISION:
-        // I should probably change the Electron app to use a simple hashed key or PBKDF2 so I can replicate it here easily.
-        // OR, I can use a CDN for crypto-js.
-
-        const APP_SECRET = 'your-secret-key-32-chars-exactly!!';
+        let loadedPrivateKey = null;
 
         function updateDatePreview() {
             const daysInput = document.getElementById('expiryDays').value;
@@ -167,13 +432,70 @@
 
             const date = new Date();
             date.setDate(date.getDate() + days);
-            // Format to unambiguous style: 02 Jan 2026
             const options = { year: 'numeric', month: 'short', day: '2-digit' };
             previewEl.innerText = date.toLocaleDateString('en-GB', options);
         }
 
-        // Init on load
         updateDatePreview();
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('privateKeyArea').value = e.target.result;
+                validateKeyState();
+            };
+            reader.readAsText(file);
+        }
+
+        async function pasteMachineId() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    document.getElementById('machineId').value = text.trim();
+                } else {
+                    alert("Clipboard is empty.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Could not access clipboard automatically. Please allow permission or paste using Ctrl+V.");
+            }
+        }
+
+        async function validateKeyState() {
+            const pem = document.getElementById('privateKeyArea').value.trim();
+            const statusEl = document.getElementById('keyStatus');
+            const genBtn = document.getElementById('genBtn');
+
+            if (!pem) {
+                statusEl.classList.add('hidden');
+                genBtn.disabled = true;
+                return;
+            }
+
+            try {
+                loadedPrivateKey = await importPrivateKey(pem);
+                statusEl.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span>✓ Private Key Loaded Successfully</span>
+                `;
+                statusEl.className = "alert alert-success";
+                statusEl.classList.remove('hidden');
+                genBtn.disabled = false;
+            } catch (e) {
+                console.error(e);
+                statusEl.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    <span>✗ Invalid Private Key Format (Expected RSA PKCS#8 PEM)</span>
+                `;
+                statusEl.className = "alert alert-error";
+                statusEl.classList.remove('hidden');
+                genBtn.disabled = true;
+                loadedPrivateKey = null;
+            }
+        }
 
         async function generateKey() {
             const mid = document.getElementById('machineId').value.trim();
@@ -185,131 +507,152 @@
                 return;
             }
 
+            if (!loadedPrivateKey) {
+                alert("Please load a valid private key first");
+                return;
+            }
+
             const expiryDate = new Date();
             expiryDate.setDate(expiryDate.getDate() + days);
 
-            const payload = JSON.stringify({
+            const payloadObj = {
                 mid: mid,
                 exp: expiryDate.getTime(),
                 type: type
-            });
+            };
+
+            const payloadStr = JSON.stringify(payloadObj);
 
             try {
-                const encrypted = await encryptAES(payload, APP_SECRET);
+                const encoder = new TextEncoder();
+                const data = encoder.encode(payloadStr);
+
+                // Sign using RSA-PSS
+                const signatureBuffer = await window.crypto.subtle.sign(
+                    {
+                        name: "RSA-PSS",
+                        saltLength: 32,
+                    },
+                    loadedPrivateKey,
+                    data
+                );
+
+                // Format: Base64(Payload):Base64(Signature)
+                const payloadB64 = btoa(unescape(encodeURIComponent(payloadStr)));
+                const signatureB64 = arrayBufferToBase64(signatureBuffer);
+
+                const finalKey = `${payloadB64}:${signatureB64}`.replace(/\s/g, '');
 
                 document.getElementById('resultArea').classList.remove('hidden');
-                document.getElementById('outputKey').innerText = encrypted;
+                document.getElementById('outputKey').innerText = finalKey;
             } catch (e) {
                 console.error(e);
-                alert("Error generating key: " + e.message);
+                alert("Signing failed: " + e.message);
             }
         }
 
-        // --- Compatible Crypto Implementation ---
-        // We need to match Node's:
-        // key = scryptSync(password, 'salt', 32)
-        // cipher = createCipheriv('aes-256-cbc', key, iv)
+        // --- Keypair Generator Implementation ---
 
-        async function encryptAES(text, password) {
-            // 1. Derive Key using PBKDF2 (easier in WebCrypto) - WAIT, Node used scrypt.
-            // I will change the Node implementation to use a raw key for simplicity if I can't match it.
-            // But I already wrote the Node code.
+        async function generateNewKeyPair() {
+            try {
+                const keyPair = await window.crypto.subtle.generateKey(
+                    {
+                        name: "RSA-PSS",
+                        modulusLength: 2048,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: "SHA-256"
+                    },
+                    true,
+                    ["sign", "verify"]
+                );
 
-            // Let's use CryptoJS via CDN for easiest compatibility with "standard" crypto names if I were using it.
-            // But since I am using built-in node crypto...
-            // Let's try to do it:
+                const privateDer = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+                const publicDer = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
 
-            // Actually, for this specific admin tool, I will use a simple polyfill logic or assuming I can use proper WebCrypto scrypt.
-            // Chrome 105+ supports scrypt in WebCrypto.
+                const privatePem = `-----BEGIN PRIVATE KEY-----\n${arrayBufferFormat(arrayBufferToBase64(privateDer))}\n-----END PRIVATE KEY-----`;
+                const publicPem = `-----BEGIN PUBLIC KEY-----\n${arrayBufferFormat(arrayBufferToBase64(publicDer))}\n-----END PUBLIC KEY-----`;
 
-            // Let's use a bundled approach: I'll inject a minified crypto-js or similar? No, too big.
+                document.getElementById('genPrivKeyArea').value = privatePem;
+                document.getElementById('genPubKeyArea').value = publicPem;
+                document.getElementById('keyPairResult').classList.remove('hidden');
 
-            // ALTERNATIVE:
-            // Since this file is for the ADMIN (USER), he can run it.
-            // I will implement a "Raw Key" approach in the Electron app instead of Scrypt to make this easier?
-            // No, Scrypt is better.
+                document.getElementById('loadIntoGenBtn').disabled = false;
 
-            // Let's use the Web Crypto API to derive the key.
-            // Note: Node's scrypt default params are N=16384, r=8, p=1.
-            // Web Crypto doesn't have scrypt everywhere easily.
-
-            // CHANGE OF PLAN:
-            // I will update the Electron App (licenseService.ts) to use a SIMPLE 32-byte key directly from the string (padded).
-            // This avoids the scrypt complexity disparity between Node and Browser for this simple tool.
-
-            // See Step 2 Modification Plan below.
-
-            return "Please update licenseService.ts to use raw key first!";
-        }
-
-        async function getKeyMaterial(password) {
-            const enc = new TextEncoder();
-            return window.crypto.subtle.importKey(
-                "raw",
-                enc.encode(password),
-                { name: "PBKDF2" },
-                false,
-                ["deriveBits", "deriveKey"]
-            );
-        }
-
-        async function deriveKey(password) {
-            // We will switch to PBKDF2 in Electron too, it's standard everywhere.
-            // Or easier: Just use the password directly if it's 32 chars.
-            const enc = new TextEncoder();
-            const keyData = enc.encode(password).slice(0, 32); // Ensure 32 bytes
-
-            return window.crypto.subtle.importKey(
-                "raw",
-                keyData,
-                "AES-CBC",
-                false,
-                ["encrypt"]
-            );
-        }
-
-        // Re-implementing ensure 32-byte key from string
-        async function encryptAES_Simple(text, secret) {
-            // Prepare Key (First 32 chars of secret)
-            const enc = new TextEncoder();
-            let keyBytes = enc.encode(secret);
-            if (keyBytes.length > 32) keyBytes = keyBytes.slice(0, 32);
-            if (keyBytes.length < 32) {
-                const temp = new Uint8Array(32);
-                temp.set(keyBytes);
-                keyBytes = temp;
+                alert("RSA-PSS 2048 key pair generated successfully!");
+            } catch (e) {
+                console.error(e);
+                alert("Key generation failed: " + e.message);
             }
-
-            const key = await window.crypto.subtle.importKey(
-                "raw",
-                keyBytes,
-                { name: "AES-CBC" },
-                false,
-                ["encrypt"]
-            );
-
-            const iv = window.crypto.getRandomValues(new Uint8Array(16));
-            const encodedText = enc.encode(text);
-
-            const encrypted = await window.crypto.subtle.encrypt(
-                { name: "AES-CBC", iv: iv },
-                key,
-                encodedText
-            );
-
-            // Convert to Hex
-            const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-            const encHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-            return ivHex + ':' + encHex;
         }
 
-        // Override the function
-        window.encryptAES = encryptAES_Simple;
+        function arrayBufferFormat(b64) {
+            return b64.match(/.{1,64}/g).join('\n');
+        }
+
+        function downloadPemFile(content, filename) {
+            const blob = new Blob([content], { type: 'application/x-pem-file' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadGeneratedPrivateKey() {
+            const pem = document.getElementById('genPrivKeyArea').value;
+            if (!pem) return;
+            document.getElementById('privateKeyArea').value = pem;
+            validateKeyState();
+            document.getElementById('privateKeyFile').value = ''; // Clear file input
+            alert("Loaded generated private key into the signing form.");
+        }
+
+        // --- Helper Functions ---
+
+        async function importPrivateKey(pem) {
+            const b64 = pem
+                .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+                .replace(/-----END PRIVATE KEY-----/g, "")
+                .replace(/\s/g, "");
+
+            const binaryDer = base64ToArrayBuffer(b64);
+
+            return window.crypto.subtle.importKey(
+                "pkcs8",
+                binaryDer,
+                {
+                    name: "RSA-PSS",
+                    hash: "SHA-256",
+                },
+                false,
+                ["sign"]
+            );
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                alert("Copied to clipboard!");
+                alert("License key copied to clipboard!");
             });
         }
     </script>

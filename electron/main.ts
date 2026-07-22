@@ -873,7 +873,13 @@ ipcMain.handle('updater:check', async () => {
 });
 
 ipcMain.handle('updater:install', () => {
-  autoUpdater.quitAndInstall();
+  try {
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  } catch (err: any) {
+    console.error('Update install failed:', err);
+    return { error: err.message || 'Failed to install update' };
+  }
 });
 
 app.on('window-all-closed', () => {

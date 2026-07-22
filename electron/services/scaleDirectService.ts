@@ -171,10 +171,21 @@ export class ScaleDirectService {
             try {
                 require('fs').writeFileSync('C:\\temp_scale_debug.txt', res.data || 'No data');
             } catch (e) { }
-            // The raw string response needs parsing on front-end or here. 
-            // Sending raw data back to renderer to conform to Item[] structure.
         }
         return res;
+    }
+
+    public async readWeight(): Promise<SyncResponse> {
+        console.log(`[Scale ${this.ip}] Requesting live weight...`);
+        // Command for scale weight fetch (Industrial standard UPL WEI)
+        const res = await this.sendCommandWithRetry('UPL', 'WEI');
+        if (res.success && res.data) {
+            // Expected format: "0.500" or "\t0.500\t"
+            const raw = res.data.toString().trim();
+            const weight = parseFloat(raw.replace(/[^\d.]/g, '')) || 0;
+            return { success: true, message: 'Weight read successfully', data: weight };
+        }
+        return { success: false, message: res.message || 'Failed to read weight from scale' };
     }
 
     private buildPluLine(product: any): string {

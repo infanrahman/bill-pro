@@ -1,362 +1,495 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // Assuming react-router-dom is used, typically via hash routing in Electron
+import { useParams, useNavigate } from 'react-router-dom';
 import { db, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, Phone, Mail, MapPin, Building, FileText, RotateCcw, CreditCard } from 'lucide-react';
+import { 
+ ArrowLeft, Phone, Mail, MapPin, Building, FileText, 
+ RotateCcw, CreditCard, Receipt, Clock, Sparkles, Filter,
+ ChevronDown, Search, ArrowUpRight, TrendingDown, History
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useNotification } from '../../contexts/NotificationContext';
+import clsx from 'clsx';
+import Modal from '../../components/UI/Modal';
 
 const SupplierDetails = () => {
-    const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
-    const { t } = useTranslation();
-    const { formatCurrency, formatDate } = useSettings();
-    const { addToast } = useNotification();
-    const supplierId = id!;
+ const { id } = useParams<{ id: string }>();
+ const navigate = useNavigate();
+ const { t } = useTranslation();
+ const { formatCurrency, formatDate } = useSettings();
+ const { addToast } = useNotification();
+ const supplierId = id!;
 
-    const supplier = useLiveQuery(() => db.suppliers.get(supplierId), [supplierId]);
+ const [searchQuery, setSearchQuery] = React.useState('');
+ const [sortBy, setSortBy] = React.useState<string>('date_desc');
+ const [activeTab, setActiveTab] = React.useState<'bills' | 'history'>('bills');
+ const [selectedBill, setSelectedBill] = React.useState<any>(null);
+ const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
 
-    // Fetch History
-    const purchases = useLiveQuery(() =>
-        db.purchases.where('supplierId').equals(supplierId).reverse().sortBy('date'),
-        [supplierId]);
+ // Payment Form State
+ const [payAmount, setPayAmount] = React.useState('');
+ const [payDate, setPayDate] = React.useState(new Date().toISOString().split('T')[0]);
+ const [payMode, setPayMode] = React.useState('cash');
+ const [payNote, setPayNote] = React.useState('');
 
-    const payments = useLiveQuery(() =>
-        db.purchasePayments.where('supplierId').equals(supplierId).reverse().sortBy('date'),
-        [supplierId]);
+ const supplier = useLiveQuery(() => db.suppliers.get(supplierId), [supplierId]);
 
-    // Merge and Sort
-    const history = React.useMemo(() => {
-        return [...(purchases || []), ...(payments || [])].sort((a: any, b: any) =>
-            new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
-    }, [purchases, payments]);
+ const purchases = useLiveQuery(() =>
+ db.purchases.where('supplierId').equals(supplierId).reverse().sortBy('date'),
+ [supplierId]);
 
-    const [activeTab, setActiveTab] = React.useState<'bills' | 'history'>('bills');
-    const [selectedBill, setSelectedBill] = React.useState<any>(null); // For payment modal
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
+ const payments = useLiveQuery(() =>
+ db.purchasePayments.where('supplierId').equals(supplierId).reverse().sortBy('date'),
+ [supplierId]);
 
-    // Payment Form State
-    const [payAmount, setPayAmount] = React.useState('');
-    const [payDate, setPayDate] = React.useState(new Date().toISOString().split('T')[0]);
-    const [payMode, setPayMode] = React.useState('cash');
-    const [payNote, setPayNote] = React.useState('');
+ const history = React.useMemo(() => {
+ return [...(purchases || []), ...(payments || [])];
+ }, [purchases, payments]);
 
-    const handleOpenPayment = (bill: any) => {
-        setSelectedBill(bill);
-        const due = bill.totalAmount - (bill.paidAmount || 0);
-        setPayAmount(due.toString());
-        setPayDate(new Date().toISOString().split('T')[0]);
-        setPayMode('cash');
-        setPayNote('');
-        setIsPaymentModalOpen(true);
-    };
+ const filteredHistory = React.useMemo(() => {
+ let items = [...history];
 
-    const handleSavePayment = async () => {
-        if (!selectedBill || !payAmount) return;
-        const amount = parseFloat(payAmount);
-        if (isNaN(amount) || amount <= 0) {
-            addToast(t('pos.invalid_amount'), 'error');
-            return;
-        }
+ if (searchQuery) {
+ const lower = searchQuery.toLowerCase();
+ items = items.filter(item => {
+ const isPayment = 'paymentMode' in item;
+ if (isPayment) {
+ return item.reference?.toLowerCase().includes(lower) || item.note?.toLowerCase().includes(lower);
+ } else {
+ return item.orderNumber?.toLowerCase().includes(lower) || item.notes?.toLowerCase().includes(lower);
+ }
+ });
+ }
 
-        try {
-            await db.transaction('rw', [db.purchases, db.purchasePayments, db.suppliers], async () => {
-                // 1. Record Payment linked to Bill
-                await db.purchasePayments.add({
-                    ...createRecordMetadata(),
-                    purchaseId: selectedBill.id,
-                    supplierId: supplierId,
-                    amount: amount,
-                    date: new Date(payDate),
-                    paymentMode: payMode as any,
-                    note: payNote,
-                    reference: selectedBill.orderNumber // Store bill no as reference
-                });
+ items.sort((a: any, b: any) => {
+ if (sortBy === 'date_desc') return new Date(b.date).getTime() - new Date(a.date).getTime();
+ if (sortBy === 'date_asc') return new Date(a.date).getTime() - new Date(b.date).getTime();
+ if (sortBy === 'amount_desc') {
+ const amtA = 'amount' in a ? a.amount : a.totalAmount;
+ const amtB = 'amount' in b ? b.amount : b.totalAmount;
+ return amtB - amtA;
+ }
+ if (sortBy === 'amount_asc') {
+ const amtA = 'amount' in a ? a.amount : a.totalAmount;
+ const amtB = 'amount' in b ? b.amount : b.totalAmount;
+ return amtA - amtB;
+ }
+ return 0;
+ });
 
-                // 2. Update Bill Status
-                const newPaid = (selectedBill.paidAmount || 0) + amount;
-                const newStatus = newPaid >= selectedBill.totalAmount - 0.01 ? 'completed' : 'pending'; // Tolerance
+ return items;
+ }, [history, searchQuery, sortBy]);
 
-                await db.purchases.update(selectedBill.id, {
-                    ...updateRecordMetadata(),
-                    paidAmount: newPaid,
-                    status: newStatus
-                });
+ const outstandingBills = React.useMemo(() => {
+ return purchases?.filter((p: any) => !p.type || p.type === 'bill').filter((p: any) => {
+ const paid = p.paidAmount || 0;
+ return (p.totalAmount - paid) > 0.01;
+ }) || [];
+ }, [purchases]);
 
-                // 3. Update Supplier Total Balance
-                const currentSup = await db.suppliers.get(supplierId);
-                if (currentSup) {
-                    await db.suppliers.update(supplierId, {
-                        ...updateRecordMetadata(),
-                        balance: currentSup.balance - amount
-                    });
-                }
-            });
+ const filteredBills = React.useMemo(() => {
+ let bills = [...outstandingBills];
 
-            addToast(t('purchases.payment_recorded'), 'success');
-            setIsPaymentModalOpen(false);
-        } catch (e) {
-            console.error(e);
-            addToast(t('common.error'), 'error');
-        }
-    };
+ if (searchQuery) {
+ const lower = searchQuery.toLowerCase();
+ bills = bills.filter(b => 
+ b.orderNumber?.toLowerCase().includes(lower) || 
+ b.notes?.toLowerCase().includes(lower)
+);
+ }
 
-    if (!supplier) return <div className="p-8 text-center">{t('common.loading')}</div>;
+ bills.sort((a: any, b: any) => {
+ if (sortBy === 'date_desc') return new Date(b.date).getTime() - new Date(a.date).getTime();
+ if (sortBy === 'date_asc') return new Date(a.date).getTime() - new Date(b.date).getTime();
+ if (sortBy === 'amount_desc') return b.totalAmount - a.totalAmount;
+ if (sortBy === 'amount_asc') return a.totalAmount - b.totalAmount;
+ if (sortBy === 'balance_desc') {
+ const dueA = a.totalAmount - (a.paidAmount || 0);
+ const dueB = b.totalAmount - (b.paidAmount || 0);
+ return dueB - dueA;
+ }
+ if (sortBy === 'balance_asc') {
+ const dueA = a.totalAmount - (a.paidAmount || 0);
+ const dueB = b.totalAmount - (b.paidAmount || 0);
+ return dueA - dueB;
+ }
+ return 0;
+ });
 
-    // Filter for Tabs
-    const outstandingBills = purchases?.filter((p: any) => !p.type || p.type === 'bill').filter((p: any) => {
-        const paid = p.paidAmount || 0;
-        return (p.totalAmount - paid) > 0.01;
-    }) || [];
+ return bills;
+ }, [outstandingBills, searchQuery, sortBy]);
 
-    return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <button
-                    onClick={() => navigate('/suppliers')}
-                    className="flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                >
-                    <ArrowLeft size={20} />
-                    {t('common.back')}
-                </button>
-            </div>
+ const handleOpenPayment = (bill: any) => {
+ setSelectedBill(bill);
+ const due = bill.totalAmount - (bill.paidAmount || 0);
+ setPayAmount(due.toString());
+ setPayDate(new Date().toISOString().split('T')[0]);
+ setPayMode('cash');
+ setPayNote('');
+ setIsPaymentModalOpen(true);
+ };
 
-            {/* Profile Card */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row gap-6 items-start md:items-center">
-                <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-2xl shrink-0">
-                    {supplier.name.charAt(0)}
-                </div>
+ const handleSavePayment = async () => {
+ if (!selectedBill || !payAmount) return;
+ const amount = parseFloat(payAmount);
+ if (isNaN(amount) || amount <= 0) {
+ addToast(t('pos.invalid_amount'), 'error');
+ return;
+ }
 
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold dark:text-white mb-2">{supplier.name}</h1>
-                    <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400">
-                        {supplier.phone && <div className="flex items-center gap-1"><Phone size={14} /> {supplier.phone}</div>}
-                        {supplier.email && <div className="flex items-center gap-1"><Mail size={14} /> {supplier.email}</div>}
-                        {supplier.location && <div className="flex items-center gap-1"><MapPin size={14} /> {supplier.location}</div>}
-                        {supplier.taxNumber && <div className="flex items-center gap-1"><Building size={14} /> {supplier.taxNumber}</div>}
-                    </div>
-                </div>
+ try {
+ await db.transaction('rw', [db.purchases, db.purchasePayments, db.suppliers], async () => {
+ await db.purchasePayments.add({
+ ...createRecordMetadata(),
+ purchaseId: selectedBill.id,
+ supplierId: supplierId,
+ amount: amount,
+ date: new Date(payDate),
+ paymentMode: payMode as any,
+ note: payNote,
+ reference: selectedBill.orderNumber
+ });
 
-                <div className="text-right bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl">
-                    <p className="text-xs text-slate-500 uppercase font-bold mb-1">{t('purchases.balance_due')}</p>
-                    <p className={`text-3xl font-bold ${supplier.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                        {formatCurrency(supplier.balance)}
-                    </p>
-                </div>
-            </div>
+ const newPaid = (selectedBill.paidAmount || 0) + amount;
+ const newStatus = newPaid >= selectedBill.totalAmount - 0.01 ? 'completed' : 'pending';
 
-            {/* Tabs */}
-            <div className="flex gap-4 border-b dark:border-slate-700">
-                <button
-                    onClick={() => setActiveTab('bills')}
-                    className={`pb-3 border-b-2 font-medium transition-colors ${activeTab === 'bills'
-                        ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
-                >
-                    {t('purchases.outstanding_bills')} ({outstandingBills.length})
-                </button>
-                <button
-                    onClick={() => setActiveTab('history')}
-                    className={`pb-3 border-b-2 font-medium transition-colors ${activeTab === 'history'
-                        ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
-                >
-                    {t('common.history')}
-                </button>
-            </div>
+ await db.purchases.update(selectedBill.id, {
+ ...updateRecordMetadata(),
+ paidAmount: newPaid,
+ status: newStatus
+ });
 
-            {/* Content */}
-            {activeTab === 'bills' ? (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm">
-                            <tr>
-                                <th className="p-4">{t('common.date')}</th>
-                                <th className="p-4">{t('purchases.bill_no')}</th>
-                                <th className="p-4 text-right">{t('purchases.total')}</th>
-                                <th className="p-4 text-right">{t('purchases.paid')}</th>
-                                <th className="p-4 text-right">{t('purchases.balance')}</th>
-                                <th className="p-4 text-right">{t('common.actions')}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {outstandingBills.length === 0 ? (
-                                <tr><td colSpan={6} className="p-8 text-center text-slate-500">{t('purchases.no_outstanding_bills')}</td></tr>
-                            ) : outstandingBills.map((bill: any) => {
-                                const paid = bill.paidAmount || 0;
-                                const due = bill.totalAmount - paid;
-                                return (
-                                    <tr key={bill.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                        <td className="p-4 dark:text-slate-300 font-mono text-sm">{formatDate(bill.date)}</td>
-                                        <td className="p-4 font-bold dark:text-white">{bill.orderNumber}</td>
-                                        <td className="p-4 text-right dark:text-white">{formatCurrency(bill.totalAmount)}</td>
-                                        <td className="p-4 text-right text-green-600">{formatCurrency(paid)}</td>
-                                        <td className="p-4 text-right text-red-500 font-bold">{formatCurrency(due)}</td>
-                                        <td className="p-4 text-right">
-                                            <button
-                                                onClick={() => handleOpenPayment(bill)}
-                                                className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg text-sm font-medium transition-colors"
-                                            >
-                                                {t('purchases.pay_now')}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            ) : (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm">
-                            <tr>
-                                <th className="p-4">{t('common.date')}</th>
-                                <th className="p-4">{t('common.type')}</th>
-                                <th className="p-4">{t('common.reference')}</th>
-                                <th className="p-4 text-right">{t('common.amount')}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {history.map((item: any) => {
-                                const isPayment = 'paymentMode' in item;
-                                const isReturn = !isPayment && item.type === 'return';
+ const currentSup = await db.suppliers.get(supplierId);
+ if (currentSup) {
+ await db.suppliers.update(supplierId, {
+ ...updateRecordMetadata(),
+ balance: currentSup.balance - amount
+ });
+ }
+ });
 
-                                return (
-                                    <tr key={`${isPayment ? 'pay' : 'po'}-${item.id}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                        <td className="p-4 dark:text-slate-300 font-mono text-sm">{formatDate(item.date)}</td>
-                                        <td className="p-4">
-                                            {isPayment ? (
-                                                <span className="flex items-center gap-1 text-green-600 font-medium text-sm">
-                                                    <CreditCard size={14} /> {t('purchases.payment')} ({item.paymentMode})
-                                                </span>
-                                            ) : isReturn ? (
-                                                <span className="flex items-center gap-1 text-amber-600 font-medium text-sm">
-                                                    <RotateCcw size={14} /> {t('purchases.return')}
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-1 text-blue-600 font-medium text-sm">
-                                                    <FileText size={14} /> {t('purchases.bill')}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 dark:text-slate-300 text-sm">
-                                            {isPayment ? (
-                                                <div className="flex flex-col">
-                                                    {item.reference && <span className="font-bold text-xs bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded w-fit mb-0.5">{item.reference}</span>}
-                                                    <span>{item.note || '-'}</span>
-                                                </div>
-                                            ) : item.orderNumber}
-                                        </td>
-                                        <td className={`p-4 text-right font-bold ${isPayment || isReturn ? 'text-green-600' : 'text-red-500'}`}>
-                                            {isPayment ? `-${formatCurrency(item.amount)}` :
-                                                isReturn ? `-${formatCurrency(item.totalAmount)}` :
-                                                    `+${formatCurrency(item.totalAmount)}`}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                            {history.length === 0 && (
-                                <tr>
-                                    <td colSpan={4} className="p-8 text-center text-slate-500">
-                                        {t('common.no_history')}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+ addToast(t('purchases.payment_recorded'), 'success');
+ setIsPaymentModalOpen(false);
+ } catch (e) {
+ console.error(e);
+ addToast(t('common.error'), 'error');
+ }
+ };
 
-            {/* Payment Modal */}
-            {isPaymentModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm animate-in fade-in zoom-in duration-200">
-                        <div className="p-6">
-                            <h3 className="text-xl font-bold dark:text-white mb-4">{t('purchases.record_payment')}</h3>
+ if (!supplier) return (
+ <div className="flex items-center justify-center h-96">
+ <div className="w-12 h-12 border-4 border-slate-900 dark:border-white border-t-transparent rounded-full"/>
+ </div>
+);
 
-                            <div className="space-y-4">
-                                <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg">
-                                    <div className="flex justify-between text-sm mb-1 text-slate-500">
-                                        <span>{t('purchases.bill_no')}</span>
-                                        <span className="font-mono">{selectedBill?.orderNumber}</span>
-                                    </div>
-                                    <div className="flex justify-between font-bold dark:text-white">
-                                        <span>{t('purchases.balance_due')}</span>
-                                        <span className="text-red-500">{formatCurrency(parseFloat(payAmount))}</span>
-                                    </div>
-                                </div>
+ return (
+ <div className="space-y-8 pb-10">
+ {/* Header Bar */}
+ <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ 
+ 
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-8 relative z-10">
+ <div className="flex items-center gap-6">
+ <button type="button"
+ 
+ 
+ onClick={() => navigate('/suppliers')}
+ className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-600 hover:text-slate-900 dark:hover:text-white"
+ >
+ <ArrowLeft size={24} />
+ </button>
+ <div>
+ <h1 className="text-3xl font-semibold dark:text-white tracking-tight uppercase">{supplier.name}</h1>
+ <p className="text-slate-700 dark:text-slate-300 font-bold mt-1 text-[10px] uppercase tracking-wider flex items-center gap-2">
+ <Building size={12} className="text-slate-900 dark:text-white"/>
+ {t('suppliers.title')} / {t('common.details')}
+ </p>
+ </div>
+ </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('common.amount')}</label>
-                                    <input
-                                        type="number"
-                                        className="w-full p-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold text-lg"
-                                        value={payAmount}
-                                        onChange={e => setPayAmount(e.target.value)}
-                                        autoFocus
-                                    />
-                                </div>
+ <div className="bg-rose-500/10 dark:bg-rose-500/5 border border-rose-500/20 p-5 rounded-2xl flex items-center gap-6">
+ <div className="p-4 bg-rose-500 text-white rounded-2xl">
+ <TrendingDown size={24} />
+ </div>
+ <div>
+ <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider mb-1">{t('purchases.balance_due')}</p>
+ <p className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+ {formatCurrency(supplier.balance)}
+ </p>
+ </div>
+ </div>
+ </div>
+ </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('common.date')}</label>
-                                    <input
-                                        type="date"
-                                        className="w-full p-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                        value={payDate}
-                                        onChange={e => setPayDate(e.target.value)}
-                                    />
-                                </div>
+ <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+ {/* Left Side: Contact Info */}
+ <div className="lg:col-span-1 space-y-6">
+ <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30">
+ <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-8 flex items-center gap-3">
+ <Sparkles size={14} className="text-slate-900 dark:text-white"/>
+ {t('common.contact_info')}
+ </h3>
+ 
+ <div className="space-y-6">
+ {[
+ { icon: Phone, label: t('suppliers.phone'), value: supplier.phone, color: 'blue' },
+ { icon: Mail, label: t('suppliers.email'), value: supplier.email || '---', color: 'indigo' },
+ { icon: Building, label: t('suppliers.tax_id'), value: supplier.taxNumber || '---', color: 'emerald' },
+ { icon: MapPin, label: t('suppliers.location'), value: supplier.location || '---', color: 'rose' }
+ ].map((info, i) => (
+ <div key={i} className="group/info">
+ <p className="text-[9px] font-semibold text-slate-600 uppercase tracking-wider mb-2 ml-1">{info.label}</p>
+ <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 group-hover/info:border-slate-900/30 dark:group-hover/info:border-white/30">
+ <info.icon size={16} className="text-slate-600 group-hover/info:text-slate-900 dark:group-hover/info:text-white"/>
+ <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{info.value}</span>
+ </div>
+ </div>
+))}
+ </div>
+ </div>
+ </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('purchases.payment_mode')}</label>
-                                    <select
-                                        className="w-full p-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                        value={payMode}
-                                        onChange={e => setPayMode(e.target.value)}
-                                    >
-                                        <option value="cash">{t('pos.pay_cash')}</option>
-                                        <option value="card">{t('pos.pay_card')}</option>
-                                        <option value="upi">{t('pos.pay_digital')}</option>
-                                        <option value="bank_transfer">{t('pos.pay_bank')}</option>
-                                    </select>
-                                </div>
+ {/* Right Side: Bills & History */}
+ <div className="lg:col-span-3 space-y-8">
+ {/* Tabs & Search Header */}
+ <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row items-center justify-between gap-4">
+ <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-full md:w-auto">
+ {[
+ { id: 'bills', label: t('purchases.outstanding_bills'), icon: Receipt, count: outstandingBills.length },
+ { id: 'history', label: t('common.history'), icon: History, count: history.length }
+ ].map((tab) => (
+ <button type="button"
+ key={tab.id}
+ onClick={() => setActiveTab(tab.id as any)}
+ className={clsx(
+"flex items-center gap-3 px-6 py-3 rounded-xl text-[10px] font-semibold uppercase tracking-wider",
+ activeTab === tab.id 
+ ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white ' 
+ : 'text-slate-600 hover:text-slate-600 dark:hover:text-slate-200'
+)}
+ >
+ <tab.icon size={14} />
+ <span>{tab.label}</span>
+ <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[8px]">{tab.count}</span>
+ </button>
+))}
+ </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('common.notes')}</label>
-                                    <textarea
-                                        className="w-full p-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                        rows={2}
-                                        value={payNote}
-                                        onChange={e => setPayNote(e.target.value)}
-                                        placeholder={t('common.notes_placeholder')}
-                                    />
-                                </div>
-                            </div>
+ <div className="flex items-center gap-4 w-full md:w-auto">
+ <div className="relative flex-1 md:w-64 group">
+ <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"size={16} />
+ <input
+ type="text"
+ placeholder={t('common.search')}
+ value={searchQuery}
+ onChange={(e) => setSearchQuery(e.target.value)}
+ className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
+ />
+ </div>
+ <div className="relative group">
+ <select 
+ value={sortBy}
+ onChange={(e) => setSortBy(e.target.value)}
+ className="appearance-none pl-10 pr-10 py-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
+ >
+ <option value="date_desc">{t('common.date_desc')}</option>
+ <option value="date_asc">{t('common.date_asc')}</option>
+ <option value="amount_desc">{t('common.amount_desc')}</option>
+ <option value="amount_asc">{t('common.amount_asc')}</option>
+ </select>
+ <Filter size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"/>
+ <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"/>
+ </div>
+ </div>
+ </div>
 
-                            <div className="flex gap-3 mt-6">
-                                <button
-                                    onClick={() => setIsPaymentModalOpen(false)}
-                                    className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-                                >
-                                    {t('common.cancel')}
-                                </button>
-                                <button
-                                    onClick={handleSavePayment}
-                                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold"
-                                >
-                                    {t('common.save')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+ {/* Content List */}
+ <div className="space-y-4">
+ <>
+ {(activeTab === 'bills' ? filteredBills : filteredHistory).map((item: any, idx) => {
+ const isPayment = 'paymentMode' in item;
+ const isReturn = !isPayment && item.type === 'return';
+ const due = !isPayment ? (item.totalAmount - (item.paidAmount || 0)) : 0;
+
+ return (
+ <div
+ key={`${isPayment ? 'pay' : 'po'}-${item.id}`}
+ 
+ 
+ 
+ className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row items-center justify-between gap-6 hover:border-slate-900/30 dark:hover:border-white/30 group"
+ >
+ <div className="flex items-center gap-6 flex-1">
+ <div className={clsx(
+"w-14 h-14 rounded-2xl flex items-center justify-center",
+ isPayment ?"bg-emerald-500/10 text-emerald-600": 
+ isReturn ?"bg-amber-500/10 text-amber-600":"bg-slate-900 dark:bg-white text-white"
+)}>
+ {isPayment ? <CreditCard size={24} /> : isReturn ? <RotateCcw size={24} /> : <Receipt size={24} />}
+ </div>
+ <div>
+ <div className="flex items-center gap-3">
+ <h4 className="text-lg font-semibold dark:text-white tracking-tight uppercase">
+ {isPayment ? t('purchases.payment') : item.orderNumber}
+ </h4>
+ <span className={clsx(
+"text-[8px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider",
+ isPayment ?"bg-emerald-500/10 text-emerald-500": 
+ isReturn ?"bg-amber-500/10 text-amber-500":"bg-slate-900 dark:bg-white text-white"
+)}>
+ {isPayment ? item.paymentMode : isReturn ? t('purchases.return') : t('purchases.bill')}
+ </span>
+ </div>
+ <div className="flex items-center gap-4 mt-1">
+ <p className="text-[10px] font-bold text-slate-600 flex items-center gap-2">
+ <Clock size={12} />
+ {formatDate(item.date)}
+ </p>
+ {item.reference && (
+ <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-tight bg-slate-100 dark:bg-slate-900 px-2 rounded">
+ REF: {item.reference}
+ </p>
+)}
+ </div>
+ </div>
+ </div>
+
+ <div className="flex items-center gap-10">
+ <div className="text-right">
+ <p className="text-[9px] font-semibold text-slate-600 uppercase tracking-wider mb-1">{t('common.amount')}</p>
+ <p className={clsx(
+"text-xl font-semibold tracking-tight",
+ isPayment || isReturn ? 'text-emerald-500' : 'text-rose-500'
+)}>
+ {(isPayment || isReturn) ? '-' : '+'}{formatCurrency(isPayment ? item.amount : item.totalAmount)}
+ </p>
+ </div>
+
+ {activeTab === 'bills' && !isPayment && !isReturn && due > 0 && (
+ <button type="button"
+ 
+ 
+ onClick={() => handleOpenPayment(item)}
+ className="px-6 py-3 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-semibold text-[10px] uppercase tracking-wider"
+ >
+ {t('purchases.pay_now')}
+ </button>
+)}
+ </div>
+ </div>
+);
+ })}
+ </>
+
+ {(activeTab === 'bills' ? filteredBills : filteredHistory).length === 0 && (
+ <div className="py-20 text-center bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700/50">
+ <FileText size={64} strokeWidth={1} className="mx-auto mb-4 text-slate-300"/>
+ <p className="text-lg font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-tight">{t('common.no_results')}</p>
+ </div>
+)}
+ </div>
+ </div>
+ </div>
+
+ {/* Payment Modal */}
+ <Modal
+ isOpen={isPaymentModalOpen}
+ onClose={() => setIsPaymentModalOpen(false)}
+ title={t('purchases.record_payment')}
+ >
+ <div className="p-8 space-y-6">
+ <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800">
+ <div className="flex justify-between items-center mb-4">
+ <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">{t('purchases.bill_no')}</span>
+ <span className="text-sm font-semibold dark:text-white uppercase">{selectedBill?.orderNumber}</span>
+ </div>
+ <div className="flex justify-between items-center">
+ <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">{t('purchases.balance_due')}</span>
+ <span className="text-2xl font-semibold text-rose-500 tracking-tight">{formatCurrency(parseFloat(payAmount) || 0)}</span>
+ </div>
+ </div>
+
+ <div className="grid grid-cols-2 gap-6">
+ <div className="space-y-2">
+ <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider ml-1">{t('common.amount')}</label>
+ <div className="relative">
+ <input
+ type="number"
+ className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-semibold text-xl dark:text-white outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20"
+ value={payAmount}
+ onChange={e => setPayAmount(e.target.value)}
+ autoFocus
+ />
+ </div>
+ </div>
+ <div className="space-y-2">
+ <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider ml-1">{t('common.date')}</label>
+ <input
+ type="date"
+ className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20"
+ value={payDate}
+ onChange={e => setPayDate(e.target.value)}
+ />
+ </div>
+ </div>
+
+ <div className="space-y-2">
+ <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider ml-1">{t('purchases.payment_mode')}</label>
+ <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+ {[
+ { id: 'cash', label: t('pos.pay_cash') },
+ { id: 'card', label: t('pos.pay_card') },
+ { id: 'upi', label: t('pos.pay_digital') },
+ { id: 'bank_transfer', label: t('pos.pay_bank') }
+ ].map((m) => (
+ <button type="button"
+ key={m.id}
+ onClick={() => setPayMode(m.id)}
+ className={clsx(
+"p-3 rounded-xl text-[10px] font-semibold uppercase tracking-wider border",
+ payMode === m.id 
+ ? 'bg-slate-900 dark:bg-white border-transparent text-white ' 
+ : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600'
+)}
+ >
+ {m.label}
+ </button>
+))}
+ </div>
+ </div>
+
+ <div className="space-y-2">
+ <label className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider ml-1">{t('common.notes')}</label>
+ <textarea
+ className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20"
+ rows={2}
+ value={payNote}
+ onChange={e => setPayNote(e.target.value)}
+ placeholder={t('common.notes_placeholder')}
+ />
+ </div>
+
+ <div className="flex gap-4 pt-4">
+ <button type="button"
+ onClick={() => setIsPaymentModalOpen(false)}
+ className="flex-1 px-8 py-4 text-slate-600 hover:text-slate-900 dark:hover:text-white font-semibold text-xs uppercase tracking-wider"
+ >
+ {t('common.cancel')}
+ </button>
+ <button type="button"
+ 
+ 
+ onClick={handleSavePayment}
+ className="flex-1 px-8 py-4 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
+ >
+ {t('common.save')}
+ </button>
+ </div>
+ </div>
+ </Modal>
+ </div>
+);
 };
 
 export default SupplierDetails;

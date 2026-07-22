@@ -1,9 +1,10 @@
 
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { db, type Item, type Purchase, type PurchaseItem, type SyncEntity, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Search, Trash2, Save, FileText, ShoppingCart, RotateCcw, Edit, CheckCircle, Printer, Download, ShieldOff, CreditCard, Eye } from 'lucide-react';
+import { Plus, Search, Trash2, Save, FileText, ShoppingCart, RotateCcw, Edit, CheckCircle, Printer, Download, ShieldOff, CreditCard, Eye, ArrowLeft } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../../components/UI/Modal';
 import ConfirmationModal from '../../components/UI/ConfirmationModal';
@@ -19,6 +20,7 @@ import BarcodeModal from '../Inventory/BarcodeModal';
 import PurchaseDetailsModal from '../../components/UI/PurchaseDetailsModal';
 
 const PurchaseOrders = () => {
+    const navigate = useNavigate();
     const { addToast, addNotification } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
     const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
@@ -636,7 +638,7 @@ const PurchaseOrders = () => {
             <div className="flex justify-between items-center">
                 {hasPermission('purchases_add') ? (
                     <button
-                        onClick={() => { resetForm(); setIsModalOpen(true); }}
+                        onClick={() => navigate(`/purchase/new?type=${activeTab}`)}
                         className={`flex items-center gap-2 text-white px-4 py-2 rounded-lg transition-colors shadow-sm ${activeTab === 'return' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
                             }`}
                     >

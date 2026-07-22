@@ -49,10 +49,15 @@ export const AutoUpdateBanner: React.FC = () => {
     };
   }, []);
 
-  const handleInstall = () => {
+  const handleInstall = async () => {
     const updater = (window as any).electron?.updater;
     if (updater) {
-      updater.install();
+      const result = await updater.install();
+      if (result?.error) {
+        setStatus('error');
+        setErrorMsg(result.error);
+        setVisible(true);
+      }
     }
   };
 

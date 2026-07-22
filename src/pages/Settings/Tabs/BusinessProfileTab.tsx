@@ -1,349 +1,326 @@
 import React, { useState, useEffect } from 'react';
-import { Save, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { Save, Loader2, Store, Phone, Globe, FileText, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../contexts/AuthContext';
 import { db } from '../../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import SettingsCard from '../components/SettingsCard';
+import FormRow from '../components/FormRow';
+import SettingsSectionHeader from '../components/SettingsSectionHeader';
 
 interface BusinessDetails {
-    name: string;
-    address: string;
-    phone: string;
-    email: string;
-    gstin: string; // Tax Registration No
-    logoUrl?: string;
-    country?: string;
-    taxName?: string; // e.g. 'VAT', 'GST'
-    taxRate?: number;
-    vatNo?: string;
-    crNo?: string;
-    pincode?: string;
-    terms?: string; // Terms & Conditions
+ name: string;
+ address: string;
+ phone: string;
+ email: string;
+ gstin: string;
+ logoUrl?: string;
+ country?: string;
+ taxName?: string;
+ taxRate?: number;
+ vatNo?: string;
+ crNo?: string;
+ pincode?: string;
+ terms?: string;
+ primaryTitle?: string;
+ secondaryTitle?: string;
 }
 
-interface BusinessProfileTabProps {
-    onBack?: () => void; // callback to switch back to settings tab list
-}
+const BusinessProfileTab: React.FC = () => {
+ const { activeBranchId } = useAuth();
+ const { addToast } = useNotification();
+ const { t } = useTranslation();
+ const [isSaving, setIsSaving] = useState(false);
 
-const BusinessProfileTab: React.FC<BusinessProfileTabProps> = ({ onBack }) => {
-    const { activeBranchId } = useAuth();
-    const { addToast } = useNotification();
-    const { t } = useTranslation();
-    const [isSaving, setIsSaving] = useState(false);
-    const [showSuccess, setShowSuccess] = useState(false);
+ const branch = useLiveQuery(async () => {
+ if (!activeBranchId) return undefined;
+ return await db.branches.get(activeBranchId);
+ }, [activeBranchId]);
 
-    const branch = useLiveQuery(async () => {
-        if (!activeBranchId) return undefined;
-        return await db.branches.get(activeBranchId);
-    }, [activeBranchId]);
+ const [details, setDetails] = useState<BusinessDetails>({
+ name: '', address: '', phone: '', email: '', gstin: '',
+ country: 'Saudi Arabia', taxName: 'VAT', taxRate: 15,
+ crNo: '', vatNo: '', primaryTitle: '', secondaryTitle: ''
+ });
 
-    const [details, setDetails] = useState<BusinessDetails>({
-        name: '', address: '', phone: '', email: '', gstin: '',
-        country: 'Saudi Arabia', taxName: 'VAT', taxRate: 15,
-        crNo: '', vatNo: ''
-    });
+ useEffect(() => {
+ if (branch) {
+ setDetails({
+ name: branch.name || '',
+ address: branch.location || '',
+ phone: branch.phone || '',
+ email: branch.email || '',
+ gstin: branch.gstin || branch.vatNo || '',
+ logoUrl: branch.logoUrl || '',
+ country: branch.country || 'Saudi Arabia',
+ taxName: branch.taxName || 'VAT',
+ taxRate: branch.taxRate || 0,
+ pincode: branch.pincode ? branch.pincode.toString() : '',
+ terms: branch.terms || '',
+ crNo: branch.crNo || '',
+ vatNo: branch.vatNo || branch.gstin || '',
+ primaryTitle: branch.primaryTitle || '',
+ secondaryTitle: branch.secondaryTitle || ''
+ });
+ }
+ }, [branch]);
 
-    useEffect(() => {
-        if (branch) {
-            setDetails({
-                name: branch.name || '',
-                address: branch.location || '',
-                phone: branch.phone || '',
-                email: branch.email || '',
-                gstin: branch.gstin || '',
-                logoUrl: branch.logoUrl,
-                country: branch.country || 'India',
-                taxName: branch.taxName || 'GST',
-                taxRate: branch.taxRate || 0,
-                pincode: branch.pincode ? branch.pincode.toString() : '',
-                terms: branch.terms || '',
-                crNo: branch.crNo || '',
-                vatNo: branch.vatNo || branch.gstin || ''
-            });
-        } else {
-            // Fallback to localStorage for initial migration or if no branch record exists
-            const saved = localStorage.getItem('businessDetails');
-            if (saved) {
-                setDetails(JSON.parse(saved));
-            }
-        }
-    }, [branch]);
+ const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+ setDetails({ ...details, [e.target.name]: e.target.value });
+ };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        setDetails({ ...details, [e.target.name]: e.target.value });
-    };
+ const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+ const file = e.target.files?.[0];
+ if (file) {
+ const reader = new FileReader();
+ reader.onloadend = () => {
+ const base64String = reader.result as string;
+ if (base64String.length > 700000) {
+ addToast(t('settings.profile.logo_too_large'), 'error');
+ return;
+ }
+ setDetails(prev => ({ ...prev, logoUrl: base64String }));
+ };
+ reader.readAsDataURL(file);
+ }
+ };
 
-    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result as string;
-                if (base64String.length > 700000) {
-                    addToast(t('settings.profile.logo_too_large'), 'error');
-                    return;
-                }
-                setDetails(prev => ({ ...prev, logoUrl: base64String }));
-            };
-            reader.readAsDataURL(file);
-        }
-    };
+ const handleSubmit = async (e: React.FormEvent) => {
+ e.preventDefault();
+ if (isSaving) return;
+ setIsSaving(true);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isSaving) return;
+ try {
+ if (activeBranchId) {
+ const updatePayload: any = {
+ id: activeBranchId,
+ branchId: activeBranchId,
+ isMaster: true,
+ status: 'active',
+ name: (details.name || '').trim(),
+ location: (details.address || '').trim(),
+ phone: (details.phone || '').trim(),
+ email: (details.email || '').trim(),
+ gstin: (details.gstin || '').trim(),
+ logoUrl: details.logoUrl || null,
+ country: details.country || 'Saudi Arabia',
+ taxName: details.taxName || 'VAT',
+ taxRate: details.taxRate ? Number(details.taxRate) : 0,
+ pincode: details.pincode || '',
+ terms: details.terms || '',
+ crNo: (details.crNo || '').trim(),
+ vatNo: (details.gstin || '').trim(),
+ primaryTitle: (details.primaryTitle || '').trim(),
+ secondaryTitle: (details.secondaryTitle || '').trim(),
+ updatedAt: new Date()
+ };
 
-        setIsSaving(true);
-        setShowSuccess(false);
+ await db.branches.put(updatePayload);
+ localStorage.setItem('businessDetails', JSON.stringify(details));
+ addToast(t('settings.profile.saved_success'), 'success');
+ }
+ } catch (error) {
+ addToast(t('common.error'), 'error');
+ } finally {
+ setIsSaving(false);
+ }
+ };
 
-        try {
-            if (activeBranchId) {
-                const existing = await db.branches.get(activeBranchId);
+ return (
+ <div className="space-y-12 pb-20">
+ <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+ <SettingsSectionHeader 
+ title={t('settings.profile.title')} 
+ description={t('settings.profile.subtitle', 'Establish your business identity, contact details, and tax credentials')} 
+ />
+ <button type="button"
+ 
+ 
+ onClick={handleSubmit}
+ disabled={isSaving}
+ className="flex items-center gap-3 px-10 py-4 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-semibold text-xs uppercase tracking-wide disabled:opacity-50 shrink-0"
+ >
+ {isSaving ? <Loader2 size={18} className=""/> : <Save size={18} />}
+ {isSaving ? t('common.saving') : t('common.save_profile')}
+ </button>
+ </div>
 
-                // Only update profile-related fields — never overwrite id, isMaster, status, etc.
-                const updatePayload: Record<string, any> = {
-                    name: details.name || '',
-                    location: details.address || '',
-                    phone: details.phone || '',
-                    email: details.email || '',
-                    gstin: details.gstin || '',
-                    logoUrl: details.logoUrl || null,
-                    country: details.country || 'Saudi Arabia',
-                    taxName: details.taxName || 'VAT',
-                    taxRate: details.taxRate ? Number(details.taxRate) : 0,
-                    pincode: details.pincode || '',
-                    terms: details.terms || '',
-                    crNo: details.crNo || '',
-                    vatNo: details.vatNo || details.gstin || '',
-                    updatedAt: new Date()
-                };
+ <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+ 
+ <div className="space-y-10">
+ <SettingsCard title={t('settings.profile.brand_section', 'Identity & Brand')} icon={Store}>
+ <div className="space-y-8">
+ <div className="flex flex-col items-center gap-6 p-8 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 group relative overflow-hidden">
+ 
+ <div className="relative group/logo">
+ <div className="w-32 h-32 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 flex items-center justify-center overflow-hidden group-hover/logo:scale-110">
+ {details.logoUrl ? (
+ <img src={details.logoUrl} alt="Logo"className="w-full h-full object-contain"/>
+) : (
+ <ImageIcon size={40} className="text-slate-300"/>
+)}
+ </div>
+ <label className="absolute inset-0 flex items-center justify-center bg-slate-900 text-white opacity-0 group-hover/logo:opacity-100 rounded-2xl cursor-pointer">
+ <input type="file"accept="image/*"onChange={handleLogoUpload} className="hidden"/>
+ <div className="text-center">
+ <ImageIcon size={24} className="mx-auto mb-2"/>
+ <span className="text-[10px] font-semibold uppercase tracking-wider">{t('common.change')}</span>
+ </div>
+ </label>
+ </div>
+ <div className="text-center relative z-10">
+ <p className="text-sm font-semibold text-slate-800 dark:text-white uppercase tracking-tight">{t('settings.profile.shop_logo')}</p>
+ <p className="text-[10px] font-bold text-slate-600 mt-2 uppercase tracking-wider">{t('settings.profile.logo_hint', 'Max 700KB. PNG/JPG recommended.')}</p>
+ </div>
+ </div>
 
-                if (existing) {
-                    await db.branches.update(activeBranchId, updatePayload);
-                } else {
-                    await db.branches.add({
-                        id: activeBranchId,
-                        branchId: activeBranchId,
-                        ...updatePayload,
-                        isMaster: false,
-                        status: 'active',
-                        createdAt: new Date(),
-                    } as any);
-                }
+ <FormRow label={t('settings.profile.primary_title', 'Primary Title')} inline={false}>
+ <div className="relative w-full group">
+ <Sparkles size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"/>
+ <input
+ type="text"
+ name="primaryTitle"
+ value={details.primaryTitle || ''}
+ onChange={handleChange}
+ className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-xs uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ placeholder="Enter primary title"
+ />
+ </div>
+ </FormRow>
 
-                localStorage.setItem('businessDetails', JSON.stringify({ ...details, crNo: details.crNo || '', vatNo: details.vatNo || details.gstin || '' }));
+ <FormRow label={t('settings.profile.secondary_title', 'Secondary Title')} inline={false}>
+ <div className="relative w-full group">
+ <Sparkles size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"/>
+ <input
+ type="text"
+ name="secondaryTitle"
+ value={details.secondaryTitle || ''}
+ onChange={handleChange}
+ className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-xs uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ placeholder="Enter secondary title"
+ />
+ </div>
+ </FormRow>
 
-                setShowSuccess(true);
-                addToast(t('settings.profile.saved_success'), 'success');
+ <FormRow label={t('settings.profile.business_name')} inline={false}>
+ <div className="relative w-full group">
+ <Store size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"/>
+ <input
+ type="text"
+ name="name"
+ value={details.name}
+ onChange={handleChange}
+ className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-xs uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ placeholder="Enter business name"
+ required
+ />
+ </div>
+ </FormRow>
+ </div>
+ </SettingsCard>
 
-                setTimeout(() => {
-                    setShowSuccess(false);
-                    if (onBack) onBack();
-                }, 1000);
-            }
-        } catch (error) {
-            console.error("Error saving business profile:", error);
-            addToast(t('common.error'), 'error');
-        } finally {
-            setIsSaving(false);
-        }
-    };
+ <SettingsCard title={t('settings.profile.contact_section', 'Communication')} icon={Phone}>
+ <div className="divide-y divide-slate-100/50 dark:divide-slate-700/50">
+ <FormRow label={t('settings.profile.phone')} icon={Phone}>
+ <input
+ type="text"
+ name="phone"
+ value={details.phone}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ />
+ </FormRow>
+ <FormRow label={t('settings.profile.email')} icon={Globe}>
+ <input
+ type="email"
+ name="email"
+ value={details.email}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ />
+ </FormRow>
+ </div>
+ </SettingsCard>
+ </div>
 
-    return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-            {/* Header with Back Button */}
-            <div className="flex items-center gap-3 mb-6">
-                {onBack && (
-                    <button
-                        type="button"
-                        onClick={onBack}
-                        className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
-                        title={t('common.back')}
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                )}
-                <h2 className="text-lg font-semibold dark:text-white">{t('settings.profile.title')}</h2>
-            </div>
+ <div className="space-y-10">
+ <SettingsCard title={t('settings.profile.legal_section', 'Legal & Compliance')} icon={FileText}>
+ <div className="space-y-8">
+ <FormRow label={t('settings.profile.address')} inline={false}>
+ <textarea
+ name="address"
+ value={details.address}
+ onChange={handleChange}
+ rows={3}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-h-[120px]"
+ placeholder="Full business address"
+ />
+ </FormRow>
 
-            {/* Success Banner */}
-            {showSuccess && (
-                <div className="mb-4 flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 animate-fade-in">
-                    <CheckCircle size={18} />
-                    <span className="text-sm font-medium">{t('settings.profile.saved_success')}</span>
-                </div>
-            )}
+ <div className="grid grid-cols-2 gap-6">
+ <FormRow label={t('settings.profile.pincode')} inline={false}>
+ <input
+ type="text"
+ name="pincode"
+ value={details.pincode || ''}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ />
+ </FormRow>
+ <FormRow label={t('settings.profile.country')} inline={false}>
+ <select
+ name="country"
+ value={details.country || 'Saudi Arabia'}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white cursor-pointer"
+ >
+ <option value="Saudi Arabia">Saudi Arabia (KSA)</option>
+ <option value="UAE">UAE</option>
+ <option value="India">India</option>
+ <option value="USA">USA</option>
+ </select>
+ </FormRow>
+ </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+ <div className="grid grid-cols-2 gap-6 pt-6 border-t border-slate-100/50 dark:border-slate-700/50">
+ <FormRow label={t('settings.profile.tax_reg_no')} inline={false}>
+ <input
+ type="text"
+ name="gstin"
+ value={details.gstin}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ />
+ </FormRow>
+ <FormRow label={t('settings.profile.cr_no')} inline={false}>
+ <input
+ type="text"
+ name="crNo"
+ value={details.crNo || ''}
+ onChange={handleChange}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ />
+ </FormRow>
+ </div>
+ </div>
+ </SettingsCard>
 
-                {/* Logo Upload */}
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="w-20 h-20 rounded-lg border border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-900">
-                        {details.logoUrl ? (
-                            <img src={details.logoUrl} alt="Logo" className="w-full h-full object-contain" />
-                        ) : (
-                            <span className="text-xs text-slate-400">{t('settings.profile.no_logo')}</span>
-                        )}
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.shop_logo')}</label>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLogoUpload}
-                            className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                        />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.business_name')}</label>
-                        <input
-                            type="text"
-                            name="name"
-                            value={details.name}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.phone')}</label>
-                        <input
-                            type="text"
-                            name="phone"
-                            value={details.phone}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-
-                    {/* Email moved here */}
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.email')}</label>
-                        <input
-                            type="email"
-                            name="email"
-                            value={details.email}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.address')}</label>
-                        <textarea
-                            name="address"
-                            value={details.address}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                            rows={2}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.pincode')}</label>
-                        <input
-                            type="text"
-                            name="pincode"
-                            value={details.pincode || ''}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.country')}</label>
-                        <select
-                            name="country"
-                            value={details.country || 'India'}
-                            onChange={(e) => setDetails({ ...details, country: e.target.value })}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 dark:text-white"
-                        >
-                            <option value="India">India</option>
-                            <option value="Saudi Arabia">Saudi Arabia (KSA)</option>
-                            <option value="UAE">United Arab Emirates (UAE)</option>
-                            <option value="USA">United States</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.tax_name')}</label>
-                        <input
-                            type="text"
-                            name="taxName"
-                            value={details.taxName || ''}
-                            placeholder="VAT"
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.tax_rate')}</label>
-                        <input
-                            type="number"
-                            name="taxRate"
-                            value={details.taxRate || ''}
-                            placeholder="15"
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.tax_reg_no')}</label>
-                        <input
-                            type="text"
-                            name="gstin"
-                            value={details.gstin}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.cr_no')}</label>
-                        <input
-                            type="text"
-                            name="crNo"
-                            value={details.crNo || ''}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                        />
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('settings.profile.terms_conditions')}</label>
-                        <textarea
-                            name="terms"
-                            value={details.terms || ''}
-                            placeholder={t('settings.profile.terms_placeholder', 'Example: Goods once sold will not be returned.')}
-                            onChange={handleChange}
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent dark:text-white"
-                            rows={3}
-                        />
-                    </div>
-                </div>
-                <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-semibold transition-colors w-full md:w-auto min-w-[140px]"
-                >
-                    {isSaving ? (
-                        <>
-                            <Loader2 size={18} className="animate-spin" />
-                            {t('common.saving', 'Saving...')}
-                        </>
-                    ) : (
-                        <>
-                            <Save size={18} /> {t('common.save')}
-                        </>
-                    )}
-                </button>
-            </form>
-        </div>
-    );
+ <SettingsCard title={t('settings.profile.fine_print', 'Terms & Conditions')} icon={FileText}>
+ <FormRow label={t('settings.profile.terms_conditions')} inline={false} description={t('settings.profile.terms_hint', 'Example: Goods once sold will not be returned.')}>
+ <textarea
+ name="terms"
+ value={details.terms || ''}
+ onChange={handleChange}
+ rows={3}
+ className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-h-[100px]"
+ />
+ </FormRow>
+ </SettingsCard>
+ </div>
+ </form>
+ </div>
+);
 };
 
 export default BusinessProfileTab;
-

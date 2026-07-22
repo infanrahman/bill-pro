@@ -1,663 +1,809 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Banknote, CreditCard, Smartphone, Clock, SplitSquareHorizontal, ChevronRight } from 'lucide-react';
-import { db } from '../../services/db';
+import { Banknote, CreditCard, Smartphone, Clock, SplitSquareHorizontal, ChevronRight, XCircle, Receipt } from 'lucide-react';
+import clsx from 'clsx';
+import { db, getCurrentBranchId } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Invoice, InvoiceItem } from '../../services/db';
+import { calculateLineItem, calculateDocumentTotals } from '../../utils/financials';
 import { useNotification } from '../../contexts/NotificationContext';
 import { generateInvoicePDF, generateKitchenTicketPDF } from '../../services/invoiceGenerator';
 
 import Modal from '../../components/UI/Modal';
 import { useSettings } from '../../contexts/SettingsContext';
+import { messagingService } from '../../services/messagingService';
 
 interface CheckoutModalProps {
-    isOpen: boolean;
-    onClose: (success?: boolean) => void;
-    subTotal: number;
-    items: InvoiceItem[];
-    customerName?: string;
-    customerId?: string;
-    customerVatNumber?: string; // New Prop
-    notes?: string;
-    orderType?: 'dine_in' | 'parcel' | 'pickup' | 'delivery';
-    onConfirm: (data: Partial<Invoice>) => Promise<string>; // Updated return type
-    invoiceNumber?: string;
+ isOpen: boolean;
+ onClose: (success?: boolean) => void;
+ subTotal: number;
+ items: InvoiceItem[];
+ customerName?: string;
+ customerId?: string;
+ customerVatNumber?: string; // New Prop
+ notes?: string;
+ orderType?: 'dine_in' | 'parcel' | 'pickup' | 'delivery';
+ onConfirm: (data: Partial<Invoice>) => Promise<string>; // Updated return type
+ invoiceNumber?: string;
+ showPayLater?: boolean;
 }
 
-const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal, items, customerName, customerId, customerVatNumber, notes, orderType, onConfirm, invoiceNumber }) => {
-    // Moved early return to after hooks to satisfy Rules of Hooks
-    const { addToast } = useNotification();
-    const { formatCurrency, settings } = useSettings();
-    const { t } = useTranslation();
+const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal, items, customerName, customerId, customerVatNumber, notes, orderType, onConfirm, invoiceNumber, showPayLater }) => {
+ // Moved early return to after hooks to satisfy Rules of Hooks
+ const { addToast } = useNotification();
+ const { formatCurrency, settings } = useSettings();
+ const { t } = useTranslation();
 
-    const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
-    const [discountValue, setDiscountValue] = useState(0);
-    const [taxPercent, setTaxPercent] = useState(15); // Default 15% (KSA Standard)
-    const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | 'upi' | 'credit' | 'split'>('cash');
-    const [amountPaidInput, setAmountPaidInput] = useState('');
-    const [splitCashInput, setSplitCashInput] = useState('');
-    const [splitCardInput, setSplitCardInput] = useState('');
-    const [dueDate, setDueDate] = useState('');
-    
+ const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+ const [discountValue, setDiscountValue] = useState(0);
+ const [taxPercent, setTaxPercent] = useState(15); // Default 15% (KSA Standard)
+ const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | 'upi' | 'credit' | 'split' | 'pay_later'>('cash');
+ const [amountPaidInput, setAmountPaidInput] = useState('');
+ const [splitCashInput, setSplitCashInput] = useState('');
+ const [splitCardInput, setSplitCardInput] = useState('');
+ const [dueDate, setDueDate] = useState('');
+ 
 
-    // ... existing code ...
+ // ... existing code ...
 
-    // Load Tax Defaults from Settings
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [businessDetails, setBusinessDetails] = useState<any>(null);
-    const [printerConfig, setPrinterConfig] = useState<any>(null);
-    const [shouldPrint, setShouldPrint] = useState(true);
+ // Load Tax Defaults from Settings
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ const [businessDetails, setBusinessDetails] = useState<any>(null);
+ const [printerConfig, setPrinterConfig] = useState<any>(null);
+ const [shouldPrint, setShouldPrint] = useState(true);
 
-    // Reset state when modal opens to ensure a clean transaction every time
-    React.useEffect(() => {
-        if (isOpen) {
-            setPaymentMode('cash');
-            setAmountPaidInput('');
-            setSplitCashInput('');
-            setSplitCardInput('');
-            setDiscountValue(0);
-            setDiscountType('percentage');
-            setDueDate('');
-            setIsProcessing(false);
-        }
-    }, [isOpen, t]);
+ // Reset state when modal opens to ensure a clean transaction every time
+ React.useEffect(() => {
+ if (isOpen) {
+ setPaymentMode('cash');
+ setAmountPaidInput('');
+ setSplitCashInput('');
+ setSplitCardInput('');
+ setDiscountValue(0);
+ setDiscountType('percentage');
+ setDueDate('');
+ setIsProcessing(false);
+ }
+ }, [isOpen, t]);
 
-    React.useEffect(() => {
-        const saved = localStorage.getItem('businessDetails');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            setBusinessDetails(parsed);
-            if (parsed.country === 'Saudi Arabia') setTaxPercent(15);
-        }
+ React.useEffect(() => {
+ const saved = localStorage.getItem('businessDetails');
+ if (saved) {
+ const parsed = JSON.parse(saved);
+ setBusinessDetails(parsed);
+ if (parsed.country === 'Saudi Arabia') setTaxPercent(15);
+ }
 
-        // Load Printer Config
-        const savedPrinter = localStorage.getItem('printerConfig');
-        if (savedPrinter) {
-            setPrinterConfig(JSON.parse(savedPrinter));
-        }
-    }, []);
+ // Load Printer Config
+ const savedPrinter = localStorage.getItem('printerConfig');
+ if (savedPrinter) {
+ setPrinterConfig(JSON.parse(savedPrinter));
+ }
+ }, []);
 
-    const customer = useLiveQuery(async () => {
-        return customerId ? await db.customers.get(customerId) : undefined;
-    }, [customerId]);
+ const customer = useLiveQuery(async () => {
+ return customerId ? await db.customers.get(customerId) : undefined;
+ }, [customerId]);
 
 
 
-    // --- ZATCA Standard Calculations ---
-    const effectiveDiscountPercent = discountType === 'percentage' 
-        ? discountValue 
-        : (subTotal > 0 ? (discountValue / subTotal) * 100 : 0);
+ // --- ZATCA Standard Calculations ---
+ // --- ZATCA Standard Calculations ---
+ const financialResults = React.useMemo(() => {
+ const lineResults = items.map(item => calculateLineItem({
+ price: item.price,
+ quantity: item.quantity,
+ taxRate: item.taxRate ?? taxPercent,
+ taxType: item.taxType || 'exclusive',
+ discount: item.discountAmount || 0,
+ discountType: 'fixed'
+ }, settings.applyTax));
 
-    const discountAmount = discountType === 'percentage' 
-        ? Math.round((subTotal * discountValue / 100) * 100) / 100
-        : discountValue;
+ return {
+ lineResults,
+ totals: calculateDocumentTotals(lineResults, discountValue, discountType, settings.applyTax)
+ };
+ }, [items, discountValue, discountType, taxPercent, settings.applyTax]);
 
-    let totalTaxAmount = 0;
-    let totalGrandTotal = 0;
-    let totalSubTotal = 0;
+ const { subTotal: subTotalSum, taxAmount, discountAmount, grandTotal } = financialResults.totals;
 
-    const mappedItems = items.map((item: any) => {
-        const lineTotal = Math.round((item.price * item.quantity) * 100) / 100;
-        const lineDiscount = Math.round((lineTotal * (effectiveDiscountPercent / 100)) * 100) / 100;
-        const lineNet = Math.round((lineTotal - lineDiscount) * 100) / 100;
+ const mappedItems = items.map((item: any, index: number) => {
+ const lineFin = financialResults.lineResults[index];
+ return {
+ ...item,
+ taxAmount: lineFin.taxAmount,
+ netAmount: lineFin.taxableAmount,
+ total: lineFin.total,
+ discountAmount: lineFin.discountAmount,
+ taxRate: item.taxRate ?? taxPercent,
+ taxType: item.taxType || 'exclusive'
+ };
+ });
 
-        const rate = item.taxRate ?? taxPercent;
-        const type = item.taxType || 'exclusive';
+ 
+ let amountPaid = 0;
+ if (paymentMode === 'split') {
+ const cashValue = parseFloat(splitCashInput) || 0;
+ const cardValue = parseFloat(splitCardInput) || 0;
+ amountPaid = Math.round((cashValue + cardValue) * 100) / 100;
+ } else if (paymentMode === 'credit') {
+ amountPaid = Math.round((parseFloat(amountPaidInput) || 0) * 100) / 100;
+ } else if (paymentMode === 'cash') {
+ amountPaid = amountPaidInput ? Math.round((parseFloat(amountPaidInput) || 0) * 100) / 100 : grandTotal;
+ } else if (paymentMode === 'pay_later') {
+ amountPaid = 0; // Pay Later = no payment yet
+ } else {
+ amountPaid = grandTotal;
+ }
 
-        let lineTax = 0;
-        let lineFinal = 0;
+ const isPayLater = paymentMode === 'pay_later';
+ const balanceDue = isPayLater ? 0 : Math.max(0, Math.round((grandTotal - amountPaid) * 100) / 100);
+ const changeAmount = isPayLater ? 0 : Math.round(Math.max(0, amountPaid - grandTotal) * 100) / 100;
 
-        if (settings.applyTax) {
-            if (type === 'inclusive') {
-                const base = lineNet / (1 + (rate / 100));
-                lineTax = Math.round((lineNet - base) * 100) / 100;
-                lineFinal = lineNet;
-            } else {
-                lineTax = Math.round((lineNet * (rate / 100)) * 100) / 100;
-                lineFinal = Math.round((lineNet + lineTax) * 100) / 100;
-            }
-        } else {
-            lineTax = 0;
-            lineFinal = lineNet;
-        }
+ const isCreditSale = !isPayLater && (paymentMode === 'credit' || balanceDue > 0.01);
+ const currentBalance = customer?.balance || 0;
+ const limit = customer?.creditLimit || 0;
+ const canTakeCredit = !!customerId && (limit === 0 || (currentBalance + balanceDue <= limit)); // Assuming 0 limit means strict 0.
+ // Actually, usually if creditLimit is 0 it means"No Credit".
+ // If we want"No Limit", we'd use -1 or null.
+ // Let's stick to: if limit > 0 check it. If limit === 0, then Credit NOT Allowed.
 
-        totalSubTotal = Math.round((totalSubTotal + lineTotal) * 100) / 100;
-        totalTaxAmount = Math.round((totalTaxAmount + lineTax) * 100) / 100;
-        totalGrandTotal = Math.round((totalGrandTotal + lineFinal) * 100) / 100;
+ const [isProcessing, setIsProcessing] = useState(false);
 
-        return {
-            ...item,
-            taxRate: rate,
-            taxType: type,
-            taxAmount: lineTax,
-            discountAmount: lineDiscount,
-            netAmount: lineNet,
-            total: lineFinal
-        };
-    });
+ const handleConfirm = async () => {
+ if (isProcessing) return; // Prevent double click
 
-    const taxAmount = totalTaxAmount;
-    const grandTotal = totalGrandTotal;
-    const subTotalSum = totalSubTotal; 
-    
-    let amountPaid = 0;
-    if (paymentMode === 'split') {
-        const cashValue = parseFloat(splitCashInput) || 0;
-        const cardValue = parseFloat(splitCardInput) || 0;
-        amountPaid = Math.round((cashValue + cardValue) * 100) / 100;
-    } else if (paymentMode === 'credit') {
-        amountPaid = Math.round((parseFloat(amountPaidInput) || 0) * 100) / 100;
-    } else if (paymentMode === 'cash') {
-        amountPaid = amountPaidInput ? Math.round((parseFloat(amountPaidInput) || 0) * 100) / 100 : grandTotal;
-    } else {
-        amountPaid = grandTotal;
-    }
+ if (isCreditSale && !canTakeCredit) {
+ addToast(t('pos.credit_error_msg'), 'error');
+ return;
+ }
 
-    const balanceDue = Math.max(0, Math.round((grandTotal - amountPaid) * 100) / 100);
-    const changeAmount = Math.round(Math.max(0, amountPaid - grandTotal) * 100) / 100;
+ if (paymentMode === 'credit' && !dueDate) {
+ addToast(t('pos.due_date_required'), 'error');
+ return;
+ }
 
-    const isCreditSale = paymentMode === 'credit' || balanceDue > 0.01;
-    const currentBalance = customer?.balance || 0;
-    const limit = customer?.creditLimit || 0;
-    const canTakeCredit = !!customerId && (limit === 0 || (currentBalance + balanceDue <= limit)); // Assuming 0 limit means strict 0.
-    // Actually, usually if creditLimit is 0 it means "No Credit".
-    // If we want "No Limit", we'd use -1 or null.
-    // Let's stick to: if limit > 0 check it. If limit === 0, then Credit NOT Allowed.
+ if (paymentMode === 'split') {
+ const cardAmt = parseFloat(splitCardInput) || 0;
+ const cashAmt = parseFloat(splitCashInput) || 0;
+ if (cardAmt + cashAmt < grandTotal) {
+ addToast(t('pos.insufficient_payment') || 'Split payment must cover the full amount', 'error');
+ return;
+ }
+ }
 
-    const [isProcessing, setIsProcessing] = useState(false);
+ setIsProcessing(true); // Start Loading
 
-    const handleConfirm = async () => {
-        if (isProcessing) return; // Prevent double click
+ let finalStatus: 'paid' | 'pending' | 'partial' = 'paid';
+ if (balanceDue > 0.01) {
+ finalStatus = amountPaid > 0 ? 'partial' : 'pending';
+ }
 
-        if (isCreditSale && !canTakeCredit) {
-            addToast(t('pos.credit_error_msg'), 'error');
-            return;
-        }
+ // Use createdAt index (NOT id — UUIDs are not sequential!)
+ const lastInvoice = await db.invoices.orderBy('createdAt').last();
+ let nextNumber = 1;
+ if (lastInvoice && lastInvoice.invoiceNumber) {
+ // Extract only digits from the invoice number (handles"INV-003","SO-123","RET-5", etc.)
+ const lastNumStr = lastInvoice.invoiceNumber.replace(/\D/g, '');
+ const lastNum = parseInt(lastNumStr, 10);
+ if (!isNaN(lastNum)) {
+ nextNumber = lastNum + 1;
+ }
+ }
+ 
+ // Prefix logic: SO- for orders, INV- for invoices
+ let prefix = 'INV-';
+ if (isPayLater) prefix = 'SO-';
+ 
+ // If we are editing an Order but paying now (not as pay_later), we need a NEW INV- number.
+ // If we are editing an Order and staying as pay_later (unlikely from UI but possible), we keep SO number.
+ const shouldRegenerate = invoiceNumber && invoiceNumber.startsWith('SO-') && !isPayLater;
+ const finalInvoiceNumber = (shouldRegenerate || !invoiceNumber) ? (prefix + nextNumber.toString().padStart(3, '0')) : invoiceNumber;
 
-        if (paymentMode === 'credit' && !dueDate) {
-            addToast(t('pos.due_date_required'), 'error');
-            return;
-        }
+ // Generate Token Number for Cafe Mode (Daily Reset) or if Print Token is enabled
+ let tokenNumber: string | undefined;
+ const savedPrinterConfig = localStorage.getItem('printerConfig');
+ const currentPrinterConfig = savedPrinterConfig ? JSON.parse(savedPrinterConfig) : printerConfig;
 
-        if (paymentMode === 'split') {
-            const cardAmt = parseFloat(splitCardInput) || 0;
-            const cashAmt = parseFloat(splitCashInput) || 0;
-            if (cardAmt + cashAmt < grandTotal) {
-                addToast(t('pos.insufficient_payment') || 'Split payment must cover the full amount', 'error');
-                return;
-            }
-        }
+ if (settings.cafeMode || currentPrinterConfig?.printToken) {
+ const startOfToday = new Date();
+ startOfToday.setHours(0, 0, 0, 0);
 
-        setIsProcessing(true); // Start Loading
+ const lastTokenInvoice = await db.invoices
+ .where('createdAt').above(startOfToday)
+ .filter((inv: any) => !!inv.tokenNumber)
+ .last();
+ 
+ let nextToken = 1;
+ if (lastTokenInvoice?.tokenNumber) {
+ const lastToken = parseInt(lastTokenInvoice.tokenNumber, 10);
+ if (!isNaN(lastToken)) {
+ nextToken = lastToken + 1;
+ }
+ }
+ tokenNumber = nextToken.toString().padStart(3, '0');
+ }
 
-        let finalStatus: 'paid' | 'pending' | 'partial' = 'paid';
-        if (balanceDue > 0.01) {
-            finalStatus = amountPaid > 0 ? 'partial' : 'pending';
-        }
+ const invoiceData: any = {
+ invoiceNumber: finalInvoiceNumber,
+ tokenNumber: tokenNumber, // Add token if generated
+ customerName: customerName || t('pos.walk_in_customer'),
+ customerId: customerId,
+ customerVatNumber: customerId ? (customerVatNumber || undefined) : undefined,
+ items: mappedItems, // Use the pre-calculated mapped items
+ subTotal: subTotalSum, // Use strictly calculated sum
+ discountAmount,
+ taxAmount: taxAmount,
+ grandTotal: grandTotal,
+ paidAmount: isPayLater ? 0 : Math.round(amountPaid * 100) / 100,
+ remainingAmount: isPayLater ? grandTotal : Math.round(((paymentMode === 'credit' || balanceDue > 0.01) ? (grandTotal - amountPaid) : 0) * 100) / 100,
+ paymentMode: isPayLater ? 'pay_later' : paymentMode,
+ createdAt: new Date(),
+ paymentStatus: isPayLater ? 'pending' : finalStatus,
+ status: isPayLater ? 'pending' : finalStatus,
+ type: isPayLater ? 'order' : 'invoice',
+ dueDate: (finalStatus !== 'paid' && dueDate) ? new Date(dueDate) : undefined,
+ taxRate: taxPercent,
+ notes: notes,
+ orderType: orderType
+ };
 
-        // Use createdAt index (NOT id — UUIDs are not sequential!)
-        const lastInvoice = await db.invoices.orderBy('createdAt').last();
-        let nextNumber = 1;
-        if (lastInvoice && lastInvoice.invoiceNumber) {
-            // Extract only digits from the invoice number (handles "INV-003", "SO-123", "RET-5", etc.)
-            const lastNumStr = lastInvoice.invoiceNumber.replace(/\D/g, '');
-            const lastNum = parseInt(lastNumStr, 10);
-            if (!isNaN(lastNum)) {
-                nextNumber = lastNum + 1;
-            }
-        }
-        const finalInvoiceNumber = invoiceNumber || nextNumber.toString().padStart(3, '0');
+ try {
+ console.log("DEBUG: Final Invoice Data Payload:", JSON.stringify(invoiceData, null, 2));
+ let newId: string | undefined;
+ // 1. Critical: Save to DB (Await this as it must succeed)
+ newId = await onConfirm(invoiceData);
+ // 2. Success Feedback (Close immediately and reset POS)
+ addToast(isPayLater ? (t('sales.order_created', 'Order saved!')) : t('pos.order_completed_successfully'), 'success');
+ 
+ // Start background tasks before closing
+ const safeBusinessDetails = businessDetails || { name: 'My Shop', address: '', phone: '', email: '' };
+ const isPrintEnabled = !printerConfig?.enableCheckoutPrintToggle || shouldPrint;
+ // Skip printing and ZATCA for Pay Later orders
+ if (!isPayLater && (businessDetails || safeBusinessDetails) && newId) {
+ // Background tasks (Fire & Forget)
+ const printDetails = { ...safeBusinessDetails, taxRate: taxPercent };
+ const printDataForBg = { ...invoiceData, id: newId } as Invoice;
+ setTimeout(async () => {
+ // --- 1. PRE-CALCULATE ZATCA (Once for both printing and reporting) ---
+ let precalculatedQR: string | undefined;
+ let precalculatedXML: string | undefined;
+ let precalculatedHash: string | undefined;
+ let precalculatedUUID: string | undefined;
 
-        // Generate Token Number for Cafe Mode (Daily Reset)
-        let tokenNumber: string | undefined;
-        const savedPrinterConfig = localStorage.getItem('printerConfig');
-        const currentPrinterConfig = savedPrinterConfig ? JSON.parse(savedPrinterConfig) : printerConfig;
+ try {
+ const vatNumberRaw = safeBusinessDetails.gstin || safeBusinessDetails.vatNo || '';
+ const vatNumber = vatNumberRaw.trim();
+ if (vatNumber) {
+ const zatcaConfig = (window.electron && window.electron.zatca)
+ ? await window.electron.zatca.getConfig()
+ : JSON.parse(localStorage.getItem('zatca_config') || 'null');
 
-        if (settings.cafeMode && currentPrinterConfig?.printToken) {
-            const startOfToday = new Date();
-            startOfToday.setHours(0, 0, 0, 0);
+ if (zatcaConfig && zatcaConfig.privateKey) {
+ const isLive = zatcaConfig.status === 'LIVE';
+ const activeCsid = isLive ? zatcaConfig.productionCsid : zatcaConfig.complianceCsid;
 
-            const lastTokenInvoice = await db.invoices
-                .where('createdAt').above(startOfToday)
-                .filter((inv: any) => !!inv.tokenNumber)
-                .last();
-            
-            let nextToken = 1;
-            if (lastTokenInvoice?.tokenNumber) {
-                const lastToken = parseInt(lastTokenInvoice.tokenNumber, 10);
-                if (!isNaN(lastToken)) {
-                    nextToken = lastToken + 1;
-                }
-            }
-            tokenNumber = nextToken.toString().padStart(3, '0');
-        }
+ if (activeCsid) {
+ const { generateZatcaXML } = await import('../../services/zatcaXml');
+ const activeBranchId = getCurrentBranchId();
+ const branch = await db.branches.get(activeBranchId);
+ const currentPIH = branch?.lastInvoiceHash || 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=';
 
-        const invoiceData: any = {
-            invoiceNumber: finalInvoiceNumber,
-            tokenNumber: tokenNumber, // Add token if generated
-            customerName: customerName || t('pos.walk_in_customer'),
-            customerId: customerId,
-            customerVatNumber: customerId ? (customerVatNumber || undefined) : undefined,
-            items: mappedItems, // Use the pre-calculated mapped items
-            subTotal: subTotalSum, // Use strictly calculated sum
-            discountAmount,
-            taxAmount: taxAmount,
-            grandTotal: grandTotal,
-            paidAmount: Math.round(amountPaid * 100) / 100,
-            remainingAmount: Math.round((paymentMode === 'credit' ? (grandTotal - amountPaid) : 0) * 100) / 100,
-            paymentMode,
-            createdAt: new Date(),
-            paymentStatus: finalStatus,
-            dueDate: (finalStatus !== 'paid' && dueDate) ? new Date(dueDate) : undefined,
-            taxRate: taxPercent,
-            notes: notes,
-            orderType: orderType
-        };
+ const result = await generateZatcaXML(
+ printDataForBg,
+ { ...safeBusinessDetails, gstin: vatNumber },
+ zatcaConfig.privateKey,
+ activeCsid,
+ currentPIH
+);
+ 
+ precalculatedXML = result.xml;
+ precalculatedHash = result.hash;
+ precalculatedUUID = result.uuid;
 
-        try {
-            console.log("DEBUG: Final Invoice Data Payload:", JSON.stringify(invoiceData, null, 2));
-            let newId: string | undefined;
-            // 1. Critical: Save to DB (Await this as it must succeed)
-            newId = await onConfirm(invoiceData);
-            // 2. Success Feedback (Close immediately and reset POS)
-            addToast(t('pos.order_completed_successfully'), 'success');
-            
-            // Start background tasks before closing
-            const safeBusinessDetails = businessDetails || { name: 'My Shop', address: '', phone: '', email: '' };
-            const isPrintEnabled = !printerConfig?.enableCheckoutPrintToggle || shouldPrint;
-            if ((businessDetails || safeBusinessDetails) && newId) {
-                // Background tasks (Fire & Forget)
-                const printDetails = { ...safeBusinessDetails, taxRate: taxPercent };
-                const printDataForBg = { ...invoiceData, id: newId } as Invoice;
-                setTimeout(async () => {
-                    // --- PRINTING SEQUENCE (Sequential) ---
-                    const executePrintingSequence = async () => {
-                        try {
-                            console.log("Starting POS printing sequence...");
+ // Save XML locally for offline queueing
+ await db.invoices.update(newId!, {
+ zatcaXml: precalculatedXML,
+ zatcaHash: precalculatedHash,
+ zatcaStatus: 'PENDING'
+ });
 
-                            // 1. Kitchen Ticket
-                            const printerConfigStr = localStorage.getItem('printerConfig');
-                            const config = printerConfigStr ? JSON.parse(printerConfigStr) : null;
-                            const kConfig = config?.kitchen;
-                            
-                            if (kConfig && kConfig.enabled) {
-                                console.log("Printing Kitchen Ticket...");
-                                try {
-                                    // printDataForBg is the invoice object
-                                    await generateKitchenTicketPDF(printDataForBg);
-                                    console.log("Kitchen Ticket Sent.");
-                                    // 200ms safety delay for thermal hardware
-                                    await new Promise(r => setTimeout(r, 200));
-                                } catch (e) {
-                                    console.error("Kitchen Print Error:", e);
-                                }
-                            }
+ // Convert TLV to QR DataURL early
+ const QRCode = (await import('qrcode')).default;
+ precalculatedQR = await QRCode.toDataURL(result.qr, { margin: 0 });
+ console.log("ZATCA Pre-calculation complete.");
+ }
+ }
+ }
+ } catch (e) {
+ console.error("ZATCA Pre-calculation failed:", e);
+ addToast("ZATCA Error:"+ (e instanceof Error ? e.message : 'Pre-calculation failed'), 'error');
+ }
 
-                            // 2. Customer Receipt
-                            if (isPrintEnabled) {
-                                console.log("Printing Customer Receipt...");
-                                try {
-                                    // generateInvoicePDF expects (Invoice, BusinessDetails)
-                                    await generateInvoicePDF(printDataForBg, printDetails);
-                                    console.log("Customer Receipt Sent.");
-                                } catch (e) {
-                                    console.error("Customer Print Error:", e);
-                                }
-                            }
-                        } catch (fatalPrintErr) {
-                            console.error("Fatal Printing Sequence Error:", fatalPrintErr);
-                        }
-                    };
+ // --- 2. PRINTING SEQUENCE (Parallelized) ---
+ const executePrintingSequence = async () => {
+ console.log("Starting parallel printing sequence...");
+ const printTasks: Promise<any>[] = [];
 
-                    // Execute Printing
-                    await executePrintingSequence();
+ // Kitchen Ticket
+ const printerConfigStr = localStorage.getItem('printerConfig');
+ const config = printerConfigStr ? JSON.parse(printerConfigStr) : null;
+ const kConfig = config?.kitchen;
+ 
+ if (kConfig && kConfig.enabled) {
+ printTasks.push((async () => {
+ try {
+ console.log("Task: Printing Kitchen Ticket...");
+ await generateKitchenTicketPDF(printDataForBg);
+ console.log("Kitchen Ticket Sent.");
+ } catch (e) { 
+ console.error("Kitchen Print Error:", e); 
+ addToast("Kitchen Print Error:"+ (e instanceof Error ? e.message : 'Unknown error'), 'error');
+ }
+ })());
+ }
 
-                    // --- 3. ZATCA REPORTING (Background / Non-blocking) ---
-                    // Run this last and in its own block so it never blocks the prints
-                    (async () => {
-                        try {
-                            const zatcaConfigStr = localStorage.getItem('zatca_config');
-                            if (zatcaConfigStr) {
-                                const zatcaConfig = JSON.parse(zatcaConfigStr);
-                                const isLive = zatcaConfig.status === 'LIVE';
-                                const canReport = isLive || zatcaConfig.status === 'COMPLIANCE_OBTAINED';
+ // Customer Receipt
+ if (isPrintEnabled) {
+ printTasks.push((async () => {
+ try {
+ console.log("Task: Printing Customer Receipt...");
+ await generateInvoicePDF(printDataForBg, printDetails, precalculatedQR);
+ console.log("Customer Receipt Sent.");
+ } catch (e) { 
+ console.error("Customer Print Error:", e); 
+ addToast("Customer Print Error:"+ (e instanceof Error ? e.message : 'Unknown error'), 'error');
+ }
+ })());
+ }
 
-                                // Pick the right credentials — production CSID first, compliance fallback
-                                const activeCsid = isLive ? zatcaConfig.productionCsid : zatcaConfig.complianceCsid;
-                                const activeSecret = isLive ? zatcaConfig.productionSecret : zatcaConfig.complianceSecret;
-                                const env = zatcaConfig.environment || 'PRODUCTION';
+ // Run all print tasks in parallel
+ if (printTasks.length > 0) {
+ await Promise.all(printTasks);
+ console.log("All print jobs dispatched.");
+ }
+ };
 
-                                if (canReport && zatcaConfig.privateKey && activeCsid) {
-                                    const { generateZatcaXML } = await import('../../services/zatcaXml');
-                                    const { reportInvoice } = await import('../../services/zatcaApi');
+ // Execute Printing
+ await executePrintingSequence();
 
-                                    const { xml, hash, uuid } = await generateZatcaXML(
-                                        printDataForBg,
-                                        { ...safeBusinessDetails, gstin: safeBusinessDetails.gstin || safeBusinessDetails.vatNo },
-                                        zatcaConfig.privateKey
-                                    );
+ // --- 3. ZATCA REPORTING (Background) ---
+ if (precalculatedXML && precalculatedHash) {
+ (async () => {
+ try {
+ const zatcaConfig = (window.electron && window.electron.zatca)
+ ? await window.electron.zatca.getConfig()
+ : JSON.parse(localStorage.getItem('zatca_config') || 'null');
 
-                                    const reportResult = await reportInvoice(
-                                        xml,
-                                        hash,
-                                        uuid,
-                                        activeCsid,
-                                        activeSecret,
-                                        env
-                                    );
+ if (zatcaConfig) {
+ const { reportInvoice } = await import('../../services/zatcaApi');
+ const isLive = zatcaConfig.status === 'LIVE';
+ const canReport = isLive || zatcaConfig.status === 'COMPLIANCE_OBTAINED';
+ const activeCsid = isLive ? zatcaConfig.productionCsid : zatcaConfig.complianceCsid;
+ const activeSecret = isLive ? zatcaConfig.productionSecret : zatcaConfig.complianceSecret;
+ const env = zatcaConfig.environment || 'PRODUCTION';
 
-                                    if (reportResult.status === 'REPORTED') {
-                                        await db.invoices.update(newId!, {
-                                            zatcaStatus: 'REPORTED',
-                                            zatcaHash: hash
-                                        });
-                                    } else {
-                                        await db.invoices.update(newId!, { zatcaStatus: 'ERROR' });
-                                    }
-                                }
-                            }
-                        } catch (zatcaErr) {
-                            console.error("ZATCA Reporting Task Failed:", zatcaErr);
-                        }
-                    })();
-                }, 100);
-            }
+ if (canReport && activeCsid) {
+ const reportResult = await reportInvoice(
+ precalculatedXML!,
+ precalculatedHash!,
+ precalculatedUUID!,
+ activeCsid,
+ activeSecret,
+ env
+);
 
-            // Close modal and return to POS immediately
-            onClose(true);
-            setIsProcessing(false);
+ const activeBranchId = getCurrentBranchId();
+ const branch = await db.branches.get(activeBranchId);
+ const nextICV = (branch?.invoiceCounter || 0) + 1;
 
-        } catch (error) {
-            console.error(error);
-            addToast(`${t('pos.sale_failed')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-            setIsProcessing(false);
-            return;
-        }
-    };
+ await db.branches.update(activeBranchId, {
+ lastInvoiceHash: precalculatedHash,
+ invoiceCounter: nextICV
+ });
 
-    return (
-        <Modal
-            isOpen={isOpen}
-            onClose={() => onClose()}
-            maxWidth="5xl"
-            className="h-auto max-h-[90vh] flex flex-col md:flex-row overflow-hidden"
-        >
-            <div className="flex flex-col md:flex-row w-full h-full">
-                    {/* LEFT SIDE: Payment Methods (60%) */}
-                    <div className="w-full md:w-[60%] flex flex-col p-8 bg-white dark:bg-slate-800 overflow-y-auto border-r border-slate-200 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">{t('pos.select_payment_mode')}</h3>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                            {[
-                                { id: 'cash', icon: Banknote, label: t('pos.pay_cash') },
-                                { id: 'card', icon: CreditCard, label: t('pos.pay_card') },
-                                { id: 'upi', icon: Smartphone, label: t('pos.pay_digital', 'Online/UPI') },
-                                { id: 'split', icon: SplitSquareHorizontal, label: t('pos.split_payment', 'Split') },
-                                { id: 'credit', icon: Clock, label: t('pos.pay_credit') }
-                            ].map((mode) => (
-                                <button
-                                    key={mode.id}
-                                    onClick={() => {
-                                        setPaymentMode(mode.id as any);
-                                        setAmountPaidInput('');
-                                        setSplitCashInput('');
-                                        setSplitCardInput('');
-                                    }}
-                                    className={`p-5 rounded-2xl border-2 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer select-none ${paymentMode === mode.id
-                                        ? 'border-transparent bg-blue-600 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-600 ring-offset-2 dark:ring-offset-slate-800 transform scale-[1.02]'
-                                        : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                        }`}
-                                >
-                                    <mode.icon size={32} className={paymentMode === mode.id ? 'text-white' : 'text-slate-400 dark:text-slate-500'} strokeWidth={paymentMode === mode.id ? 2.5 : 2} />
-                                    <span className="font-bold tracking-wide">{mode.label}</span>
-                                </button>
-                            ))}
-                        </div>
+ if (reportResult.status === 'REPORTED') {
+ await db.invoices.update(newId!, {
+ zatcaStatus: 'REPORTED'
+ });
+ } else {
+ await db.invoices.update(newId!, { zatcaStatus: 'ERROR', zatcaError: JSON.stringify(reportResult) });
+ }
+ }
+ }
+ } catch (zatcaErr) {
+ console.error("ZATCA Reporting Task Failed:", zatcaErr);
+ addToast("Invoice saved locally. Will report to ZATCA when online.", 'info');
+ }
+ })();
+ }
 
-                        {/* Credit Info & Due Date */}
-                        {paymentMode === 'credit' && (
-                            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <div className={`p-5 rounded-2xl border-2 ${canTakeCredit ? 'bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900/20 dark:border-blue-800' : 'bg-red-50 border-red-200 text-red-900 dark:bg-red-900/20 dark:border-red-800'}`}>
-                                    <div className="font-bold flex justify-between items-center mb-2">
-                                        <span className="text-sm uppercase tracking-wider opacity-70">Credit Limit</span>
-                                        <span className="text-xl">{formatCurrency(customer?.creditLimit || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm font-semibold">
-                                        <span className="opacity-70">Current Balance</span>
-                                        <span>{formatCurrency(customer?.balance || 0)}</span>
-                                    </div>
-                                    {!canTakeCredit && (
-                                        <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/40 rounded-xl flex items-center justify-center">
-                                            <p className="text-sm font-bold text-red-600 dark:text-red-400 uppercase tracking-widest">{t('pos.credit_error_title')}</p>
-                                        </div>
-                                    )}
-                                </div>
+ // --- 4. WHATSAPP NOTIFICATION ---
+ if (customerId && customerId !== '0') {
+ try {
+ const c = await db.customers.get(customerId);
+ if (c) {
+ await messagingService.sendThankYouMessage(printDataForBg, c);
+ }
+ } catch (err) {
+ console.error("WhatsApp notification failed:", err);
+ addToast("WhatsApp notification failed", 'error');
+ }
+ }
+ }, 100);
+ }
 
-                                <div>
-                                    <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                                        {t('pos.due_date')} <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="w-full p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-blue-500 outline-none transition-colors font-semibold"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                        )}
+ // Close modal and return to POS immediately
+ onClose(true);
+ setIsProcessing(false);
 
-                        {/* Split Payment Inputs */}
-                        {paymentMode === 'split' && (
-                            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <div>
-                                    <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                                        Cash Amount
-                                    </label>
-                                    <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 focus-within:border-blue-500 bg-slate-50 dark:bg-slate-900 dark:border-slate-700 transition-colors">
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{settings.currency}</div>
-                                        <input
-                                            type="number"
-                                            value={splitCashInput}
-                                            onChange={(e) => setSplitCashInput(e.target.value)}
-                                            placeholder="0.00"
-                                            className="w-full pl-12 pr-4 py-4 bg-transparent font-bold outline-none text-slate-800 dark:text-white"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                                        Card Amount
-                                    </label>
-                                    <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 focus-within:border-blue-500 bg-slate-50 dark:bg-slate-900 dark:border-slate-700 transition-colors">
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{settings.currency}</div>
-                                        <input
-                                            type="number"
-                                            value={splitCardInput}
-                                            onChange={(e) => setSplitCardInput(e.target.value)}
-                                            placeholder="0.00"
-                                            className="w-full pl-12 pr-4 py-4 bg-transparent font-bold outline-none text-slate-800 dark:text-white"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+ } catch (error) {
+ console.error(error);
+ addToast(`${t('pos.sale_failed')}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+ setIsProcessing(false);
+ return;
+ }
+ };
 
-                        {/* Payment Input (Card / UPI / Credit partials) */}
-                        {paymentMode !== 'cash' && paymentMode !== 'split' && (
-                            <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300 flex-1">
-                                <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                                    {paymentMode === 'credit' ? t('pos.down_payment') : t('pos.amount_tendered')}
-                                </label>
-                                <div className={`relative rounded-xl overflow-hidden border-2 transition-colors ${isCreditSale && !canTakeCredit ? 'border-red-300 bg-red-50' : 'border-slate-200 focus-within:border-blue-500 bg-slate-50 dark:bg-slate-900 dark:border-slate-700'}`}>
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{settings.currency}</div>
-                                    <input
-                                        type="number"
-                                        value={amountPaidInput}
-                                        onChange={(e) => setAmountPaidInput(e.target.value)}
-                                        placeholder={paymentMode === 'credit' ? "0.00" : grandTotal.toFixed(2)}
-                                        className="w-full pl-12 pr-4 py-4 bg-transparent font-bold outline-none text-slate-800 dark:text-white text-lg"
-                                    />
-                                </div>
-                            </div>
-                        )}
+ return (
+ <Modal
+ isOpen={isOpen}
+ onClose={() => onClose()}
+ maxWidth="5xl"
+ className="!overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-700/50"
+ >
+ <div className="flex flex-col md:flex-row w-full min-h-0 relative"style={{ height: 'min(90vh, 800px)' }}>
+ {/* Background Decorations */}
+ <div className="absolute top-0 left-0 w-full h-full bg-slate-50 dark:bg-slate-900 -z-10"/>
 
-                        <div className="mt-auto pt-6 justify-between items-center border-t border-slate-100 dark:border-slate-700/50 hidden md:flex">
-                             <button onClick={() => onClose()} disabled={isProcessing} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 uppercase tracking-wider text-sm">
-                                {t('common.cancel')}
-                            </button>
-                        </div>
-                    </div>
+ {/* LEFT SIDE: Payment Methods (60%) */}
+ <div className="w-full md:w-[60%] flex flex-col p-6 md:p-10 overflow-y-auto border-r border-slate-200/50 dark:border-slate-700/50 relative z-10">
+ <div className="flex justify-between items-center mb-10">
+ <div className="space-y-1">
+ <h3 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight uppercase">{t('pos.select_payment_mode')}</h3>
+ <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-[0.4em]">{t('pos.complete_transaction_to_print')}</p>
+ </div>
+ </div>
+ 
+ <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+ {[
+ { id: 'cash', icon: Banknote, label: t('pos.pay_cash'), color: 'emerald' },
+ { id: 'card', icon: CreditCard, label: t('pos.pay_card'), color: 'blue' },
+ { id: 'upi', icon: Smartphone, label: t('pos.pay_digital'), color: 'indigo' },
+ { id: 'split', icon: SplitSquareHorizontal, label: t('pos.split_payment'), color: 'amber' },
+ { id: 'credit', icon: Clock, label: t('pos.pay_credit'), color: 'rose' },
+ ...(showPayLater !== false ? [{ id: 'pay_later', icon: Clock, label: t('pos.pay_later'), color: 'slate' }] : [])
+ ].map((mode) => (
+ <button type="button"
+ key={mode.id}
+ 
+ 
+ onClick={() => {
+ setPaymentMode(mode.id as any);
+ setAmountPaidInput('');
+ setSplitCashInput('');
+ setSplitCardInput('');
+ }}
+ className={clsx(
+"p-5 rounded-2xl border-2 flex flex-col items-center justify-center gap-2 relative overflow-hidden group",
+ paymentMode === mode.id
+ ? 'bg-slate-800 dark:bg-slate-700 text-white border-transparent ring-4 ring-slate-900/20 dark:ring-white/20'
+ : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+)}
+ >
+ {paymentMode === mode.id && (
+ <div className="absolute inset-0 to-indigo-600 pointer-events-none"/>
+)}
+ <div className="relative z-10">
+ <mode.icon size={40} className={clsx("", paymentMode === mode.id ? 'text-white' : 'text-slate-600')} />
+ </div>
+ <span className="relative z-10 font-semibold text-[12px] uppercase tracking-wider">{mode.label}</span>
+ {paymentMode === mode.id && <div className="absolute bottom-4 right-4 w-2 h-2 bg-white rounded-full 0_0_8px_white]"/>}
+ </button>
+))}
+ </div>
 
-                    {/* RIGHT SIDE: Receipt Summary (40%) */}
-                    <div className="w-full md:w-[40%] bg-slate-50 dark:bg-slate-900 flex flex-col relative overflow-hidden">
-                        {/* Decorative top pattern */}
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 to-blue-600"></div>
-                        
-                        <div className="p-8 flex-1 flex flex-col">
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest">{t('pos.order_summary')}</h3>
-                                {orderType && (
-                                    <span className="px-4 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1 border border-blue-200 dark:border-blue-800">
-                                        {(orderType === 'dine_in') && '🍽️'}
-                                        {(orderType === 'parcel') && '🥡'}
-                                        {(orderType === 'pickup') && '🚶'}
-                                        {(orderType === 'delivery') && '🚚'}
-                                        {t(`pos.${orderType}`)}
-                                    </span>
-                                )}
-                            </div>
+ {/* Credit Info & Due Date */}
+ {paymentMode === 'credit' && (
+ <div className="space-y-6">
+ <div className={clsx(
+"p-6 rounded-2xl border-2", 
+ canTakeCredit ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 ' : 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
+)}>
+ <div className="flex justify-between items-center mb-6">
+ <div className="flex items-center gap-4">
+ <div className="p-3 bg-slate-900 dark:bg-white rounded-2xl text-slate-900 dark:text-white"><Clock size={24} /></div>
+ <div>
+ <div className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Credit Status</div>
+ <div className="text-xl font-semibold text-slate-900 dark:text-white uppercase tracking-tight">Account Balance</div>
+ </div>
+ </div>
+ <div className="text-right">
+ <div className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">{formatCurrency(customer?.balance || 0)}</div>
+ <div className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Limit: {formatCurrency(customer?.creditLimit || 0)}</div>
+ </div>
+ </div>
+ {!canTakeCredit && (
+ <div className="p-5 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center gap-3">
+ <div className="w-2 h-2 bg-rose-500 rounded-full"/>
+ <p className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wide">{t('pos.credit_error_title')}</p>
+ </div>
+)}
+ </div>
 
-                            {/* Bill Details */}
-                            <div className="space-y-5 mb-8 text-slate-600 dark:text-slate-300 font-medium">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-500">{t('pos.subtotal')} ({items.length} items)</span>
-                                    <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(subTotal)}</span>
-                                </div>
+ <div className="group/date">
+ <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-[0.4em] mb-3 ml-4">
+ {t('pos.due_date')} <span className="text-rose-500">*</span>
+ </label>
+ <input
+ type="date"
+ value={dueDate}
+ onChange={(e) => setDueDate(e.target.value)}
+ className="w-full p-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 font-semibold text-lg"
+ required
+ />
+ </div>
+ </div>
+)}
 
-                                {/* Discount Input */}
-                                <div className="flex justify-between items-center group">
-                                    <span className="group-focus-within:text-blue-600 transition-colors text-slate-500">{t('pos.discount')}</span>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex text-xs bg-slate-200 dark:bg-slate-800 rounded-lg p-1">
-                                            <button
-                                                onClick={() => setDiscountType('percentage')}
-                                                className={`px-3 py-1 rounded-md transition-all ${discountType === 'percentage' ? 'bg-white shadow-sm text-black font-black' : 'text-slate-500 hover:text-slate-700 font-bold'}`}
-                                            >
-                                                %
-                                            </button>
-                                            <button
-                                                onClick={() => setDiscountType('fixed')}
-                                                className={`px-3 py-1 rounded-md transition-all ${discountType === 'fixed' ? 'bg-white shadow-sm text-black font-black' : 'text-slate-500 hover:text-slate-700 font-bold'}`}
-                                            >
-                                                Amt
-                                            </button>
-                                        </div>
-                                        <div className="relative border-b-2 border-slate-300 focus-within:border-blue-500 pb-1 w-16">
-                                            <input
-                                                type="number"
-                                                value={discountValue || ''}
-                                                onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
-                                                placeholder="0"
-                                                min="0"
-                                                className="w-full text-right bg-transparent outline-none font-bold text-slate-800 dark:text-white"
-                                            />
-                                        </div>
-                                        <span className="text-red-500 font-bold w-20 text-right">-{formatCurrency(discountAmount)}</span>
-                                    </div>
-                                </div>
+ {/* Split Payment Inputs */}
+ {paymentMode === 'split' && (
+ <div className="grid grid-cols-2 gap-6">
+ {[
+ { id: 'cash', label: 'Cash Amount', value: splitCashInput, setter: setSplitCashInput, icon: Banknote },
+ { id: 'card', label: 'Card Amount', value: splitCardInput, setter: setSplitCardInput, icon: CreditCard }
+ ].map((s) => (
+ <div key={s.id} className="space-y-3">
+ <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-[0.4em] ml-4">
+ {s.label}
+ </label>
+ <div className="relative group/input">
+ <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 font-semibold text-lg group-focus-within/input:text-slate-900 dark:group-focus-within/input:text-white">{settings.currency}</div>
+ <input
+ type="number"
+ value={s.value}
+ onChange={(e) => s.setter(e.target.value)}
+ placeholder="0.00"
+ className="w-full pl-20 pr-8 py-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-2xl outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20"
+ />
+ </div>
+ </div>
+))}
+ </div>
+)}
 
-                                {/* Tax Row */}
-                                <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
-                                    <span className="text-slate-500">{t('pos.tax')}</span>
-                                    <span className="font-bold text-slate-800 dark:text-white">+{formatCurrency(taxAmount)}</span>
-                                </div>
-                            </div>
+ {/* Payment Input (Card / UPI / Credit partials) */}
+ {paymentMode !== 'cash' && paymentMode !== 'split' && paymentMode !== 'pay_later' && (
+ <div className="flex-1 space-y-3">
+ <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-[0.4em] ml-4">
+ {paymentMode === 'credit' ? t('pos.down_payment') : t('pos.amount_tendered')}
+ </label>
+ <div className="relative group/input">
+ <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 font-semibold text-lg group-focus-within/input:text-slate-900 dark:group-focus-within/input:text-white">{settings.currency}</div>
+ <input
+ type="number"
+ value={amountPaidInput}
+ onChange={(e) => setAmountPaidInput(e.target.value)}
+ placeholder={paymentMode === 'credit' ?"0.00": grandTotal.toFixed(2)}
+ className="w-full pl-20 pr-8 py-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl font-semibold text-4xl outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20"
+ />
+ </div>
+ </div>
+)}
 
-                            {/* Grand Total Card */}
-                            <div className="bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 p-7 rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-200 dark:border-slate-700 mb-8 relative overflow-hidden group/total">
-                                <div className="absolute -right-4 -top-4 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover/total:bg-blue-500/20 transition-all duration-700"></div>
-                                <div className="text-center mb-1 relative z-10">
-                                    <span className="text-[10px] font-black text-blue-500 dark:text-blue-400 uppercase tracking-[0.3em]">{t('pos.grand_total')}</span>
-                                </div>
-                                <div className="text-center relative z-10">
-                                    <span className="text-5xl font-black text-slate-800 dark:text-white tracking-tighter leading-none">{formatCurrency(grandTotal)}</span>
-                                </div>
-                            </div>
+ <div className="mt-auto pt-10 flex justify-between items-center border-t border-slate-200/50 dark:border-slate-700/50">
+ <button type="button"
+ 
+ 
+ onClick={() => onClose()} 
+ disabled={isProcessing} 
+ className="px-8 py-4 rounded-2xl font-semibold text-slate-600 hover:text-slate-900 dark:hover:text-white disabled:opacity-50 uppercase tracking-wider text-[10px] flex items-center gap-3"
+ >
+ <XCircle size={18} />
+ {t('common.cancel')}
+ </button>
+ </div>
+ </div>
 
-                            {/* Change/Balance Indicator */}
-                            <div className={`mt-auto mb-8 flex items-center justify-between p-5 rounded-2xl border-2 transition-colors ${changeAmount >= 0 ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-800' : 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800'}`}>
-                                {changeAmount >= 0 ? (
-                                    <>
-                                        <span className="font-bold uppercase tracking-wider text-sm text-green-700 dark:text-green-500">{t('pos.change_due', 'Change Due')}</span>
-                                        <span className="text-2xl font-black text-green-600">{formatCurrency(changeAmount)}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="font-bold uppercase tracking-wider text-sm text-red-700 dark:text-red-500">{t('pos.credit_balance_remaining', 'Balance Due')}</span>
-                                        <span className="text-2xl font-black text-red-500">{formatCurrency(balanceDue)}</span>
-                                    </>
-                                )}
-                            </div>
+ {/* RIGHT SIDE: Receipt Summary (40%) */}
+ <div className="w-full md:w-[40%] bg-slate-50 dark:bg-slate-950 border-t md:border-t-0 border-l-0 md:border-l border-slate-200 dark:border-slate-800 flex flex-col relative z-10 min-h-0">
+ {/* Summary Header Gradient */}
+ <div className="absolute top-0 left-0 right-0 h-2 via-indigo-600"/>
+ 
+ <div className="p-5 md:p-6 flex-1 flex flex-col min-h-0 overflow-y-auto">
+ <div className="flex justify-between items-center mb-8 shrink-0">
+ <div className="flex items-center gap-4">
+ <div className="w-10 h-10 bg-slate-900 dark:bg-white rounded-2xl flex items-center justify-center text-white">
+ <Receipt size={20} />
+ </div>
+ <div>
+ <h3 className="text-sm font-semibold dark:text-white uppercase tracking-wider">{t('pos.order_summary')}</h3>
+ <p className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">
+ {new Date().toLocaleDateString()}
+ </p>
+ </div>
+ </div>
+ {orderType && (
+ <span 
+ 
+ 
+ className="px-4 py-1.5 bg-white dark:bg-slate-800 rounded-full text-[10px] font-semibold uppercase tracking-wider border border-slate-100 dark:border-slate-700 flex items-center gap-2"
+ >
+ <span className="text-base">
+ {settings.customOrderTypes?.[orderType]?.icon || (
+ orderType === 'dine_in' ? '🍽️' :
+ orderType === 'parcel' ? '🥡' :
+ orderType === 'pickup' ? '🚶' : '🚚'
+)}
+ </span>
+ {settings.customOrderTypes?.[orderType]?.label || t(`pos.${orderType}`)}
+ </span>
+)}
+ </div>
 
-                            {/* Actions */}
-                            <div className="space-y-4">
-                                {/* Print Toggle */}
-                                {printerConfig?.enableCheckoutPrintToggle && (
-                                    <label className="flex items-center justify-between cursor-pointer select-none px-2 mb-2 group">
-                                        <span className="text-sm font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-800 dark:group-hover:text-slate-300 transition-colors">{t('pos.print_receipt')}</span>
-                                        <div className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={shouldPrint}
-                                                onChange={e => setShouldPrint(e.target.checked)}
-                                                className="sr-only peer"
-                                            />
-                                            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                                        </div>
-                                    </label>
-                                )}
+ {/* Scrollable Items List */}
+ <div className="flex-1 overflow-y-auto mb-8 pr-2 custom-scrollbar space-y-4">
+ {items.map((item, idx) => (
+ <div key={idx} className="flex justify-between items-center group/item">
+ <div className="flex flex-col">
+ <span className="text-sm font-bold text-slate-800 dark:text-white line-clamp-1 group-hover/item:text-slate-900 dark:group-hover/item:text-white">{item.name}</span>
+ <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">
+ {item.quantity} x {formatCurrency(item.price)}
+ </span>
+ </div>
+ <span className="text-sm font-semibold text-slate-800 dark:text-white tracking-tight">
+ {formatCurrency(item.price * item.quantity)}
+ </span>
+ </div>
+))}
+ {items.length === 0 && (
+ <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
+ <Receipt size={40} className="mb-2"/>
+ <span className="text-[10px] font-semibold uppercase tracking-wider">No Items</span>
+ </div>
+)}
+ </div>
 
-                                <button
-                                    onClick={handleConfirm}
-                                    disabled={(paymentMode === 'credit' && !canTakeCredit) || isProcessing || (paymentMode === 'split' && ((parseFloat(splitCashInput)||0) + (parseFloat(splitCardInput)||0) < grandTotal))}
-                                    className="w-full p-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center gap-3 transform active:scale-95 transition-all group overflow-hidden relative"
-                                >
-                                    {/* Button Shine Effect */}
-                                    <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-                                    
-                                    {isProcessing ? (
-                                        <>
-                                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-                                            <span className="font-black text-xl tracking-wide">{t('common.processing')}...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="font-black text-xl tracking-wide">
-                                                PAY {formatCurrency(
-                                                    paymentMode === 'cash' ? grandTotal : 
-                                                    paymentMode === 'credit' ? (parseFloat(amountPaidInput) || 0) :
-                                                    paymentMode === 'split' ? ((parseFloat(splitCashInput)||0) + (parseFloat(splitCardInput)||0)) :
-                                                    (parseFloat(amountPaidInput) || grandTotal)
-                                                )}
-                                            </span>
-                                            <ChevronRight className="w-6 h-6 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                                        </>
-                                    )}
-                                </button>
+ {/* Bill Details */}
+ <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800 shrink-0">
+ <div className="flex justify-between items-center">
+ <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('pos.subtotal')} ({items.length} items)</span>
+ <span className="text-lg font-semibold text-slate-800 dark:text-white tracking-tight">{formatCurrency(subTotal)}</span>
+ </div>
 
-                                <button onClick={() => onClose()} disabled={isProcessing} className="w-full py-4 text-center font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 uppercase tracking-widest text-sm transition-colors md:hidden">
-                                    {t('common.cancel')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-        </Modal>
-    );
+ {/* Discount Input */}
+ <div className="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/50 group/disc">
+ <div className="flex justify-between items-center mb-4">
+ <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('pos.discount')}</span>
+ <div className="flex bg-slate-100 dark:bg-slate-900 rounded-xl p-1">
+ {['percentage', 'fixed'].map((type) => (
+ <button type="button"
+ key={type}
+ onClick={() => setDiscountType(type as any)}
+ className={clsx(
+"px-4 py-1.5 rounded-lg text-[10px] font-semibold",
+ discountType === type 
+ ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white ' 
+ : 'text-slate-600'
+)}
+ >
+ {type === 'percentage' ? '%' : 'AMT'}
+ </button>
+))}
+ </div>
+ </div>
+ <div className="flex justify-between items-center">
+ <div className="relative border-b-2 border-slate-200 dark:border-slate-700 focus-within:border-slate-900 dark:focus-within:border-white pb-1 w-24">
+ <input
+ type="number"
+ value={discountValue || ''}
+ onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+ placeholder="0"
+ className="w-full text-left bg-transparent outline-none font-semibold text-2xl text-slate-800 dark:text-white"
+ />
+ </div>
+ <div className="text-rose-500 font-semibold text-xl tracking-tight">-{formatCurrency(discountAmount)}</div>
+ </div>
+ </div>
+
+ {/* Tax Row */}
+ <div className="flex justify-between items-center pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
+ <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('pos.tax')} (15%)</span>
+ <span className="text-lg font-semibold text-slate-800 dark:text-white tracking-tight">+{formatCurrency(taxAmount)}</span>
+ </div>
+ </div>
+
+ {/* Grand Total Card */}
+ <div className="bg-slate-800 dark:bg-slate-700 p-5 rounded-2xl mb-3 shrink-0">
+ <div className="flex items-center justify-between">
+ <span className="text-[10px] font-semibold text-white/60 uppercase tracking-wider">{t('pos.grand_total')}</span>
+ <span 
+ key={grandTotal}
+ 
+ 
+ className="text-2xl md:text-3xl font-semibold text-white tracking-tight leading-none"
+ >
+ {formatCurrency(grandTotal)}
+ </span>
+ </div>
+ </div>
+
+ {/* Change/Balance Indicator */}
+ <>
+ <div 
+ key={changeAmount >= 0 ? 'change' : 'balance'}
+ 
+ 
+ 
+ className={clsx(
+"mb-3 flex items-center justify-between p-4 rounded-2xl border shrink-0", 
+ changeAmount >= 0 
+ ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-800/50 dark:text-emerald-400' 
+ : 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/20 dark:border-rose-800/50 dark:text-rose-400'
+)}
+ >
+ <div className="flex flex-col">
+ <span className="font-bold uppercase tracking-wider text-[9px] mb-0.5">
+ {changeAmount >= 0 ? t('pos.change_due') : t('pos.credit_balance_remaining')}
+ </span>
+ <span className="text-xl font-semibold tracking-tight">
+ {formatCurrency(Math.abs(changeAmount >= 0 ? changeAmount : balanceDue))}
+ </span>
+ </div>
+ <div className={clsx(
+"w-10 h-10 rounded-xl flex items-center justify-center",
+ changeAmount >= 0 ? 'bg-emerald-500/20' : 'bg-rose-500/20'
+)}>
+ {changeAmount >= 0 ? <Banknote size={20} /> : <Clock size={20} />}
+ </div>
+ </div>
+ </>
+
+ {/* Actions */}
+ <div className="space-y-3 mt-auto shrink-0">
+ {/* Print Toggle */}
+ {printerConfig?.enableCheckoutPrintToggle && (
+ <label className="flex items-center justify-between cursor-pointer select-none px-1 py-1 group">
+ <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 group-hover:text-slate-700 dark:group-hover:text-white">
+ {t('pos.print_receipt')}
+ </span>
+ <div className="relative inline-flex items-center cursor-pointer">
+ <input
+ type="checkbox"
+ checked={shouldPrint}
+ onChange={e => setShouldPrint(e.target.checked)}
+ className="sr-only peer"
+ />
+ <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after: peer-checked:bg-slate-900 dark:peer-checked:bg-white"/>
+ </div>
+ </label>
+)}
+
+ <button type="button"
+ 
+ 
+ onClick={handleConfirm}
+ disabled={(paymentMode === 'credit' && !canTakeCredit) || isProcessing || (paymentMode === 'split' && ((parseFloat(splitCashInput)||0) + (parseFloat(splitCardInput)||0) < grandTotal))}
+ className="w-full py-4 px-6 bg-slate-900 dark:bg-white hover:bg-slate-900 dark:hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-base tracking-wide flex items-center justify-center gap-3"
+ >
+ {isProcessing ? (
+ <>
+ <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full"/>
+ <span>{t('common.processing')}</span>
+ </>
+) : (
+ <>
+ <ChevronRight size={20} />
+ <span>{paymentMode === 'pay_later' ? t('pos.pay_later') : t('pos.checkout')}</span>
+ </>
+)}
+ </button>
+ </div>
+ </div>
+ </div>
+ </div>
+ </Modal>
+);
 };
 
 export default CheckoutModal;

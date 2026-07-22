@@ -1,7 +1,7 @@
 {
   "name": "billing-app",
   "private": true,
-  "version": "3.0.2",
+  "version": "0.3.0",
   "productName": "Billing App",
   "appId": "com.billingapp.app",
   "main": "dist-electron/main.js",
