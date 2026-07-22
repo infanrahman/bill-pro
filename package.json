@@ -110,10 +110,10 @@
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": true,
-      "artifactName": "Billing App Setup ${version}.${ext}"
+      "artifactName": "Billing-App-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "Billing App Portable ${version}.${ext}"
+      "artifactName": "Billing-App-Portable-${version}.${ext}"
     },
     "publish": [
       {
