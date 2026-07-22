@@ -1,28 +1,82 @@
 import { app, BrowserWindow, ipcMain, dialog, WebContentsPrintOptions, shell } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
-
+import { autoUpdater } from 'electron-updater';
 import { LicenseService } from './services/licenseService';
 import { GoogleDriveService } from './services/googleDriveService';
 import { ThermalPrinterService } from './services/thermalPrinterService';
 import { ScaleDirectService } from './services/scaleDirectService';
+import { ZatcaService } from './services/zatcaService';
+import { AuthService } from './services/authService';
 
-// __dirname is natively available in CommonJS
+// Main Process Stability
+process.on('uncaughtException', (error) => {
+  console.error('CRITICAL: Uncaught Exception in Main Process:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('CRITICAL: Unhandled Rejection in Main Process:', reason);
+});
+
 const licenseService = new LicenseService();
 const googleDriveService = new GoogleDriveService();
 const thermalPrinterService = new ThermalPrinterService();
+const zatcaService = new ZatcaService();
+const authService = new AuthService();
 
 // IPC Handlers
-ipcMain.handle('license:get-status', () => {
-  return licenseService.initialize();
+ipcMain.handle('license:get-status', async () => {
+  try {
+    console.log('[IPC] license:get-status invoked');
+    const status = await licenseService.initialize();
+    console.log('[IPC] license:get-status returned:', JSON.stringify(status));
+    return status;
+  } catch (error) {
+    console.error('[IPC Error] license:get-status:', error);
+    return { status: 'error', remainingDays: 0, machineId: '', loading: false };
+  }
 });
 
-ipcMain.handle('license:activate', (_, key: string) => {
-  return licenseService.activate(key);
+ipcMain.handle('license:activate', async (_, key: string) => {
+  try {
+    console.log('[IPC] license:activate invoked with key length:', key ? key.length : 0);
+    console.log('[IPC] Key start:', key ? key.substring(0, 40) : 'none');
+    const result = await licenseService.activate(key);
+    console.log('[IPC] license:activate returned:', result);
+    return result;
+  } catch (error) {
+    console.error('[IPC Error] license:activate:', error);
+    return false;
+  }
 });
 
-ipcMain.handle('license:reset', () => {
-  return licenseService.reset();
+ipcMain.handle('license:reset', async () => {
+  try {
+    console.log('[IPC] license:reset invoked');
+    return await licenseService.reset();
+  } catch (error) {
+    console.error('[IPC Error] license:reset:', error);
+    return false;
+  }
+});
+
+// Auth / Session IPC
+ipcMain.handle('auth:sign-token', async (_, payload: string) => {
+  try {
+    return await authService.signToken(payload);
+  } catch (error) {
+    console.error('[IPC Error] auth:sign-token:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('auth:verify-token', async (_, token: string) => {
+  try {
+    return await authService.verifyToken(token);
+  } catch (error) {
+    console.error('[IPC Error] auth:verify-token:', error);
+    return null;
+  }
 });
 
 ipcMain.handle('backup-data', async (_, data: string) => {
@@ -51,28 +105,125 @@ ipcMain.handle('backup-data', async (_, data: string) => {
 
 // Google Drive IPC
 ipcMain.handle('google-drive:login', async () => {
-  return await googleDriveService.authenticate();
+  try {
+    return await googleDriveService.authenticate();
+  } catch (error) {
+    console.error('[IPC Error] google-drive:login:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('google-drive:logout', async () => {
-  return await googleDriveService.logout();
+  try {
+    return await googleDriveService.logout();
+  } catch (error) {
+    console.error('[IPC Error] google-drive:logout:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('google-drive:status', async () => {
-  return await googleDriveService.checkconnection();
+  try {
+    return await googleDriveService.checkconnection();
+  } catch (error) {
+    console.error('[IPC Error] google-drive:status:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('google-drive:upload', async (_, { filename, content }) => {
-  return await googleDriveService.uploadFile(filename, content);
+  try {
+    return await googleDriveService.uploadFile(filename, content);
+  } catch (error) {
+    console.error('[IPC Error] google-drive:upload:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('google-drive:set-config', async (_, config) => {
-  googleDriveService.saveConfig(config);
-  return true;
+  try {
+    await googleDriveService.saveConfig(config);
+    return true;
+  } catch (error) {
+    console.error('[IPC Error] google-drive:set-config:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('google-drive:get-config', async () => {
-  return googleDriveService.getConfig();
+  try {
+    return await googleDriveService.getConfig();
+  } catch (error) {
+    console.error('[IPC Error] google-drive:get-config:', error);
+    return null;
+  }
+});
+
+// ZATCA Secure Storage IPC
+ipcMain.handle('zatca:get-config', async () => {
+  try {
+    return await zatcaService.getConfig();
+  } catch (error) {
+    console.error('[IPC Error] zatca:get-config:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('zatca:save-config', async (_, config) => {
+  try {
+    return await zatcaService.saveConfig(config);
+  } catch (error) {
+    console.error('[IPC Error] zatca:save-config:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('zatca:generate-csr', async (_, options) => {
+  try {
+    return await zatcaService.generateCSR(options);
+  } catch (error) {
+    console.error('[IPC Error] zatca:generate-csr:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('zatca:sign-hash', async (_, { hashBase64, privateKeyPem }) => {
+  try {
+    return zatcaService.signHash(hashBase64, privateKeyPem);
+  } catch (error) {
+    console.error('[IPC Error] zatca:sign-hash:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('zatca:sign-invoice-xml', async (_, { unsignedXml, certificatePem, privateKeyPem }) => {
+  try {
+    return await zatcaService.signInvoiceXml(unsignedXml, certificatePem, privateKeyPem);
+  } catch (error) {
+    console.error('[IPC Error] zatca:sign-invoice-xml:', error);
+    return null;
+  }
+});
+
+import { net as electronNet } from 'electron';
+ipcMain.handle('zatca:request', async (_, { url, method, headers, body }) => {
+  try {
+    const fetchImpl = electronNet.fetch || globalThis.fetch;
+    const response = await fetchImpl(url, {
+      method,
+      headers,
+      body
+    });
+    const text = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: text
+    };
+  } catch (error: any) {
+    console.error('ZATCA Proxy Request Error:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('restore-data', async () => {
@@ -105,11 +256,39 @@ ipcMain.handle('select-backup-folder', async () => {
 
 ipcMain.handle('save-backup-file', async (_, { folderPath, data, filename }) => {
   try {
-    // If filename not provided, generate one
-    const name = filename || `AutoBackup_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    const fullPath = path.join(folderPath, name);
+    // Fix #5: Sanitize filename — strip any directory traversal components
+    const safeName = path.basename(
+      filename || `AutoBackup_${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    );
+
+    // Fix #5: Resolve full path and confirm it stays inside the chosen folder
+    const resolvedFolder = path.resolve(folderPath);
+    const fullPath = path.join(resolvedFolder, safeName);
+    if (!fullPath.startsWith(resolvedFolder + path.sep) && fullPath !== resolvedFolder) {
+      throw new Error('Path traversal detected — backup aborted.');
+    }
 
     await fs.writeFile(fullPath, data, 'utf-8');
+
+    // Fix #11: Rotate old backups — keep only the 30 most recent AutoBackup_*.json files
+    try {
+      const MAX_BACKUPS = 30;
+      const entries = await fs.readdir(resolvedFolder);
+      const autoBackups = entries
+        .filter(f => f.startsWith('AutoBackup_') && f.endsWith('.json'))
+        .sort(); // ISO timestamp names sort correctly by date
+
+      if (autoBackups.length > MAX_BACKUPS) {
+        const toDelete = autoBackups.slice(0, autoBackups.length - MAX_BACKUPS);
+        for (const old of toDelete) {
+          await fs.unlink(path.join(resolvedFolder, old)).catch(() => { /* ignore */ });
+        }
+        console.log(`Auto Backup: Rotated ${toDelete.length} old backup(s).`);
+      }
+    } catch (rotateErr) {
+      console.warn('Auto Backup: Rotation check failed (non-fatal):', rotateErr);
+    }
+
     return true;
   } catch (error) {
     console.error('Auto Backup Failed:', error);
@@ -154,12 +333,13 @@ ipcMain.handle('print', async (_, content: string, options: { printerName?: stri
   }
 
   let printWin: BrowserWindow | null = new BrowserWindow({
-    show: false, // Revert debug visibility
+    show: false,
     width: 800,
     height: 600,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
     }
   });
 
@@ -192,10 +372,13 @@ ipcMain.handle('print', async (_, content: string, options: { printerName?: stri
     });
 
     // Trigger Load
-    await printWin.loadURL(`file://${tempPath}`);
+    await printWin.loadFile(tempPath);
 
     // Wait for completion
     await loadPromise;
+    
+    // Add a small delay to ensure Base64 images (barcodes/QR) are fully rendered
+    await new Promise(resolve => setTimeout(resolve, 500));
     console.log('Main Process: Content loaded successfully.');
 
     // Configure Print Options
@@ -241,7 +424,10 @@ ipcMain.handle('print', async (_, content: string, options: { printerName?: stri
       const printers = await printWin.webContents.getPrintersAsync();
       console.log('Main Process: Available printers:', printers.map(p => p.name));
 
-      const printer = printers.find(p => p.name === printerName || p.displayName === printerName);
+      const printer = printers.find(p => 
+        p.name.toLowerCase() === printerName.toLowerCase() || 
+        (p.displayName && p.displayName.toLowerCase() === printerName.toLowerCase())
+      );
       if (printer) {
         console.log(`Main Process: FOUND printer: ${printer.name}`);
         printOptions.deviceName = printer.name;
@@ -327,7 +513,9 @@ ipcMain.handle('download-pdf', async (_, { html, filename, silent }) => {
   let printWin: BrowserWindow | null = new BrowserWindow({
     show: false,
     webPreferences: {
-      nodeIntegration: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
     }
   });
 
@@ -347,8 +535,9 @@ ipcMain.handle('download-pdf', async (_, { html, filename, silent }) => {
     if (silent) {
       // Silent Save: Save to Downloads -> Show in Folder
       const downloadsPath = app.getPath('downloads');
-      // Ensure filename is safe?
-      filePath = path.join(downloadsPath, filename || `Invoice-${Date.now()}.pdf`);
+      // CRITICAL: Sanitize filename to prevent path traversal
+      const safeFilename = path.basename(filename || `Invoice-${Date.now()}.pdf`);
+      filePath = path.join(downloadsPath, safeFilename);
     } else {
       // Show Save Dialog
       const { filePath: chosenPath } = await dialog.showSaveDialog({
@@ -383,7 +572,8 @@ ipcMain.handle('download-pdf', async (_, { html, filename, silent }) => {
 ipcMain.handle('save-file-silently', async (_, { buffer, filename }) => {
   try {
     const downloadsPath = app.getPath('downloads');
-    const filePath = path.join(downloadsPath, filename);
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(downloadsPath, safeFilename);
 
     // buffer comes as Uint8Array or similar
     await fs.writeFile(filePath, Buffer.from(buffer));
@@ -399,6 +589,12 @@ ipcMain.handle('save-file-silently', async (_, { buffer, filename }) => {
 // Open External Link Handler
 ipcMain.handle('open-external', async (_, url: string) => {
   try {
+    // SECURITY: Validate protocol to prevent protocol smuggling (e.g. file://, cmd://)
+    const parsedUrl = new URL(url);
+    const allowedProtocols = ['http:', 'https:', 'mailto:'];
+    if (!allowedProtocols.includes(parsedUrl.protocol)) {
+      throw new Error(`Forbidden protocol: ${parsedUrl.protocol}`);
+    }
     await shell.openExternal(url);
     return true;
   } catch (error) {
@@ -501,43 +697,93 @@ ipcMain.handle('test-scale-connection', async (_, { ip, port }) => {
 });
 
 ipcMain.handle('scale:connect', async (_, { ip, port }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.connect();
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.connect();
+  } catch (error) {
+    console.error('[IPC Error] scale:connect:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('scale:sync-time', async (_, { ip, port, timeStr }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.syncTime(timeStr);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.syncTime(timeStr);
+  } catch (error) {
+    console.error('[IPC Error] scale:sync-time:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('scale:upload-plu', async (_, { ip, port, product }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.uploadPLU(product);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.uploadPLU(product);
+  } catch (error) {
+    console.error('[IPC Error] scale:upload-plu:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('scale:delete-plu', async (_, { ip, port, pluNumber }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.deletePLU(pluNumber);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.deletePLU(pluNumber);
+  } catch (error) {
+    console.error('[IPC Error] scale:delete-plu:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('scale:download-plu', async (_, { ip, port }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.downloadPLU();
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.downloadPLU();
+  } catch (error) {
+    console.error('[IPC Error] scale:download-plu:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('scale:read-weight', async (_, { ip, port }) => {
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.readWeight();
+  } catch (error) {
+    console.error('[IPC Error] scale:read-weight:', error);
+    return { weight: 0, unit: 'kg' };
+  }
 });
 
 ipcMain.handle('scale:full-sync', async (_, { ip, port, products }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.fullSync(products);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.fullSync(products);
+  } catch (error) {
+    console.error('[IPC Error] scale:full-sync:', error);
+    return { success: false, synced: 0, failed: 0 };
+  }
 });
 
 ipcMain.handle('scale:incremental-sync', async (_, { ip, port, products }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.incrementalSync(products);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.incrementalSync(products);
+  } catch (error) {
+    console.error('[IPC Error] scale:incremental-sync:', error);
+    return { success: false, synced: 0, failed: 0 };
+  }
 });
 
 ipcMain.handle('scale:sync-hotkeys', async (_, { ip, port, hotkeys }) => {
-  const service = new ScaleDirectService(ip, port);
-  return await service.syncHotkeys(hotkeys);
+  try {
+    const service = new ScaleDirectService(ip, port);
+    return await service.syncHotkeys(hotkeys);
+  } catch (error) {
+    console.error('[IPC Error] scale:sync-hotkeys:', error);
+    return false;
+  }
 });
 
 
@@ -551,17 +797,25 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     },
     autoHideMenuBar: true,
     show: false, // Don't show until ready
   });
   console.log('BrowserWindow created');
 
+  win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[RENDERER CONSOLE] [Level ${level}] ${message} (at ${path.basename(sourceId)}:${line})`);
+  });
+
   win.once('ready-to-show', () => {
     console.log('Window ready to show');
     win.show();
     win.focus();
+    if (app.isPackaged) {
+      setupAutoUpdater(win);
+      autoUpdater.checkForUpdatesAndNotify().catch(err => console.error("AutoUpdate initial check error:", err));
+    }
   });
 
   // In development, load from the Vite dev server
@@ -584,6 +838,42 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// Auto Updater Handlers
+function setupAutoUpdater(win: BrowserWindow) {
+  autoUpdater.on('checking-for-update', () => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'checking-for-update' });
+  });
+  autoUpdater.on('update-available', (info) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'update-available', info });
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'update-not-available', info });
+  });
+  autoUpdater.on('error', (err) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'error', error: err.message });
+  });
+  autoUpdater.on('download-progress', (progressObj) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'download-progress', progress: progressObj });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    if (!win.isDestroyed()) win.webContents.send('updater:message', { type: 'update-downloaded', info });
+  });
+}
+
+ipcMain.handle('updater:check', async () => {
+  if (!app.isPackaged) return { error: 'Not available in development' };
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (err: any) {
+    console.error('Update check failed:', err);
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall();
 });
 
 app.on('window-all-closed', () => {
