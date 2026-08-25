@@ -392,8 +392,7 @@ const ItemList: React.FC = () => {
  </button>
  <button type="button"
  onClick={handleBulkDeleteClick}
- className="p-3 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl"
- className="p-3 text-rose-400 hover:bg-rose-500 hover:text-white rounded-full"
+ className="p-3 text-rose-400 hover:bg-rose-500 hover:text-white rounded-full transition-colors"
  title={t('common.delete')}
  >
  <Trash size={18} />
