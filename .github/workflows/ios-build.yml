@@ -14,7 +14,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install
@@ -22,14 +22,14 @@ jobs:
       - name: Build Web App
         run: npm run build:base
 
-      - name: Sync Capacitor (iOS)
-        run: npx cap sync ios --verbose > sync_log.txt 2>&1 || true
+      - name: Fix Windows Paths in SPM
+        run: |
+          if [ -f ios/App/CapApp-SPM/Package.swift ]; then
+            sed -i '' 's/\\/\//g' ios/App/CapApp-SPM/Package.swift
+          fi
 
-      - name: Upload Sync Log
-        uses: actions/upload-artifact@v4
-        with:
-          name: Sync-Log
-          path: sync_log.txt
+      - name: Sync Capacitor (iOS)
+        run: npx cap sync ios
 
       - name: Build unsigned IPA
         run: |
