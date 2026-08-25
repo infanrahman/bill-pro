@@ -18,6 +18,7 @@ import { generateInvoicePDF } from '../services/invoiceGenerator';
 import Skeleton from '../components/UI/Skeleton';
 import EmptyState from '../components/UI/EmptyState';
 import { Receipt, CreditCard } from 'lucide-react';
+import clsx from 'clsx';
 
 const Sales = () => {
     const { t } = useTranslation();
@@ -380,74 +381,59 @@ const Sales = () => {
 
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 pt-2 md:pt-0 max-w-[1600px] mx-auto font-inter pb-24">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col gap-6 relative z-10">
                 <div>
-                    <h1 className="text-2xl font-bold dark:text-white flex items-center gap-2">
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                         <ShoppingCart className="text-blue-600" />
-                        {t('sales.title')}
+                        {t('sales.title') || 'Sales Management'}
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">{t('sales.description')}</p>
+                    <p className="text-xs text-slate-500 font-medium mt-1">{t('sales.description') || 'Manage orders, invoices, returns, and payments'}</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                
+                <div className="flex items-center gap-3 w-full">
                     <button
                         onClick={() => navigate('/sales/new?type=order')}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 w-full sm:w-auto"
+                        className="flex-1 px-4 py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-transform active:scale-95 shadow-sm"
                     >
-                        <Plus size={20} /> {t('sales.new_order')}
+                        <Plus size={18} /> {t('sales.new_order') || 'New Sales Order'}
                     </button>
                     <button
                         onClick={() => navigate('/sales/new?type=return')}
-                        className="px-4 py-2 bg-amber-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-amber-700 w-full sm:w-auto"
+                        className="flex-1 px-4 py-3.5 bg-amber-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-amber-700 transition-transform active:scale-95 shadow-sm"
                     >
-                        <RotateCcw size={20} /> {t('sales.create_return')}
+                        <RotateCcw size={18} /> {t('sales.create_return') || 'Create Return'}
                     </button>
                 </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto pb-1 custom-scrollbar">
-                <button
-                    onClick={() => setActiveTab('order')}
-                    className={`px-4 py-2 rounded-t-lg font-medium flex items-center gap-2 whitespace-nowrap ${activeTab === 'order'
-                        ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600 dark:bg-slate-800 dark:text-blue-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                        }`}
-                >
-                    <ShoppingCart size={18} /> {t('sales.orders')} ({stats.orders})
-                </button>
-                <button
-                    onClick={() => setActiveTab('invoice')}
-                    className={`px-4 py-2 rounded-t-lg font-medium flex items-center gap-2 whitespace-nowrap ${activeTab === 'invoice'
-                        ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600 dark:bg-slate-800 dark:text-blue-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                        }`}
-                >
-                    <FileText size={18} /> {t('sales.invoices')} ({stats.invoices})
-                </button>
-                <button
-                    onClick={() => setActiveTab('return')}
-                    className={`px-4 py-2 rounded-t-lg font-medium flex items-center gap-2 whitespace-nowrap ${activeTab === 'return'
-                        ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600 dark:bg-slate-800 dark:text-blue-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                        }`}
-                >
-                    <RotateCcw size={18} /> {t('sales.returns')} ({stats.returns})
-                </button>
-                <button
-                    onClick={() => setActiveTab('payment')}
-                    className={`px-4 py-2 rounded-t-lg font-medium flex items-center gap-2 whitespace-nowrap ${activeTab === 'payment'
-                        ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600 dark:bg-slate-800 dark:text-blue-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                        }`}
-                >
-                    <DollarSign size={18} /> {t('sales.payments_in')} ({stats.payments})
-                </button>
+            <div className="flex justify-between border-b border-slate-200/60 dark:border-slate-800 overflow-x-auto custom-scrollbar px-2 -mx-4 md:mx-0">
+                {[
+                    { id: 'order', label: t('sales.orders') || 'Sales Orders', count: stats.orders, icon: ShoppingCart },
+                    { id: 'invoice', label: t('sales.invoices') || 'Invoices', count: stats.invoices, icon: FileText },
+                    { id: 'return', label: t('sales.returns') || 'Returns', count: stats.returns, icon: RotateCcw },
+                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign }
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={clsx(
+                            "flex flex-col items-center justify-center gap-1.5 px-2 py-3 min-w-[70px] transition-colors border-b-2",
+                            activeTab === tab.id 
+                                ? "text-blue-600 border-blue-600 dark:text-blue-500 dark:border-blue-500" 
+                                : "text-slate-400 border-transparent hover:text-slate-600"
+                        )}
+                    >
+                        <tab.icon size={20} className={activeTab === tab.id ? "text-blue-600" : "text-slate-400"} />
+                        <span className="text-[10px] font-semibold whitespace-nowrap">{tab.label} ({tab.count})</span>
+                    </button>
+                ))}
             </div>
 
             {/* Content Area */}
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 min-h-[400px] overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 min-h-[400px] overflow-hidden">
                 {activeTab === 'invoice' && <SalesHistory onReturn={(inv) => {
                     setActiveTab('return');
                     setCustomerId(inv.customerId);
@@ -459,28 +445,28 @@ const Sales = () => {
 
                 {(activeTab === 'order' || activeTab === 'return') && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                                <tr>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.date')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{activeTab === 'order' ? t('sales.order_no') : t('sales.return_no')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.customer')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.amount')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.status')}</th>
-                                    {activeTab === 'return' && isZatcaEnabled && <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">ZATCA</th>}
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300 text-right">{t('common.actions')}</th>
+                        <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                            <thead>
+                                <tr className="border-b border-slate-50 dark:border-slate-700/50">
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.date')} #</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{activeTab === 'order' ? t('sales.order_no') : t('sales.return_no')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.customer')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.amount')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.status')}</th>
+                                    {activeTab === 'return' && isZatcaEnabled && <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">ZATCA</th>}
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">{t('common.actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                                 {!currentList ? (
                                     Array.from({ length: 5 }).map((_: any, i: any) => (
                                         <tr key={i} className="animate-pulse">
-                                            <td className="p-4"><Skeleton width={100} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={120} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={150} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={60} height={30} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={100} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={120} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={40} height={30} /></td>
                                         </tr>
                                     ))
                                 ) : currentList.length === 0 ? (
@@ -500,45 +486,49 @@ const Sales = () => {
                                     </tr>
                                 ) : (
                                     currentList.map((invoice: any, rowIndex: any) => (
-                                        <tr key={invoice.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                        <tr key={invoice.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition-colors">
                                             <td
                                                 {...getGridCellProps(rowIndex, 0)}
-                                                className="p-4 text-slate-600 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-lg"
+                                                className="p-5 text-xs text-slate-500 dark:text-slate-400 outline-none"
                                             >
                                                 {formatDate(invoice.createdAt)}
                                             </td>
-                                            <td {...getGridCellProps(rowIndex, 1)} className="p-4 font-medium dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{invoice.invoiceNumber || '-'}</td>
-                                            <td {...getGridCellProps(rowIndex, 2)} className="p-4 text-slate-600 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{invoice.customerName || 'Unknown'}</td>
-                                            <td {...getGridCellProps(rowIndex, 3)} className="p-4 font-medium dark:text-white outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{formatCurrency(invoice.grandTotal)}</td>
-                                            <td {...getGridCellProps(rowIndex, 4)} className="p-4 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${invoice.status === 'paid' || invoice.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                    invoice.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-slate-100 text-slate-600'
-                                                    }`}>
+                                            <td {...getGridCellProps(rowIndex, 1)} className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{invoice.invoiceNumber || '-'}</td>
+                                            <td {...getGridCellProps(rowIndex, 2)} className="p-5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none">{invoice.customerName || 'Unknown'}</td>
+                                            <td {...getGridCellProps(rowIndex, 3)} className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{formatCurrency(invoice.grandTotal)}</td>
+                                            <td {...getGridCellProps(rowIndex, 4)} className="p-5 outline-none">
+                                                <span className={clsx(
+                                                    "px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                                                    invoice.status === 'paid' || invoice.status === 'completed' 
+                                                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                                        : invoice.status === 'pending' 
+                                                            ? 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400'
+                                                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                                )}>
                                                     {invoice.status?.toUpperCase()}
                                                 </span>
                                             </td>
                                             {activeTab === 'return' && isZatcaEnabled && (
-                                                <td className="p-4">
+                                                <td className="p-5">
                                                     {invoice.zatcaStatus === 'REPORTED' ? (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
                                                             <ShieldCheck size={12} /> Reported
                                                         </span>
                                                     ) : invoice.zatcaStatus === 'ERROR' ? (
                                                         <span 
-                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
+                                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400 cursor-help"
                                                             title={invoice.zatcaError || 'Validation Error'}
                                                         >
                                                             <ShieldAlert size={12} /> Error
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                                                             <Clock size={12} /> Pending
                                                         </span>
                                                     )}
                                                 </td>
                                             )}
-                                            <td {...getGridCellProps(rowIndex, 5)} className="p-4 text-right flex justify-end gap-2 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-lg">
+                                            <td {...getGridCellProps(rowIndex, 5)} className="p-5 text-right flex flex-col items-end gap-3 outline-none">
                                                 {activeTab === 'order' && invoice.status === 'pending' && (
                                                     <button
                                                         onClick={async () => {
@@ -598,26 +588,26 @@ const Sales = () => {
                                                                 addToast(t('sales.conversion_failed'), 'error');
                                                             }
                                                         }}
-                                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg tooltip"
+                                                        className="text-emerald-500 hover:text-emerald-600 transition-colors tooltip"
                                                         title={t('sales.convert_invoice')}
                                                     >
-                                                        <RotateCcw size={18} className="rotate-180" />
+                                                        <RotateCcw size={16} className="rotate-180" />
                                                     </button>
                                                 )}
                                                 <button
                                                     onClick={() => printInvoice(invoice)}
-                                                    className="p-2 text-slate-400 hover:text-slate-600"
+                                                    className="text-slate-400 hover:text-slate-600 transition-colors"
                                                     title={t('common.print')}
                                                 >
-                                                    <Printer size={18} />
+                                                    <Printer size={16} />
                                                 </button>
                                                 {settings.cafeMode && invoice.status === 'pending' && activeTab === 'order' && (
                                                     <button
                                                         onClick={() => navigate('/pos', { state: { editInvoice: invoice } })}
-                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                                        className="text-blue-500 hover:text-blue-600 transition-colors"
                                                         title="Proceed to Payment"
                                                     >
-                                                        <CreditCard size={18} />
+                                                        <CreditCard size={16} />
                                                     </button>
                                                 )}
                                             </td>
@@ -714,26 +704,27 @@ const Sales = () => {
                             ))}
                         </div>
 
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                                <tr>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.date')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.customer')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.amount')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.method')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.reference')}</th>
-                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300 text-right">{t('common.actions')}</th>
+                        <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                            <thead>
+                                <tr className="border-b border-slate-50 dark:border-slate-700/50">
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.date')} #</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.customer')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.amount')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.method')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.reference')}</th>
+                                    <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">{t('common.actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
                                 {!filteredPayments ? (
                                     Array.from({ length: 5 }).map((_: any, i: any) => (
                                         <tr key={i} className="animate-pulse">
-                                            <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={150} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={80} height={20} /></td>
-                                            <td className="p-4"><Skeleton width={100} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={150} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={80} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={100} height={20} /></td>
+                                            <td className="p-5"><Skeleton width={40} height={20} /></td>
                                         </tr>
                                     ))
                                 ) : filteredPayments.length === 0 ? (
@@ -753,21 +744,23 @@ const Sales = () => {
                                         const customer = customers?.find(c => c.id === payment.customerId);
                                         const custName = customer?.name || 'Unknown';
                                         return (
-                                            <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                <td className="p-4 text-slate-600 dark:text-slate-400">{formatDate(payment.date)}</td>
-                                                <td className="p-4 font-medium dark:text-white">{custName}</td>
-                                                <td className="p-4 font-medium text-green-600">+{formatCurrency(payment.amount)}</td>
-                                                <td className="p-4 text-slate-600 dark:text-slate-400 capitalize">
-                                                    <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-xs font-semibold">{payment.paymentMode}</span>
+                                            <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition-colors">
+                                                <td className="p-5 text-xs text-slate-500 dark:text-slate-400">{formatDate(payment.date)}</td>
+                                                <td className="p-5 text-xs font-bold text-slate-900 dark:text-white tracking-tight">{custName}</td>
+                                                <td className="p-5 text-sm font-bold text-emerald-600 tracking-tight">+{formatCurrency(payment.amount)}</td>
+                                                <td className="p-5 capitalize">
+                                                    <span className="px-3 py-1.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-full text-[9px] font-bold uppercase tracking-wider border border-blue-100 dark:border-blue-800">
+                                                        {payment.paymentMode}
+                                                    </span>
                                                 </td>
-                                                <td className="p-4 text-slate-500 text-sm">{payment.reference || '-'}</td>
-                                                <td className="p-4 text-right">
+                                                <td className="p-5 text-slate-500 text-xs font-medium">{payment.reference || '-'}</td>
+                                                <td className="p-5 text-right flex flex-col items-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         onClick={() => printPaymentReceipt(payment, custName)}
-                                                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors tooltip"
+                                                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors tooltip"
                                                         title="Print Receipt"
                                                     >
-                                                        <Printer size={18} />
+                                                        <Printer size={16} />
                                                     </button>
                                                 </td>
                                             </tr>
