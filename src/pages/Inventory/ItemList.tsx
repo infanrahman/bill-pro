@@ -356,10 +356,9 @@ const ItemList: React.FC = () => {
   }
 
   return (
- <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-20 max-w-[1600px] mx-auto">
+ <div className="space-y-6 max-w-[1600px] mx-auto">
  {/* Header Section */}
   <div className="relative overflow-hidden group">
- 
  
  <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
  <div>
