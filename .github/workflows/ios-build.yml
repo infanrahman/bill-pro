@@ -29,7 +29,7 @@ jobs:
         run: |
           cd ios/App
           # Build the .app file without code signing
-          xcodebuild -workspace App.xcworkspace \
+          xcodebuild -project App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
