@@ -358,7 +358,7 @@ const ItemList: React.FC = () => {
   return (
  <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-20 max-w-[1600px] mx-auto">
  {/* Header Section */}
- <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+  <div className="relative overflow-hidden group">
  
  
  <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
@@ -393,6 +393,7 @@ const ItemList: React.FC = () => {
  <button type="button"
  onClick={handleBulkDeleteClick}
  className="p-3 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl"
+ className="p-3 text-rose-400 hover:bg-rose-500 hover:text-white rounded-full"
  title={t('common.delete')}
  >
  <Trash size={18} />
@@ -402,149 +403,147 @@ const ItemList: React.FC = () => {
  </>
 
  <div className="flex items-center gap-3">
- <button type="button"
- onClick={handleAutoFillBarcodes}
- className="p-4 bg-white dark:bg-slate-800 text-purple-500 rounded-2xl border border-white dark:border-slate-700"
- title={t('inventory.auto_fill_barcodes')}
- >
- <Wand2 size={20} />
- </button>
- 
- <input type="file"ref={fileInputRef} className="hidden"onChange={handleImportExcel} accept=".xlsx, .xls, .csv"/>
- <button type="button"
- onClick={() => fileInputRef.current?.click()}
- disabled={isImporting}
- className="p-4 bg-white dark:bg-slate-800 text-emerald-500 rounded-2xl border border-white dark:border-slate-700"
- >
- <Upload size={20} />
- </button>
+  <button type="button"
+  onClick={handleAutoFillBarcodes}
+  className="p-3 bg-white dark:bg-slate-800 text-indigo-500 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm"
+  title={t('inventory.auto_fill_barcodes')}
+  >
+  <Wand2 size={18} />
+  </button>
+  
+  <input type="file"ref={fileInputRef} className="hidden"onChange={handleImportExcel} accept=".xlsx, .xls, .csv"/>
+  <button type="button"
+  onClick={() => fileInputRef.current?.click()}
+  disabled={isImporting}
+  className="p-3 bg-white dark:bg-slate-800 text-emerald-500 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm"
+  >
+  <Upload size={18} />
+  </button>
 
- <button type="button"
- onClick={() => navigate('/inventory/add')}
- className="flex items-center gap-3 bg-slate-900 dark:bg-white text-white px-8 py-4 rounded-2xl font-semibold text-xs uppercase tracking-wider"
- >
- <Plus size={18} />
- {t('common.add')}
- </button>
- </div>
+  <button type="button"
+  onClick={() => navigate('/inventory/add')}
+  className="flex items-center gap-2 bg-slate-900 dark:bg-white text-white px-6 py-3 rounded-full font-semibold text-xs uppercase tracking-wider"
+  >
+  <Plus size={16} />
+  {t('common.add')}
+  </button>
+  </div>
  </div>
  </div>
  </div>
 
  {/* Stats Ribbon */}
- <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+ <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
  {[
- { label: t('inventory.total_items') || 'Total Products', value: inventoryStats?.total || 0, icon: Box, color: 'blue' },
+ { label: t('inventory.total_items') || 'Total Products', value: inventoryStats?.total || 0, icon: Box, color: 'indigo' },
  { label: t('inventory.low_stock') || 'Low Stock Alerts', value: inventoryStats?.lowStock || 0, icon: AlertTriangle, color: 'rose' },
  { label: t('inventory.stock_value') || 'Stock Value (Cost)', value: formatCurrency(inventoryStats?.totalValue || 0), icon: Banknote, color: 'emerald' }
  ].map((stat, i) => (
  <div
  key={i}
- className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex items-center gap-6"
+ className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/30 shadow-sm flex flex-col items-start gap-4"
  >
  <div className={clsx(
-"p-4 rounded-2xl",
- stat.color === 'blue' ?"bg-slate-900 dark:bg-white text-white":
- stat.color === 'rose' ?"bg-rose-500 text-white":"bg-emerald-500 text-white"
-)}>
- <stat.icon size={24} />
+ "p-3 rounded-2xl",
+ stat.color === 'indigo' ?"bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600":
+ stat.color === 'rose' ?"bg-rose-50 dark:bg-rose-900/30 text-rose-500":"bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500"
+ )}>
+ <stat.icon size={22} />
  </div>
  <div>
- <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-1">{stat.label}</p>
- <p className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">{stat.value}</p>
+ <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">{stat.label}</p>
+ <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{stat.value}</p>
  </div>
  </div>
-))}
- </div>
-
+ ))}
  {/* Main Tabs & View Toggle */}
- <div className="flex flex-col md:flex-row items-center justify-between gap-6">
- <div className="flex p-1.5 bg-slate-200 dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 w-full md:w-auto">
+ <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+ {/* Main Tabs */}
+ <div className="flex md:inline-flex p-1 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700 w-full md:w-auto shadow-sm">
  {[
  { id: 'items', label: t('inventory.items') || 'Products', icon: Box },
- { id: 'categories', label: t('inventory.categories'), icon: Tags }
+ { id: 'categories', label: t('inventory.categories') || 'Categories', icon: LayoutGrid }
  ].map((tab) => (
  <button type="button"
  key={tab.id}
  onClick={() => setActiveTab(tab.id as any)}
  className={clsx(
-"flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-3 rounded-xl text-[10px] font-semibold uppercase tracking-wider",
+ "flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-2.5 rounded-xl text-xs font-bold transition-all duration-200",
  activeTab === tab.id 
- ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white ' 
- : 'text-slate-700 hover:text-slate-700 dark:hover:text-slate-300'
-)}
+ ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-100 dark:border-slate-600' 
+ : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+ )}
  >
  <tab.icon size={16} />
  {tab.label}
  </button>
-))}
+ ))}
  </div>
 
-        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-          {activeTab === 'items' && categories && categories.length > 0 && (
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-xs outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
-            >
-              <option value="all">{t('inventory.all_categories') || 'All Categories'}</option>
-              {categories.map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          )}
+ <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto flex-1 md:flex-none max-w-2xl">
+ <div className="relative flex-1 group">
+ <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-900 dark:group-focus-within:text-white" size={18} />
+ <input
+ type="text"
+ placeholder={t('inventory.search_placeholder') || 'Search items by name or barcode'}
+ value={search}
+ onChange={(e) => setSearch(e.target.value)}
+ className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-2xl font-semibold text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 dark:text-white shadow-sm"
+ />
+ </div>
 
-          {activeTab === 'items' && suppliers && suppliers.length > 0 && (
-            <select
-              value={selectedSupplier}
-              onChange={(e) => setSelectedSupplier(e.target.value)}
-              className="px-4 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-xs outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
-            >
-              <option value="all">{t('inventory.supplier') || 'All Suppliers'}</option>
-              {suppliers.map((s: any) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          )}
+ <div className="flex p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm shrink-0 self-center">
+ <button
+ type="button"
+ onClick={() => setViewMode('list')}
+ className={clsx(
+ "p-2 rounded-lg transition-colors",
+ viewMode === 'list' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-slate-400'
+ )}
+ >
+ <List size={18} />
+ </button>
+ <button
+ type="button"
+ onClick={() => setViewMode('grid')}
+ className={clsx(
+ "p-2 rounded-lg transition-colors",
+ viewMode === 'grid' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-slate-400'
+ )}
+ >
+ <LayoutGrid size={18} />
+ </button>
+ </div>
+ </div>
+ </div>
 
-          <div className="relative flex-1 group min-w-[200px] md:min-w-[300px]">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white" size={20} />
-            <input
-              type="text"
-              placeholder={t('inventory.search_placeholder')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-16 pr-6 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
-            />
-          </div>
+ <div className="flex items-center gap-3 w-full md:w-auto">
+ {activeTab === 'items' && categories && categories.length > 0 && (
+ <select
+ value={selectedCategory}
+ onChange={(e) => setSelectedCategory(e.target.value)}
+ className="px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-xl font-semibold text-xs outline-none shadow-sm cursor-pointer"
+ >
+ <option value="all">{t('inventory.all_categories') || 'All Categories'}</option>
+ {categories.map((c: any) => (
+ <option key={c.id} value={c.id}>{c.name}</option>
+ ))}
+ </select>
+ )}
 
-          <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={clsx(
-                "p-3 rounded-xl",
-                viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
-              )}
-            >
-              <List size={20} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={clsx(
-                "p-3 rounded-xl",
-                viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
-              )}
-            >
-              <LayoutGrid size={20} />
-            </button>
-          </div>
-        </div>
+ {activeTab === 'items' && suppliers && suppliers.length > 0 && (
+ <select
+ value={selectedSupplier}
+ onChange={(e) => setSelectedSupplier(e.target.value)}
+ className="px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-xl font-semibold text-xs outline-none shadow-sm cursor-pointer"
+ >
+ <option value="all">{t('inventory.supplier') || 'Supplier'}</option>
+ {suppliers.map((s: any) => (
+ <option key={s.id} value={s.id}>{s.name}</option>
+ ))}
+ </select>
+ )}
+ </div>
       </div>
 
       {activeTab === 'items' && selectedCategory !== 'all' && (
@@ -580,61 +579,61 @@ const ItemList: React.FC = () => {
  <div key="items">
  {loading || (items && items.length > 0) ? (
   viewMode === 'list' ? (
- <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
+ <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
  <div className="overflow-x-auto">
  <table className="w-full text-left whitespace-nowrap min-w-[800px]">
  <thead>
- <tr className="border-b border-slate-100 dark:border-slate-700/50">
- <th className="p-6 w-12 text-center">
+ <tr className="border-b border-slate-50 dark:border-slate-700/50">
+ <th className="p-5 w-12 text-center">
  <input
  type="checkbox"
- className="w-5 h-5 rounded-lg border-slate-300 text-slate-900 dark:text-white"
+ className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
  checked={items && items.length > 0 && items.every((i: any) => selectedIds.includes(i.id!))}
  onChange={toggleSelectAll}
  />
  </th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.item_name')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.barcode')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.stock')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.sale_price')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.supplier') || t('suppliers.title') || 'Supplier'}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right">{t('common.actions')}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.item_name') || 'Item Name'}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.barcode') || 'Barcode'}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.stock') || 'Stock'}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.sale_price') || 'Sale Price'}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.supplier') || t('suppliers.title') || 'Supplier'}</th>
+ <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right"></th>
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
  {loading || !items ? (
  Array.from({ length: 5 }).map((_, i) => (
  <tr key={i} className="">
- <td className="p-6"><Skeleton width={20} height={20} /></td>
- <td className="p-6"><Skeleton width={200} height={20} /></td>
- <td className="p-6"><Skeleton width={120} height={20} /></td>
- <td className="p-6"><Skeleton width={80} height={20} /></td>
- <td className="p-6"><Skeleton width={100} height={20} /></td>
- <td className="p-6"><Skeleton width={100} height={20} /></td>
- <td className="p-6 text-right"><Skeleton width={100} height={32} /></td>
+ <td className="p-5"><Skeleton width={20} height={20} /></td>
+ <td className="p-5"><Skeleton width={200} height={20} /></td>
+ <td className="p-5"><Skeleton width={120} height={20} /></td>
+ <td className="p-5"><Skeleton width={80} height={20} /></td>
+ <td className="p-5"><Skeleton width={100} height={20} /></td>
+ <td className="p-5"><Skeleton width={100} height={20} /></td>
+ <td className="p-5 text-right"><Skeleton width={100} height={32} /></td>
  </tr>
 ))
 ) : (
  items.map((item: Item, idx: number) => (
  <tr 
  key={item.id}
- className="hover:bg-slate-50 dark:hover:bg-slate-700 group"
+ className="hover:bg-slate-50 dark:hover:bg-slate-700/50 group transition-colors"
  >
- <td className="p-6 text-center">
+ <td className="p-5 text-center">
  <input
  type="checkbox"
- className="w-5 h-5 rounded-lg border-slate-300 text-slate-900 dark:text-white"
+ className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
  checked={selectedIds.includes(item.id!)}
  onChange={() => toggleSelect(item.id!)}
  />
  </td>
- <td className="p-6">
+ <td className="p-5">
  <div className="flex items-center gap-4">
  {item.image && (
- <img src={item.image} className="w-10 h-10 rounded-lg object-cover border border-slate-200"alt=""/>
+ <img src={item.image} className="w-10 h-10 rounded-lg object-cover border border-slate-100 dark:border-slate-700"alt=""/>
 )}
  <div>
- <p className="font-semibold dark:text-white uppercase tracking-tight">{item.name}</p>
+ <p className="font-bold text-xs dark:text-white uppercase tracking-tight">{item.name}</p>
  {item.itemCode && (
  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">
  PLU: {item.itemCode}
@@ -643,12 +642,12 @@ const ItemList: React.FC = () => {
  </div>
  </div>
  </td>
- <td className="p-6">
- <span className="font-mono text-xs font-semibold bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 tracking-wider inline-block">
+ <td className="p-5">
+ <span className="font-mono text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg text-indigo-700 dark:text-indigo-400 tracking-wider inline-block">
  {item.barcode || '---'}
  </span>
  </td>
- <td className="p-6">
+ <td className="p-5">
  <div className={clsx(
 "flex items-center gap-2 px-3 py-1 rounded-full w-fit text-[9px] font-semibold uppercase tracking-wider border",
  (item.stock || 0) <= (item.minStock || 0) 
@@ -659,19 +658,19 @@ const ItemList: React.FC = () => {
  {item.stock} {t('inventory.units')}
  </div>
  </td>
- <td className="p-6">
- <p className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</p>
+ <td className="p-5">
+ <p className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</p>
  </td>
- <td className="p-6">
- <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-tight">
+ <td className="p-5">
+ <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
  {item.supplierId ? (supplierMap.get(item.supplierId) || '---') : '---'}
  </span>
  </td>
- <td className="p-6 text-right">
+ <td className="p-5 text-right">
  <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100">
- <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
- <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-700" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
- <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-3 bg-white dark:bg-slate-800 text-rose-500 rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
+ <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
+ <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-2.5 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
+ <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-2.5 bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
  </div>
  </td>
  </tr>
