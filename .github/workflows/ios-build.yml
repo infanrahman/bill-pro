@@ -22,12 +22,6 @@ jobs:
       - name: Build Web App
         run: npm run build:base
 
-      - name: Fix Windows Paths in SPM
-        run: |
-          if [ -f ios/App/CapApp-SPM/Package.swift ]; then
-            sed -i '' 's/\\/\//g' ios/App/CapApp-SPM/Package.swift
-          fi
-
       - name: Sync Capacitor (iOS)
         run: npx cap sync ios
 
