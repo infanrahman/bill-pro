@@ -595,18 +595,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  </div>
 )}
 
- <div className="mt-auto pt-10 flex justify-between items-center border-t border-slate-200/50 dark:border-slate-700/50">
- <button type="button"
- 
- 
- onClick={() => onClose()} 
- disabled={isProcessing} 
- className="px-8 py-4 rounded-2xl font-semibold text-slate-600 hover:text-slate-900 dark:hover:text-white disabled:opacity-50 uppercase tracking-wider text-[10px] flex items-center gap-3"
- >
- <XCircle size={18} />
- {t('common.cancel')}
- </button>
- </div>
+ {/* Removed Cancel button from here */}
  </div>
 
  {/* RIGHT SIDE: Receipt Summary (40%) */}
@@ -823,6 +812,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  </>
 )}
  </button>
+ 
+ {/* Mobile Cancel Button */}
+ <div className="mt-4 pt-4 border-t border-slate-200/50 dark:border-slate-700/50 flex justify-center">
+   <button type="button"
+     onClick={() => onClose()} 
+     disabled={isProcessing} 
+     className="py-3 px-6 rounded-xl font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white disabled:opacity-50 uppercase tracking-wider text-[10px] flex items-center gap-3 w-full justify-center"
+   >
+     <XCircle size={18} />
+     {t('common.cancel')}
+   </button>
+ </div>
  </div>
  </div>
  </div>

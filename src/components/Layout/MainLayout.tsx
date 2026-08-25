@@ -17,10 +17,12 @@ import { useLocation } from 'react-router-dom';
 
 import { db } from '../../services/db';
 
+import MobileBottomNav from './MobileBottomNav';
+import { Search } from 'lucide-react';
+
 const MainLayout: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    // const { registerShortcut, unregisterShortcut } = useKeyboard(); // Removed context dependency for F9 to ensure it works
     const [isQuickPayOpen, setIsQuickPayOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1280);
 
@@ -94,55 +96,68 @@ const MainLayout: React.FC = () => {
         <div className="flex h-screen w-screen bg-slate-50 dark:bg-slate-950 overflow-hidden text-slate-900 dark:text-slate-100 font-inter pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
             <LicenseBlocker />
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-            <div className="flex-1 flex flex-col h-screen overflow-hidden">
+            <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 <TrialBanner />
-                <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 md:p-4 flex items-center justify-between z-10">
+                    <div className="flex items-center gap-3">
                         {/* Hamburger Menu Button */}
                         <button
                             type="button"
                             onClick={() => setIsSidebarOpen(prev => !prev)}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-400 transition-colors"
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-800 dark:text-slate-200 transition-colors"
                             title="Toggle Menu"
                         >
-                            <Menu size={20} />
+                            <Menu size={24} />
                         </button>
 
-                        <button
-                            onClick={() => navigate(-1)}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
-                            title="Go Back"
-                        >
-                            <ChevronLeft size={20} />
-                        </button>
-                        <button
-                            onClick={() => navigate(1)}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
-                            title="Go Forward"
-                        >
-                            <ChevronRight size={20} />
-                        </button>
+                        <div className="hidden md:flex items-center gap-2 ml-2">
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
+                                title="Go Back"
+                            >
+                                <ChevronLeft size={20} />
+                            </button>
+                            <button
+                                onClick={() => navigate(1)}
+                                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
+                                title="Go Forward"
+                            >
+                                <ChevronRight size={20} />
+                            </button>
+                        </div>
+
+                        {/* Mobile Brand Name */}
+                        <div className="md:hidden flex flex-col pl-1">
+                            <span className="font-bold text-lg leading-tight tracking-wide text-slate-900 dark:text-white uppercase">POS App</span>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setIsQuickPayOpen(true)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-900/50 rounded-full transition-colors font-medium text-sm"
-                            title="Quick Payment (Zap)"
-                        >
-                            <Zap size={16} className="fill-yellow-700 dark:fill-yellow-400" />
-                            <span className="hidden md:inline">Quick Pay</span>
+                    <div className="flex items-center gap-3 md:gap-4">
+                        <button className="md:hidden p-2 text-slate-700 dark:text-slate-300">
+                            <Search size={22} />
                         </button>
+                        
+                        <div className="hidden md:flex">
+                            <button
+                                onClick={() => setIsQuickPayOpen(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-900/50 rounded-full transition-colors font-medium text-sm"
+                                title="Quick Payment (Zap)"
+                            >
+                                <Zap size={16} className="fill-yellow-700 dark:fill-yellow-400" />
+                                <span>Quick Pay</span>
+                            </button>
+                        </div>
 
                         <NotificationBell />
-                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm">
                             {/* Avatar Placeholder */}
-                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" className="w-full h-full object-cover" />
                         </div>
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-6 xl:p-8">
+                <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-6 xl:p-8 pb-24 md:pb-6 xl:pb-8">
                     <div className="w-full h-full mx-auto">
                         <AnimatePresence mode="wait">
                             <PageTransition key={location.pathname} className="h-full">
@@ -151,6 +166,8 @@ const MainLayout: React.FC = () => {
                         </AnimatePresence>
                     </div>
                 </main>
+                
+                <MobileBottomNav />
             </div>
 
             <QuickPaymentModal
