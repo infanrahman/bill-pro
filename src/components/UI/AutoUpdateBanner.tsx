@@ -37,9 +37,9 @@ export const AutoUpdateBanner: React.FC = () => {
           setVisible(true);
           break;
         case 'error':
-          setStatus('error');
-          setErrorMsg(msg.error);
-          setVisible(true);
+          // Suppress raw 404 / no release errors from popping up automatically
+          setStatus('idle');
+          setVisible(false);
           break;
       }
     });

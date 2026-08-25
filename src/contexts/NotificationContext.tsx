@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { db, type Notification, createRecordMetadata } from '../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 
@@ -31,15 +31,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
  const unreadCount = notifications.filter(n => !n.read).length;
 
+ const removeToast = React.useCallback((id: number) => {
+ setToasts(prev => prev.filter(t => t.id !== id));
+ }, []);
+
  const addToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
  const id = Date.now();
  setToasts(prev => [...prev, { id, message, type }]);
  setTimeout(() => removeToast(id), 3000);
- }, []);
-
- const removeToast = React.useCallback((id: number) => {
- setToasts(prev => prev.filter(t => t.id !== id));
- }, []);
+ }, [removeToast]);
 
  const addNotification = React.useCallback(async (message: string, type: 'info' | 'warning' | 'success' | 'error', relatedId?: string) => {
  await db.notifications.add({
@@ -58,8 +58,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  }, []);
 
  const markAllAsRead = React.useCallback(async () => {
+ const now = new Date();
  const unread = await db.notifications.filter(n => !n.read).toArray();
- await Promise.all(unread.map(n => db.notifications.update(n.id!, { read: true, updatedAt: new Date() })));
+ if (unread.length === 0) return;
+ const updated = unread.map(n => ({ ...n, read: true, updatedAt: now }));
+ await db.notifications.bulkPut(updated);
  }, []);
 
  const checkReminders = React.useCallback(async () => {
@@ -69,6 +72,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
  const today = new Date();
  today.setHours(0, 0, 0, 0);
+
+ // Pre-fetch all existing unread notifications in ONE query to avoid N+1
+ const existingUnread = await db.notifications
+   .filter(n => !n.read)
+   .toArray();
+ const existingRefs = new Set(existingUnread.map(n => `${n.referenceId}:${n.type}`));
 
  // 1. Payment Due Reminders (Customer Credit)
  if (settings.paymentDue) {
@@ -81,16 +90,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  .toArray();
 
  for (const inv of overdueInvoices) {
- const exists = await db.notifications
- .filter(n => n.referenceId === inv.id && n.type === 'warning' && !n.read)
- .first();
-
- if (!exists) {
+ if (!existingRefs.has(`${inv.id}:warning`)) {
  await addNotification(
-`Overdue Credit: ${inv.customerName} owes $${inv.remainingAmount?.toFixed(2)} (Inv #${inv.invoiceNumber})`,
+ `Overdue Credit: ${inv.customerName} owes $${inv.remainingAmount?.toFixed(2)} (Inv #${inv.invoiceNumber})`,
  'warning',
  inv.id
-);
+ );
+ existingRefs.add(`${inv.id}:warning`);
  }
  }
  }
@@ -102,23 +108,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  .toArray();
 
  for (const item of lowStockItems) {
- const exists = await db.notifications
- .where({ referenceId: item.id, type: 'warning' }) // Use referenceId
- .filter(n => !n.read && n.message.includes('Low stock'))
- .first();
-
- if (!exists) {
+ if (!existingRefs.has(`${item.id}:warning`)) {
  await addNotification(
-`Low stock alert: ${item.name} (Qty: ${item.stock})`,
+ `Low stock alert: ${item.name} (Qty: ${item.stock})`,
  'warning',
  item.id
-);
+ );
+ existingRefs.add(`${item.id}:warning`);
  }
  }
  }
 
  // 3. Purchase Order Due (Due Credit) Reminders
- if (settings.paymentDue) { // Reuse paymentDue setting or add new one
+ if (settings.paymentDue) {
  const overduePurchases = await db.purchases
  .filter(p => {
  const balance = p.totalAmount - (p.paidAmount || 0);
@@ -129,18 +131,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  for (const po of overduePurchases) {
  const relId = po.id;
  if (!relId) continue;
-
- const existsId = await db.notifications
- .where({ referenceId: relId, type: 'error' })
- .filter(n => !n.read && n.message.includes('Overdue Purchase'))
- .first();
-
- if (!existsId) {
+ if (!existingRefs.has(`${relId}:error`)) {
  await addNotification(
-`Overdue Purchase to ${po.supplierName} (${po.orderNumber})`,
+ `Overdue Purchase to ${po.supplierName} (${po.orderNumber})`,
  'error',
  relId
-);
+ );
+ existingRefs.add(`${relId}:error`);
  }
  }
  }
@@ -179,8 +176,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  };
  }, [checkReminders, addToast]);
 
- return (
- <NotificationContext.Provider value={{
+ const contextValue = useMemo(() => ({
  toasts,
  notifications,
  unreadCount,
@@ -189,7 +185,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
  markAsRead,
  markAllAsRead,
  checkReminders
- }}>
+ }), [toasts, notifications, unreadCount, addToast, addNotification, markAsRead, markAllAsRead, checkReminders]);
+
+ return (
+ <NotificationContext.Provider value={contextValue}>
  {children}
  </NotificationContext.Provider>
 );

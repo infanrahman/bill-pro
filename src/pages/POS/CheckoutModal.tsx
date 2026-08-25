@@ -142,11 +142,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
 
  const isCreditSale = !isPayLater && (paymentMode === 'credit' || balanceDue > 0.01);
  const currentBalance = customer?.balance || 0;
- const limit = customer?.creditLimit || 0;
- const canTakeCredit = !!customerId && (limit === 0 || (currentBalance + balanceDue <= limit)); // Assuming 0 limit means strict 0.
- // Actually, usually if creditLimit is 0 it means"No Credit".
- // If we want"No Limit", we'd use -1 or null.
- // Let's stick to: if limit > 0 check it. If limit === 0, then Credit NOT Allowed.
+ const limit = customer?.creditLimit;
+ // H12 Fix: undefined/null limit = no credit limit set (allowed); limit === 0 = NO credit allowed; limit > 0 = enforce cap
+ const canTakeCredit = !!customerId && (
+   limit === undefined || limit === null ? true : (limit > 0 ? (currentBalance + balanceDue <= limit) : false)
+ );
 
  const [isProcessing, setIsProcessing] = useState(false);
 
@@ -294,7 +294,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  { ...safeBusinessDetails, gstin: vatNumber },
  zatcaConfig.privateKey,
  activeCsid,
- currentPIH
+ currentPIH,
+ (branch?.invoiceCounter || 0) + 1
 );
  
  precalculatedXML = result.xml;
@@ -369,6 +370,21 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
 
  // --- 3. ZATCA REPORTING (Background) ---
  if (precalculatedXML && precalculatedHash) {
+ // C9 Fix: Always update the local ICV counter and PIH hash IMMEDIATELY when the
+ // invoice is created, regardless of ZATCA reporting outcome. This keeps the
+ // cryptographic chain intact for offline scenarios and prevents ICV gaps.
+ try {
+ const activeBranchIdForZatca = getCurrentBranchId();
+ const branchForZatca = await db.branches.get(activeBranchIdForZatca);
+ const nextICV = (branchForZatca?.invoiceCounter || 0) + 1;
+ await db.branches.update(activeBranchIdForZatca, {
+ lastInvoiceHash: precalculatedHash,
+ invoiceCounter: nextICV
+ });
+ } catch (chainErr) {
+ console.error('Failed to update ZATCA chain counters:', chainErr);
+ }
+
  (async () => {
  try {
  const zatcaConfig = (window.electron && window.electron.zatca)
@@ -392,15 +408,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  activeSecret,
  env
 );
-
- const activeBranchId = getCurrentBranchId();
- const branch = await db.branches.get(activeBranchId);
- const nextICV = (branch?.invoiceCounter || 0) + 1;
-
- await db.branches.update(activeBranchId, {
- lastInvoiceHash: precalculatedHash,
- invoiceCounter: nextICV
- });
 
  if (reportResult.status === 'REPORTED') {
  await db.invoices.update(newId!, {
@@ -445,16 +452,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  }
  };
 
- return (
- <Modal
- isOpen={isOpen}
- onClose={() => onClose()}
- maxWidth="5xl"
- className="!overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-700/50"
- >
- <div className="flex flex-col md:flex-row w-full min-h-0 relative"style={{ height: 'min(90vh, 800px)' }}>
- {/* Background Decorations */}
- <div className="absolute top-0 left-0 w-full h-full bg-slate-50 dark:bg-slate-900 -z-10"/>
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row overflow-hidden animate-in fade-in duration-200">
+      <div className="flex flex-col md:flex-row w-full h-full relative">
+        {/* Background Decorations */}
+        <div className="absolute top-0 left-0 w-full h-full bg-slate-50 dark:bg-slate-900 -z-10"/>
 
  {/* LEFT SIDE: Payment Methods (60%) */}
  <div className="w-full md:w-[60%] flex flex-col p-6 md:p-10 overflow-y-auto border-r border-slate-200/50 dark:border-slate-700/50 relative z-10">
@@ -641,6 +645,27 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
 )}
  </div>
 
+ {/* Customer Details */}
+ {customer && customer.id !== '0' && (
+   <div className="mb-6 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/50 flex flex-col gap-1 shrink-0">
+     <div className="flex justify-between items-center">
+       <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Customer</span>
+       {customer.balance > 0 && (
+         <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 rounded-full">
+           Balance: {formatCurrency(customer.balance)}
+         </span>
+       )}
+     </div>
+     <span className="text-sm font-bold text-slate-900 dark:text-white uppercase">{customer.name}</span>
+     {customer.phone && (
+       <span className="text-xs text-slate-500 font-medium">{customer.phone}</span>
+     )}
+     {customerVatNumber && (
+       <span className="text-xs text-slate-500 font-medium">VAT: {customerVatNumber}</span>
+     )}
+   </div>
+ )}
+
  {/* Scrollable Items List */}
  <div className="flex-1 overflow-y-auto mb-8 pr-2 custom-scrollbar space-y-4">
  {items.map((item, idx) => (
@@ -802,7 +827,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  </div>
  </div>
  </div>
- </Modal>
+ </div>
 );
 };
 

@@ -81,55 +81,94 @@ const Dashboard: React.FC = () => {
  checkReminders();
  }, [checkReminders]);
 
+ // Keep full invoices query for accurate total stats (important for billing app)
  const invoices = useLiveQuery(() => activeBranch?.isMaster ? db.invoices.toArray() : db.invoices.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
  const expenses = useLiveQuery(() => activeBranch?.isMaster ? db.expenses.toArray() : db.expenses.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
  const lowStockItems = useLiveQuery(() =>
- activeBranch?.isMaster ? db.items.filter((i: any) => i.stock <= i.minStock).toArray() : db.items.where('branchId').equals(activeBranchId).filter((i: any) => i.stock <= i.minStock).toArray(), [activeBranchId, activeBranch?.isMaster]
+ activeBranch?.isMaster ? db.items.filter((i: any) => i.stock <= i.minStock && !i.deletedAt).toArray() : db.items.where('branchId').equals(activeBranchId).filter((i: any) => i.stock <= i.minStock && !i.deletedAt).toArray(), [activeBranchId, activeBranch?.isMaster]
 );
  const purchases = useLiveQuery(() => activeBranch?.isMaster ? db.purchases.toArray() : db.purchases.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
- const suppliers = useLiveQuery(() => activeBranch?.isMaster ? db.suppliers.toArray() : db.suppliers.where('branchId').equals(activeBranchId).toArray(), [activeBranchId, activeBranch?.isMaster]);
+ const suppliers = useLiveQuery(() => activeBranch?.isMaster ? db.suppliers.filter((s: any) => !s.deletedAt).toArray() : db.suppliers.where('branchId').equals(activeBranchId).filter((s: any) => !s.deletedAt).toArray(), [activeBranchId, activeBranch?.isMaster]);
  const inventoryItems = useLiveQuery(() => db.items.toArray());
 
  const isLoading = !invoices || !expenses || !lowStockItems || !purchases || !suppliers;
 
  // Metrics Calculation
- const { totalSales, totalTax, totalCOGS } = (invoices || []).reduce((acc, inv) => {
- acc.totalSales += inv.grandTotal;
- acc.totalTax += inv.taxAmount || 0;
- const invCOGS = (inv.items || []).reduce((pSum, item) => {
- const cost = item.purchasePrice ?? (inventoryItems?.find(oi => oi.id === item.itemId)?.purchasePrice || 0);
- return pSum + (cost * item.quantity);
- }, 0);
- acc.totalCOGS += invCOGS;
- return acc;
- }, { totalSales: 0, totalTax: 0, totalCOGS: 0 });
+  // Only count valid sales: exclude cancelled and sales returns
+  const validInvoices = (invoices || []).filter(
+  (inv: any) => inv.status !== 'cancelled' && inv.type !== 'return'
+  );
+  // Sales returns to subtract from revenue/COGS
+  const returnInvoices = (invoices || []).filter(
+  (inv: any) => inv.status !== 'cancelled' && inv.type === 'return'
+  );
 
- const netRevenue = totalSales - totalTax;
- const totalExpenses = expenses?.reduce((sum: any, exp: any) => sum + exp.amount, 0) || 0;
- const netProfit = netRevenue - totalCOGS - totalExpenses;
+  // Build a costMap for O(1) COGS fallback lookups instead of O(n) Array.find
+  const costMap = new Map<string, number>(
+    (inventoryItems || []).map(item => [item.id!, item.purchasePrice])
+  );
 
- const todaySales = invoices
- ?.filter((inv: any) => new Date(inv.createdAt).toDateString() === today.toDateString())
- .reduce((sum: any, inv: any) => sum + inv.grandTotal, 0) || 0;
+  const { totalSales, totalTax, totalCOGS } = validInvoices.reduce((acc, inv) => {
+  acc.totalSales += inv.grandTotal;
+  acc.totalTax += inv.taxAmount || 0;
+  const invCOGS = (inv.items || []).reduce((pSum, item) => {
+  const cost = item.purchasePrice ?? (costMap.get(item.itemId) || 0);
+  return pSum + (cost * item.quantity);
+  }, 0);
+  acc.totalCOGS += invCOGS;
+  return acc;
+  }, { totalSales: 0, totalTax: 0, totalCOGS: 0 });
 
- const pendingOrders = purchases?.filter((p: any) => p.type === 'order' && p.status === 'pending') || [];
- const totalPurchasesMonth = purchases
- ?.filter((p: any) => p.type === 'bill' && new Date(p.date).getMonth() === today.getMonth())
- .reduce((sum: any, p: any) => sum + p.totalAmount, 0) || 0;
- const totalSupplierBalance = suppliers?.reduce((sum: any, s: any) => sum + (s.balance || 0), 0) || 0;
+  // Subtract returns from totals
+  const { returnSales, returnTax, returnCOGS } = returnInvoices.reduce((acc, inv) => {
+  acc.returnSales += inv.grandTotal || 0;
+  acc.returnTax += inv.taxAmount || 0;
+  const invCOGS = (inv.items || []).reduce((pSum: number, item: any) => {
+  const cost = item.purchasePrice ?? (costMap.get(item.itemId) || 0);
+  return pSum + (cost * item.quantity);
+  }, 0);
+  acc.returnCOGS += invCOGS;
+  return acc;
+  }, { returnSales: 0, returnTax: 0, returnCOGS: 0 });
 
- const chartData = Array.from({ length: 7 }).map((_, i) => {
- const d = new Date();
- d.setDate(d.getDate() - (6 - i));
- const sales = invoices
- ?.filter((inv: any) => new Date(inv.createdAt).toDateString() === d.toDateString())
- .reduce((sum: any, inv: any) => sum + inv.grandTotal, 0) || 0;
- return { name: formatDate(d), sales };
- });
+  const netRevenue = (totalSales - returnSales) - (totalTax - returnTax);
+  const totalExpenses = expenses?.reduce((sum: any, exp: any) => sum + (exp.amount || 0), 0) || 0;
+  const netProfit = netRevenue - (totalCOGS - returnCOGS) - totalExpenses;
+
+  const todaySales = (invoices || [])
+  .filter((inv: any) =>
+  inv.status !== 'cancelled' &&
+  inv.type !== 'return' &&
+  new Date(inv.createdAt).toDateString() === today.toDateString()
+  )
+  .reduce((sum: any, inv: any) => sum + inv.grandTotal, 0) || 0;
+
+  const pendingOrders = purchases?.filter((p: any) => p.type === 'order' && p.status === 'pending') || [];
+  // H27 Fix: also check year to avoid aggregating same-month data from previous years
+  const totalPurchasesMonth = purchases
+  ?.filter((p: any) => {
+  const d = new Date(p.date);
+  return p.type === 'bill' && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  })
+  .reduce((sum: any, p: any) => sum + p.totalAmount, 0) || 0;
+  const totalSupplierBalance = suppliers?.reduce((sum: any, s: any) => sum + (s.balance || 0), 0) || 0;
+
+  // Build a date->sales map from validInvoices for O(1) chart lookups
+  const salesByDate = new Map<string, number>();
+  for (const inv of validInvoices) {
+    const dateKey = new Date(inv.createdAt).toDateString();
+    salesByDate.set(dateKey, (salesByDate.get(dateKey) || 0) + inv.grandTotal);
+  }
+
+  const chartData = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return { name: formatDate(d), sales: salesByDate.get(d.toDateString()) || 0 };
+  });
 
  if (isLoading) {
  return (
- <div className="space-y-8 p-8">
+ <div className="space-y-6 md:space-y-8 p-4 md:p-8">
  <div className="flex justify-between items-end">
  <div className="space-y-2">
  <Skeleton width={200} height={40} className="rounded-xl"/>
@@ -158,7 +197,7 @@ const Dashboard: React.FC = () => {
  <div 
  
  
- className="space-y-10 p-4 md:p-8 min-h-screen pb-20"
+ className="space-y-6 md:space-y-10 p-4 md:p-8 min-h-screen pb-20"
  >
  {/* Header with Background Decorative Elements */}
  <div className="relative">
@@ -200,7 +239,7 @@ const Dashboard: React.FC = () => {
  </div>
 
  {/* Stats Grid */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
  {hasPermission('reports_view') && (
  <>
  <StatCard
@@ -251,7 +290,7 @@ const Dashboard: React.FC = () => {
  
  
  
- className="grid grid-cols-1 md:grid-cols-3 gap-8"
+ className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8"
  >
  {[
  { title: t('dashboard.pending_orders'), value: pendingOrders.length, icon: ShoppingBag, color: 'text-white', bg: 'bg-indigo-500' },
@@ -272,14 +311,14 @@ const Dashboard: React.FC = () => {
 )}
 
  {/* Charts & Tables */}
- <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+ <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
  {/* Main Chart */}
  {hasPermission('reports_view') && (
  <div 
  
  
  
- className="lg:col-span-2 bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200/50 dark:border-slate-700/50"
+ className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl border border-slate-200/50 dark:border-slate-700/50"
  >
  <div className="flex justify-between items-center mb-10">
  <div>
@@ -348,7 +387,7 @@ const Dashboard: React.FC = () => {
  
  
  
- className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200/50 dark:border-slate-700/50"
+ className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl border border-slate-200/50 dark:border-slate-700/50"
  >
  <h3 className="text-xl font-semibold mb-8 dark:text-white tracking-tight flex items-center gap-3">
  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center">
@@ -392,17 +431,17 @@ const Dashboard: React.FC = () => {
  
  
  
- className="bg-white dark:bg-slate-800 p-10 rounded-[3.5rem] border border-slate-200/50 dark:border-slate-700/50"
+ className="bg-white dark:bg-slate-800 p-6 md:p-10 rounded-3xl md:rounded-[3.5rem] border border-slate-200/50 dark:border-slate-700/50"
  >
- <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+ <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-10">
  <div>
- <h3 className="text-2xl font-semibold dark:text-white tracking-tight uppercase">{t('dashboard.recent_transactions')}</h3>
- <p className="text-slate-600 text-xs font-bold uppercase tracking-wide mt-1">Live Feed</p>
+ <h3 className="text-xl md:text-2xl font-semibold dark:text-white tracking-tight uppercase">{t('dashboard.recent_transactions')}</h3>
+ <p className="text-slate-600 text-[10px] md:text-xs font-bold uppercase tracking-wide mt-1">Live Feed</p>
  </div>
  </div>
 
- <div className="overflow-x-auto -mx-10 px-10">
- <table className="w-full text-left whitespace-nowrap">
+ <div className="overflow-x-auto -mx-6 md:-mx-10 px-6 md:px-10 pb-4">
+ <table className="w-full text-left whitespace-nowrap min-w-[600px]">
  <thead className="text-slate-600 text-[10px] font-semibold uppercase tracking-wider">
  <tr>
  <th className="pb-8 px-4">Timestamp</th>
@@ -414,7 +453,11 @@ const Dashboard: React.FC = () => {
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
- {[...(invoices || [])].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8).map((inv: any, i: number) => (
+                {[...(invoices || [])].sort((a: any, b: any) => {
+                  const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                  const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                  return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime);
+                }).slice(0, 8).map((inv: any, i: number) => (
  <tr 
  
  

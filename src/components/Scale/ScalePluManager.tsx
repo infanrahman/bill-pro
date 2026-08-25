@@ -45,7 +45,7 @@ const ScalePluManager: React.FC<ScalePluManagerProps> = ({ scale, initialPlus, o
  shelfDays: 0,
  status: 'synced' as const
  }));
- setRows(enriched);
+ setTimeout(() => setRows(enriched), 0);
  }, [initialPlus]);
 
  const handleAddRow = () => {

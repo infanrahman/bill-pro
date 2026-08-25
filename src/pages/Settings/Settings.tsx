@@ -106,28 +106,30 @@ const Settings: React.FC = () => {
  };
 
  return (
- <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-slate-900 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+ <div className="flex flex-col md:flex-row h-[calc(100vh-5rem)] md:h-[calc(100vh-6rem)] bg-white dark:bg-slate-900 overflow-hidden rounded-none md:rounded-2xl border-0 md:border border-slate-200 dark:border-slate-800">
  {/* Sidebar */}
- <div className="w-48 md:w-56 lg:w-60 shrink-0 bg-slate-50 dark:bg-slate-900 flex flex-col h-full border-r border-slate-200 dark:border-slate-800 overflow-hidden">
+ <div className="w-full md:w-56 lg:w-60 shrink-0 bg-slate-50 dark:bg-slate-900 flex flex-col md:h-full border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 overflow-hidden z-10">
  {/* Header */}
- <div className="px-5 py-6 border-b border-slate-200 dark:border-slate-800">
- <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-3 uppercase">
- <div className="p-2 bg-slate-800 dark:bg-slate-700 text-white rounded-xl">
- <SettingsIcon size={18} />
+ <div className="px-4 md:px-5 py-4 md:py-6 border-b border-slate-200 dark:border-slate-800 flex md:block items-center justify-between">
+ <div>
+ <h1 className="text-base md:text-lg font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-2 md:gap-3 uppercase">
+ <div className="p-1.5 md:p-2 bg-slate-800 dark:bg-slate-700 text-white rounded-lg md:rounded-xl">
+ <SettingsIcon size={16} className="md:w-[18px] md:h-[18px]" />
  </div>
  {t('settings.title')}
  </h1>
- <p className="text-[9px] font-semibold text-slate-600 uppercase tracking-[0.25em] mt-2 ml-0.5 flex items-center gap-1.5">
+ <p className="hidden md:flex text-[9px] font-semibold text-slate-600 uppercase tracking-[0.25em] mt-2 ml-0.5 items-center gap-1.5">
  <Sparkles size={10} className="text-amber-500"/>
  App Configuration
  </p>
  </div>
+ </div>
 
  {/* Nav */}
- <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto custom-scrollbar">
+ <nav className="flex md:flex-col px-2 md:px-3 py-3 md:py-4 gap-2 md:gap-0 space-y-0 md:space-y-6 overflow-x-auto md:overflow-y-auto custom-scrollbar">
  {filteredCategories.map((category) => (
- <div key={category.id} className="space-y-1">
- <h2 className="px-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400 flex items-center gap-1.5 mb-2">
+ <div key={category.id} className="flex md:block items-center space-y-0 md:space-y-1 gap-2 md:gap-0 shrink-0 md:shrink">
+ <h2 className="hidden md:flex px-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400 items-center gap-1.5 mb-2">
  <category.icon size={10} />
  {category.label}
  </h2>
@@ -139,27 +141,27 @@ const Settings: React.FC = () => {
  key={tab.id}
  onClick={() => setActiveTab(tab.id)}
  className={clsx(
-"w-full flex items-center justify-between px-3 py-2.5 rounded-xl group",
+ "flex items-center justify-between px-3 md:px-3 py-2 md:py-2.5 rounded-lg md:rounded-xl group shrink-0 md:w-full",
  isActive
  ? 'bg-slate-800 dark:bg-slate-700 text-white '
- : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-)}
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 bg-slate-100 md:bg-transparent'
+ )}
  >
- <div className="flex items-center gap-2.5">
- <Icon size={15} strokeWidth={isActive ? 2.5 : 2} />
- <span className="text-[10px] font-semibold uppercase tracking-wider truncate">{tab.label}</span>
+ <div className="flex items-center gap-2 md:gap-2.5">
+ <Icon size={14} className="md:w-[15px] md:h-[15px]" strokeWidth={isActive ? 2.5 : 2} />
+ <span className="text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap md:truncate">{tab.label}</span>
  </div>
- <ChevronRight size={12} className={clsx("shrink-0", isActive ?"opacity-100":"opacity-0 group-hover:opacity-50")} />
+ <ChevronRight size={12} className={clsx("hidden md:block shrink-0", isActive ?"opacity-100":"opacity-0 group-hover:opacity-50")} />
  </button>
-);
+ );
  })}
  </div>
-))}
+ ))}
  </nav>
  </div>
 
  {/* Content Area */}
- <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-white dark:bg-slate-900 custom-scrollbar min-w-0">
+ <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-white dark:bg-slate-900 custom-scrollbar min-w-0 h-full">
  <div className="w-full mx-auto h-full flex flex-col">
  {renderTab()}
  </div>

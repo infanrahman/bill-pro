@@ -35,11 +35,17 @@ const Reports: React.FC = () => {
  } = useReportData(range, startDate, endDate);
 
  const getPeriodLabel = () => {
- if (startDate && endDate) {
- return`${format(new Date(startDate), 'dd MMM yyyy')} to ${format(new Date(endDate), 'dd MMM yyyy')}`;
- }
- return range.toUpperCase();
- };
+    try {
+      if (startDate && endDate) {
+        const d1 = new Date(startDate);
+        const d2 = new Date(endDate);
+        if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
+          return `${format(d1, 'dd MMM yyyy')} to ${format(d2, 'dd MMM yyyy')}`;
+        }
+      }
+    } catch {}
+    return (range || 'Custom').toUpperCase();
+  };
 
  const handleExportExcel = () => {
  const periodLabel = getPeriodLabel();
@@ -122,7 +128,7 @@ const Reports: React.FC = () => {
 
  if (!hasPermission('reports_view')) {
  return (
- <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-8 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+ <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4 md:p-8 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
  <ShieldOff size={48} className="text-slate-300 mb-4"/>
  <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
  <p className="text-slate-700">{t('reports.access_denied_msg')}</p>
@@ -139,34 +145,34 @@ const Reports: React.FC = () => {
  ];
 
  return (
- <div className="space-y-8 pb-10">
+ <div className="space-y-6 md:space-y-8 pb-10">
  {/* Premium Header Bar */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  {/* Decorative background glow */}
  
  
- <div className="flex flex-col gap-8 relative z-10">
- <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+ <div className="flex flex-col gap-6 md:gap-8 relative z-10">
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 md:gap-6">
  <div>
- <h1 className="text-4xl font-semibold dark:text-white flex items-center gap-4 tracking-tight uppercase">
- <div className="p-4 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl">
- <LayoutDashboard size={32} strokeWidth={2.5} />
+ <h1 className="text-2xl md:text-4xl font-semibold dark:text-white flex items-center gap-3 md:gap-4 tracking-tight uppercase">
+ <div className="p-3 md:p-4 bg-slate-800 dark:bg-slate-700 text-white rounded-xl md:rounded-2xl shrink-0">
+ <LayoutDashboard size={24} className="md:w-8 md:h-8" strokeWidth={2.5} />
  </div>
  <span>{t('reports.title')}</span>
  </h1>
- <p className="text-slate-700 dark:text-slate-300 font-bold mt-2 ml-2 text-xs uppercase tracking-wider flex items-center gap-2">
+ <p className="text-slate-700 dark:text-slate-300 font-bold mt-2 ml-1 md:ml-2 text-[10px] md:text-xs uppercase tracking-wider flex items-center gap-2">
  <Sparkles size={14} className="text-amber-500"/>
  {t('reports.insights_and_analytics')}
  </p>
  </div>
  
  {activeTab === 'overview' && (
- <div className="flex items-center gap-3">
+ <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
  <button type="button"
  
  
  onClick={handleExportExcel}
- className="flex items-center gap-3 px-6 py-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl font-semibold text-xs uppercase tracking-wider border border-emerald-500/20 group"
+ className="flex-1 sm:flex-none flex justify-center items-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl md:rounded-2xl font-semibold text-xs uppercase tracking-wider border border-emerald-500/20 group"
  >
  <FileSpreadsheet size={18} strokeWidth={2.5} className=""/> Excel
  </button>
@@ -174,78 +180,78 @@ const Reports: React.FC = () => {
  
  
  onClick={handleExportPDF}
- className="flex items-center gap-3 px-6 py-4 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl font-semibold text-xs uppercase tracking-wider border border-rose-500/20 group"
+ className="flex-1 sm:flex-none flex justify-center items-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl md:rounded-2xl font-semibold text-xs uppercase tracking-wider border border-rose-500/20 group"
  >
  <FileText size={18} strokeWidth={2.5} className=""/> PDF
  </button>
  </div>
-)}
+ )}
  </div>
 
  <div className="h-px from-slate-200 dark:from-slate-700/50 via-transparent to-transparent w-full"/>
 
- <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8">
+ <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-6 md:gap-8">
  {/* Custom Tab Navigation */}
- <div className="flex flex-wrap items-center gap-3 bg-slate-100 dark:bg-slate-900 p-2 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
+ <div className="flex items-center gap-2 md:gap-3 bg-slate-100 dark:bg-slate-900 p-2 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800/50 overflow-x-auto custom-scrollbar w-full xl:w-auto">
  {tabs.map(({ id, icon: Icon, label }) => (
  <button type="button"
  key={id}
  onClick={() => setActiveTab(id as typeof activeTab)}
  className={clsx(
-"flex items-center gap-3 px-6 py-3.5 rounded-2xl text-xs font-semibold uppercase tracking-wider relative overflow-hidden",
+ "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2.5 md:py-3.5 rounded-lg md:rounded-2xl text-[10px] md:text-xs font-semibold uppercase tracking-wider relative overflow-hidden whitespace-nowrap shrink-0",
  activeTab === id
- ? 'bg-white text-slate-900 dark:text-white '
+ ? 'bg-white text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-)}
+ )}
  >
- <Icon size={18} strokeWidth={2.5} />
+ <Icon size={16} className="md:w-[18px] md:h-[18px]" strokeWidth={2.5} />
  {label}
  {activeTab === id && (
  <div className="absolute inset-0 bg-slate-900/10 dark:bg-white/10 dark:bg-white/10"/>
-)}
+ )}
  </button>
-))}
+ ))}
  </div>
 
  {/* Premium Date Filters */}
  {activeTab === 'overview' && (
- <div className="flex flex-wrap items-center gap-4">
- <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800">
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4 w-full xl:w-auto">
+ <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 overflow-x-auto custom-scrollbar">
  {(['today', 'week', 'month', 'year'] as DateRange[]).map((r: any) => (
  <button type="button"
  key={r}
  onClick={() => { setRange(r); setStartDate(''); setEndDate(''); }}
  className={clsx(
-"px-5 py-2.5 text-[10px] font-semibold uppercase tracking-wider rounded-xl",
+ "px-4 md:px-5 py-2 md:py-2.5 text-[10px] font-semibold uppercase tracking-wider rounded-lg md:rounded-xl whitespace-nowrap shrink-0",
  range === r && !startDate
- ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white dark:text-white '
+ ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-600 hover:text-slate-600 dark:hover:text-slate-200'
-)}
+ )}
  >
  {t(`reports.range_${r}`)}
  </button>
-))}
+ ))}
  </div>
- <div className="flex items-center gap-4 bg-white dark:bg-slate-900 rounded-2xl p-2 px-5 border border-slate-200/50 dark:border-slate-800">
- <Calendar size={18} className="text-slate-900 dark:text-white shrink-0"/>
- <div className="flex items-center gap-3">
+ <div className="flex items-center gap-3 md:gap-4 bg-slate-50 dark:bg-slate-900 rounded-xl md:rounded-2xl p-2 px-3 md:px-5 border border-slate-200/50 dark:border-slate-800 overflow-x-auto w-full md:w-auto">
+ <Calendar size={18} className="text-slate-900 dark:text-white shrink-0 hidden sm:block"/>
+ <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
  <input
  type="datetime-local"
  value={startDate}
  onChange={(e) => { setStartDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-xs font-semibold uppercase tracking-tight w-[150px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-[10px] md:text-xs font-semibold uppercase tracking-tight w-full md:w-[150px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
- <ArrowRight size={14} className="text-slate-300"/>
+ <ArrowRight size={14} className="text-slate-300 shrink-0"/>
  <input
  type="datetime-local"
  value={endDate}
  onChange={(e) => { setEndDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-xs font-semibold uppercase tracking-tight w-[150px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-[10px] md:text-xs font-semibold uppercase tracking-tight w-full md:w-[150px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
  </div>
  </div>
  </div>
-)}
+ )}
  </div>
  </div>
  </div>

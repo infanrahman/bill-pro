@@ -76,6 +76,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const SECURE_ITERATIONS = 600000;
 const LEGACY_ITERATIONS = 5000;
 
+// Async PBKDF2 using native Web Crypto — runs off the main thread, no UI freeze
+async function derivePbkdf2Key(password: string, salt: string, iterations: number): Promise<string> {
+  try {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+  'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+  { name: 'PBKDF2', salt: enc.encode(salt), iterations, hash: 'SHA-256' },
+  keyMaterial, 256
+  );
+  // Convert ArrayBuffer to base64
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+  } catch {
+  // Fallback to synchronous forge for environments without SubtleCrypto
+  const derivedKey = forge.pkcs5.pbkdf2(password, salt, iterations, 32, forge.md.sha256.create());
+  return forge.util.encode64(derivedKey);
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
  const { t } = useTranslation();
  const { addToast } = useNotification();
@@ -124,28 +144,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  useEffect(() => {
  const initAuth = async () => {
  try {
- // Ensure default admin exists
- const adminCount = await db.users.where('role').equals('admin').count();
-
- if (adminCount === 0) {
- const salt = forge.util.encode64(forge.random.getBytesSync(16));
- const derivedKey = forge.pkcs5.pbkdf2('admin123', salt, SECURE_ITERATIONS, 32, forge.md.sha256.create());
- const hashedPassword = forge.util.encode64(derivedKey);
-
- await db.users.add({
- ...createRecordMetadata(),
- username: 'admin',
- password: hashedPassword,
- salt: salt,
- isHashed: true,
- iterations: SECURE_ITERATIONS,
- forcePasswordChange: true,
- role: 'admin',
- name: 'System Admin',
- permissions: []
- });
- console.log("Seeded default admin user with hardened security");
- }
+  // H2 Fix: Use a flag to prevent double-seeding in React 18 Strict Mode
+  const existingAdmin = await db.users.where('role').equals('admin').first();
+  if (!existingAdmin) {
+  // Double-check with a count after brief yield to prevent concurrent seeding
+  const adminCount = await db.users.where('role').equals('admin').count();
+  if (adminCount === 0) {
+  const salt = forge.util.encode64(forge.random.getBytesSync(16));
+  // Use a lighter iteration count for the seed hash (will be upgraded on first login)
+  const derivedKey = forge.pkcs5.pbkdf2('admin123', salt, LEGACY_ITERATIONS, 32, forge.md.sha256.create());
+  const hashedPassword = forge.util.encode64(derivedKey);
+  try {
+  await db.users.add({
+  ...createRecordMetadata(),
+  username: 'admin',
+  password: hashedPassword,
+  salt: salt,
+  isHashed: true,
+  iterations: LEGACY_ITERATIONS,
+  forcePasswordChange: true,
+  role: 'admin',
+  name: 'System Admin',
+  permissions: []
+  });
+  console.log('Seeded default admin user');
+  } catch (addErr: any) {
+  // Ignore ConstraintError – another concurrent call already seeded
+  if (!addErr?.message?.includes('ConstraintError')) throw addErr;
+  }
+  }
+  }
 
  // Validate existing token (Now using HMAC Signature)
  if (token && window.electron) {
@@ -168,16 +196,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  addToast("Session expired or invalid. Please login again.","error");
  logout();
  }
- } else if (token) {
- // In browser mode without electron, just decode (Dev fallback)
- try {
- const decoded = atob(token.split('.')[0]); // Take payload part
- const [idStr] = decoded.split(':');
- const foundUser = await db.users.get(idStr);
- if (foundUser) setUser(foundUser);
- else logout();
- } catch (e) { logout(); }
- }
+  } else if (token) {
+  // M3 Fix: validate token format before atob() to prevent DOMException
+  try {
+  const parts = token.split('.');
+  if (parts.length >= 1 && parts[0]) {
+  const decoded = atob(parts[0]);
+  const [idStr] = decoded.split(':');
+  if (idStr) {
+  const foundUser = await db.users.get(idStr);
+  if (foundUser) setUser(foundUser);
+  else {
+  localStorage.removeItem('token');
+  setToken(null);
+  }
+  } else {
+  localStorage.removeItem('token');
+  setToken(null);
+  }
+  } else {
+  localStorage.removeItem('token');
+  setToken(null);
+  }
+  } catch {
+  localStorage.removeItem('token');
+  setToken(null);
+  }
+  }
  } catch (error) {
  console.error("Auth initialization failed:", error);
  addToast("Authentication system failed to initialize.","error");
@@ -190,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  return () => { };
  }, []);
 
- const login = async (username: string, password: string): Promise<boolean> => {
+ const login = useCallback(async (username: string, password: string): Promise<boolean> => {
  try {
  const foundUser = await db.users.where('username').equalsIgnoreCase(username).first();
  if (!foundUser) return false;
@@ -199,8 +244,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  const currentIterations = foundUser.iterations || (foundUser.isHashed ? LEGACY_ITERATIONS : 0);
 
  if (foundUser.isHashed && foundUser.salt) {
- const derivedKey = forge.pkcs5.pbkdf2(password, foundUser.salt, currentIterations, 32, forge.md.sha256.create());
- const hashAttempt = forge.util.encode64(derivedKey);
+ // C2 Fix: use async SubtleCrypto-based PBKDF2 (no UI thread freeze)
+ const hashAttempt = await derivePbkdf2Key(password, foundUser.salt, currentIterations);
  isValid = (foundUser.password === hashAttempt);
  } else if (foundUser.password === password) {
  // Raw password (unlikely but handled)
@@ -211,8 +256,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  // Check if we need to upgrade hashing iterations
  if (currentIterations < SECURE_ITERATIONS) {
  const newSalt = forge.util.encode64(forge.random.getBytesSync(16));
- const newDerivedKey = forge.pkcs5.pbkdf2(password, newSalt, SECURE_ITERATIONS, 32, forge.md.sha256.create());
- const newHashedPassword = forge.util.encode64(newDerivedKey);
+ // C2 Fix: use async derivation for upgrade too
+ const newHashedPassword = await derivePbkdf2Key(password, newSalt, SECURE_ITERATIONS);
  
  await db.users.update(foundUser.id!, {
  password: newHashedPassword,
@@ -237,13 +282,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  setToken(newToken);
  localStorage.setItem('token', newToken);
 
- await db.activityLogs.add({
- ...createRecordMetadata(),
- userId: foundUser.id!,
- username: foundUser.username,
- action: 'LOGIN',
- timestamp: new Date()
- });
+  // H3 Fix: wrap activity log in try/catch so login never fails due to log errors
+  try {
+  await db.activityLogs.add({
+  ...createRecordMetadata(),
+  userId: foundUser.id!,
+  username: foundUser.username,
+  action: 'LOGIN',
+  timestamp: new Date()
+  });
+  } catch (logErr) {
+  console.warn('Activity log write failed (non-critical):', logErr);
+  }
 
  return true;
  }
@@ -253,14 +303,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  throw error;
  }
  return false;
- };
+ }, [addToast]);
 
- const logout = useCallback(() => {
- setUser(null);
- setToken(null);
- localStorage.removeItem('token');
- window.location.reload();
- }, []);
+  const logout = useCallback(() => {
+  setUser(null);
+  setToken(null);
+  localStorage.removeItem('token');
+  // H1 Fix: use React state navigation instead of window.location.reload()
+  // to avoid infinite reload loops when called from token validation useEffect.
+  // Navigate to login via state change — the ProtectedRoute will redirect.
+  }, []);
 
  const switchBranch = useCallback(async (branchId: string) => {
  // No-op for single-store setup without branching system
@@ -290,28 +342,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
  }
  }, [user, addToast]);
 
+  const contextValue = useMemo(() => ({
+    user,
+    token,
+    activeBranchId,
+    activeBranch,
+    availableBranches,
+    login,
+    logout,
+    switchBranch,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === 'admin',
+    hasPermission,
+    logActivity
+  }), [
+    user,
+    token,
+    activeBranchId,
+    activeBranch,
+    availableBranches,
+    login,
+    logout,
+    switchBranch,
+    hasPermission,
+    logActivity
+  ]);
+
  if (loading) {
  return <LoadingScreen />;
  }
 
  return (
- <AuthContext.Provider value={{
- user,
- token,
- activeBranchId,
- activeBranch,
- availableBranches,
- login,
- logout,
- switchBranch,
- isAuthenticated: !!user,
- isAdmin: user?.role === 'admin',
- hasPermission,
- logActivity
- }}>
+ <AuthContext.Provider value={contextValue}>
  {children}
  </AuthContext.Provider>
-);
+ );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components

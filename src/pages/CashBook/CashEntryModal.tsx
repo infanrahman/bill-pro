@@ -24,6 +24,7 @@ const CashEntryModal: React.FC<CashEntryModalProps> = ({ isOpen, onClose, onSave
  const [time, setTime] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
 
  useEffect(() => {
+ setTimeout(() => {
  if (editEntry) {
  setAmount(editEntry.amount.toString());
  setDescription(editEntry.description);
@@ -37,6 +38,7 @@ const CashEntryModal: React.FC<CashEntryModalProps> = ({ isOpen, onClose, onSave
  setDate(new Date().toISOString().split('T')[0]);
  setTime(new Date().toTimeString().split(' ')[0].substring(0, 5));
  }
+ }, 0);
  }, [editEntry, isOpen]);
 
  if (!isOpen) return null;

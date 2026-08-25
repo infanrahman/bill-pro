@@ -17,15 +17,7 @@ const Expenses: React.FC = () => {
  const { addToast } = useNotification();
  const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
 
- if (!hasPermission('expenses_view')) {
- return (
- <div className="flex flex-col items-center justify-center h-screen text-center p-8">
- <ShieldOff size={48} className="text-slate-300 mb-4"/>
- <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
- <p className="text-slate-700">{t('expenses.access_denied_msg') ||"You do not have permission to view expenses."}</p>
- </div>
-);
- }
+ const permissionDenied = !hasPermission('expenses_view');
 
  const [isModalOpen, setIsModalOpen] = useState(false);
  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -33,10 +25,11 @@ const Expenses: React.FC = () => {
  const [categoryFilter, setCategoryFilter] = useState('All');
 
  const expenses = useLiveQuery(async () => {
+ if (permissionDenied) return [];
  const baseQuery = activeBranch?.isMaster ? db.expenses.reverse() : db.expenses.where('branchId').equals(activeBranchId).reverse();
  const data = await baseQuery.sortBy('date');
  return data.filter((e: any) => !e.deletedAt);
- }, [activeBranchId, activeBranch?.isMaster]);
+ }, [activeBranchId, activeBranch?.isMaster, permissionDenied]);
 
  const filteredExpenses = useMemo(() => {
  if (!expenses) return [];
@@ -46,6 +39,8 @@ const Expenses: React.FC = () => {
  return matchesSearch && matchesCategory;
  });
  }, [expenses, search, categoryFilter]);
+
+
 
  const handleSave = async (data: Pick<Expense, 'description' | 'amount' | 'category' | 'notes'>) => {
  try {
@@ -95,7 +90,17 @@ const Expenses: React.FC = () => {
  setIsModalOpen(true);
  };
 
- const totalStats = filteredExpenses?.reduce((acc: any, curr: any) => acc + curr.amount, 0) || 0;
+ const totalStats = filteredExpenses?.reduce((acc: any, curr: any) => acc + (Number(curr.amount) || 0), 0) || 0;
+
+ if (permissionDenied) {
+ return (
+ <div className="flex flex-col items-center justify-center h-screen text-center p-8">
+ <ShieldOff size={48} className="text-slate-300 mb-4"/>
+ <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
+ <p className="text-slate-700">{t('expenses.access_denied_msg') ||"You do not have permission to view expenses."}</p>
+ </div>
+ );
+ }
 
  return (
  <div className="space-y-6">

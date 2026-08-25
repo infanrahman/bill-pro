@@ -34,7 +34,7 @@ const DayBook: React.FC = () => {
  title: t('reports.day_book_title') ||"Day Book",
  period: startDate && endDate ?`${startDate} to ${endDate}`: range.toUpperCase(),
  columns: [
- { header: 'Time', accessor: (row) => format(row.date, 'HH:mm'), width: '10%' },
+ { header: 'Time', accessor: (row) => format(new Date(row.date), 'HH:mm'), width: '10%' },
  { header: 'Type', accessor: (row) => row.type.toUpperCase(), width: '15%' },
  { header: 'Description', accessor: 'description', width: '35%' },
  { header: 'Mode', accessor: 'mode', width: '10%' },
@@ -60,7 +60,7 @@ const DayBook: React.FC = () => {
 
  const exportToExcel = () => {
  const data = transactions.map((t: any) => ({
- Date: format(t.date, 'yyyy-MM-dd HH:mm'),
+ Date: format(new Date(t.date), 'yyyy-MM-dd HH:mm'),
  Type: t.type.toUpperCase(),
  Description: t.description,
  PaymentMode: t.mode,
@@ -166,7 +166,7 @@ const DayBook: React.FC = () => {
  currentY = doc.lastAutoTable.finalY + 10;
 
  const tableData = transactions.map((t: any) => [
- format(t.date, 'HH:mm'),
+ format(new Date(t.date), 'HH:mm'),
  t.type.toUpperCase(),
  t.description,
  t.mode,
@@ -205,7 +205,7 @@ const DayBook: React.FC = () => {
  return (
  <div className="space-y-8 fade-in slide-in-from-bottom-4">
  {/* Header & Controls */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
  <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
@@ -286,7 +286,7 @@ const DayBook: React.FC = () => {
 
  {/* Transactions Table */}
  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
- <div className="p-8 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-center">
+ <div className="p-4 md:p-8 border-b border-slate-100 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0">
  <div className="flex items-center gap-3">
  <Search size={18} className="text-slate-600"/>
  <h3 className="text-sm font-semibold dark:text-white uppercase tracking-wider">{t('reports.transactions')}</h3>
@@ -332,7 +332,7 @@ const DayBook: React.FC = () => {
  >
  <td className="p-6">
  <span className="font-mono text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
- {format(item.date, 'HH:mm')}
+ {format(new Date(item.date), 'HH:mm')}
  </span>
  </td>
  <td className="p-6">
@@ -345,7 +345,7 @@ const DayBook: React.FC = () => {
  </td>
  <td className="p-6">
  <p className="font-semibold dark:text-white uppercase tracking-tight line-clamp-1">{item.description}</p>
- <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mt-1">Ref: {item.id.slice(-8).toUpperCase()}</p>
+ <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mt-1">Ref: {String(item.id).slice(-8).toUpperCase()}</p>
  </td>
  <td className="p-6">
  <div className="flex items-center gap-2">

@@ -32,7 +32,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
  addToast(t('customers.update_success'), 'success');
  } else {
  if (formData.phone) {
- const existing = await db.customers.where('phone').equals(formData.phone).first();
+ const existing = await db.customers
+ .where('phone')
+ .equals(formData.phone)
+ .filter(c => !c.deletedAt)
+ .first();
  if (existing) {
  addToast(t('customers.exists_error'), 'warning');
  return;
@@ -56,7 +60,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onClose, onSave }
  title={customer ? t('customers.edit_customer') || 'Edit Customer' : t('customers.add_customer') || 'New Customer'} 
  maxWidth="md"
  >
- <form onSubmit={handleSubmit} className="p-8 space-y-6">
+ <form onSubmit={handleSubmit} className="p-4 md:p-8 space-y-4 md:space-y-6">
  <div className="flex items-center gap-3 mb-2">
  <div className="p-2 bg-slate-900 dark:bg-white text-white rounded-xl">
  <Sparkles size={18} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, type User, softDeleteMetadata, createRecordMetadata } from '../../../services/db';
+import { db, type User, createRecordMetadata } from '../../../services/db';
 import { useAuth, PERMISSIONS } from '../../../contexts/AuthContext';
 import Modal from '../../../components/UI/Modal';
 import ConfirmationModal from '../../../components/UI/ConfirmationModal';
@@ -8,7 +8,7 @@ import { Plus, Edit2, Trash2, Shield, User as UserIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const UserManagementTab: React.FC = () => {
- const { user: currentUser } = useAuth();
+ const { user: currentUser, isAdmin } = useAuth();
  const { addToast } = useNotification();
  const { t } = useTranslation();
  const [users, setUsers] = useState<User[]>([]);
@@ -43,12 +43,19 @@ const UserManagementTab: React.FC = () => {
  }, []);
 
  const handleOpenModal = (userToEdit?: User) => {
+ // C4: Only admins can manage users
+ if (!isAdmin) {
+ addToast(t('common.access_denied'), 'error');
+ return;
+ }
  if (userToEdit) {
  setEditingUser(userToEdit);
  setFormData({
  name: userToEdit.name,
  username: userToEdit.username,
- password: userToEdit.password,
+ // C3: NEVER pre-fill password with stored hash.
+ // Leave blank — only set a new password if user explicitly types one.
+ password: '',
  role: userToEdit.role,
  permissions: userToEdit.permissions || []
  });
@@ -110,8 +117,19 @@ const UserManagementTab: React.FC = () => {
  const handleSubmit = async (e: React.FormEvent) => {
  e.preventDefault();
 
+ // C4: Only admins can create/edit users
+ if (!isAdmin) {
+ addToast(t('common.access_denied'), 'error');
+ return;
+ }
+
  // Validation
- if (!formData.name || !formData.username || !formData.password) {
+ if (!formData.name || !formData.username) {
+ addToast(t('users.fill_required'), 'error');
+ return;
+ }
+ // For new user, password is required
+ if (!editingUser && !formData.password) {
  addToast(t('users.fill_required'), 'error');
  return;
  }
@@ -124,17 +142,29 @@ const UserManagementTab: React.FC = () => {
  return;
  }
 
+ // Check username uniqueness on edit (excluding self)
+ const existing = await db.users.where('username').equalsIgnoreCase(formData.username!).first();
+ if (existing && existing.id !== editingUser.id) {
+ addToast(t('users.username_exists'), 'error');
+ return;
+ }
+
+ // C3: Only update password if a new one was explicitly typed.
+ // If left blank, preserve the existing stored hash.
+ const passwordUpdate = formData.password
+ ? { password: formData.password, isHashed: false }
+ : {}; // no password field → AuthContext keeps existing hash
+
  await db.users.update(editingUser.id!, {
  name: formData.name,
  username: formData.username,
- password: formData.password,
+ ...passwordUpdate,
  role: formData.role as 'admin' | 'shopkeeper',
  permissions: formData.role === 'admin' ? [] : formData.permissions
  });
  addToast(t('users.update_success'), 'success');
  } else {
- // Create
- // Check username existence
+ // Create — check username uniqueness
  const existing = await db.users.where('username').equalsIgnoreCase(formData.username!).first();
  if (existing) {
  addToast(t('users.username_exists'), 'error');
@@ -170,18 +200,19 @@ const UserManagementTab: React.FC = () => {
  };
 
  const handleConfirmDelete = async () => {
- if (!userToDeleteState) return;
+  if (!userToDeleteState) return;
 
- try {
- await db.users.update(userToDeleteState.id!, softDeleteMetadata());
- addToast(t('users.delete_success'), 'success');
- loadUsers();
- } catch (error) {
- addToast(t('users.delete_error'), 'error');
- } finally {
- setUserToDeleteState(null);
- }
- };
+  try {
+  await db.users.delete(userToDeleteState.id!);
+  addToast(t('users.delete_success'), 'success');
+  loadUsers();
+  } catch (error) {
+  console.error('Failed to delete user:', error);
+  addToast(t('users.delete_error'), 'error');
+  } finally {
+  setUserToDeleteState(null);
+  }
+  };
 
  const renderToggle = (id: string, label: string) => {
  const isSelected = formData.permissions?.includes(id);
@@ -208,7 +239,7 @@ const UserManagementTab: React.FC = () => {
  }`}
  onClick={() => handlePermissionToggle(id)}
  >
- <span className={`text-[10px] font-bold uppercase tracking-wide ${isSelected ? 'text-slate-900 dark:text-white ' : 'text-slate-600 dark:text-slate-400'}`}>
+ <span className={`text-[10px] font-bold uppercase tracking-wide ${isSelected ? 'text-white dark:text-slate-900' : 'text-slate-600 dark:text-slate-400'}`}>
  {label}
  </span>
  <div className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full ${
@@ -434,7 +465,7 @@ const UserManagementTab: React.FC = () => {
  {renderToggle('settings_backup', 'Data Backups')}
  <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
  <span className="text-xs font-bold text-slate-700 uppercase mb-2 block">Settings Tabs</span>
- <div className="grid grid-cols-3 gap-1.5">
+ <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
  {renderMiniToggle('settings_general', 'General')}
  {renderMiniToggle('settings_taxes', 'Taxes')}
  {renderMiniToggle('settings_invoice', 'Invoice')}

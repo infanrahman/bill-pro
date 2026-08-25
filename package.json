@@ -1,9 +1,10 @@
 {
   "name": "billing-app",
   "private": true,
-  "version": "3.0.3",
+  "version": "3.0.24",
   "productName": "Billing App",
   "appId": "com.billingapp.app",
+  "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"cross-env BROWSER=none npm run dev:vite\" \"npm run dev:electron\"",
@@ -15,10 +16,17 @@
     "build:portable": "npm run build:base && electron-builder --win portable",
     "build:zip": "npm run build:base && electron-builder --win zip",
     "dist": "npm run build:base && electron-builder",
+    "build:mobile": "npm run build:base && cap sync",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.1.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/share": "^8.0.1",
     "@types/node-forge": "^1.3.14",
     "@types/qrcode": "^1.5.6",
     "clsx": "^2.1.1",
@@ -51,6 +59,7 @@
     "zatca-xml-js": "^0.1.9"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^24.10.1",
@@ -72,6 +81,7 @@
     "png-to-ico": "^3.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
+    "terser": "^5.50.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",

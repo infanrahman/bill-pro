@@ -33,12 +33,12 @@ const ThermalPrinterCard: React.FC<Props> = ({ config, updateConfig, printers })
  <select
  value={config.thermal.printerName}
  onChange={(e) => updateThermal({ printerName: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white min-w-[220px]"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[220px]"
  >
  <option value="">{t('common.select_printer', 'Select Printer')}</option>
  {printers.map((p, idx) => (
  <option key={idx} value={p.name}>{p.name}</option>
-))}
+ ))}
  </select>
  </FormRow>
 
@@ -50,7 +50,7 @@ const ThermalPrinterCard: React.FC<Props> = ({ config, updateConfig, printers })
  <select
  value={config.thermal.paperSize}
  onChange={(e) => updateThermal({ paperSize: e.target.value as any })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white min-w-[180px]"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[180px]"
  >
  <option value="80mm">80mm (Standard)</option>
  <option value="58mm">58mm (Small)</option>
@@ -67,7 +67,7 @@ const ThermalPrinterCard: React.FC<Props> = ({ config, updateConfig, printers })
  type="text"
  value={config.thermal.customPaperWidth}
  onChange={(e) => updateThermal({ customPaperWidth: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white min-w-[180px] text-right"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[180px] text-left sm:text-right"
  placeholder="76mm"
  />
  </FormRow>

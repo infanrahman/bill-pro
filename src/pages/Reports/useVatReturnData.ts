@@ -140,41 +140,47 @@ export const useVatReturnData = (period: VatPeriod, customStartStr?: string, cus
  .toArray();
 
  for (const pur of purchaseRecs) {
- if (pur.type === 'order') continue; // Exclude Orders
- const isReturn = pur.type === 'return';
+  if (pur.type === 'order') continue; // Exclude Orders
+  const isReturn = pur.type === 'return';
 
- // Check if purchase has inclusive-tax items 
- // (only inclusive items qualify for input VAT)
- const hasInclusiveItems = pur.items.some((item: any) => {
- const type = item.taxType || 'exclusive';
- const rate = item.taxRate !== undefined ? item.taxRate : 0;
- return type === 'inclusive' && rate > 0;
- });
+  // C8 Fix: Both inclusive AND exclusive-tax purchases qualify for input VAT.
+  // For inclusive: VAT is embedded in the price (vatAmount = price * rate / (1 + rate))
+  // For exclusive: VAT is added on top (vatAmount = price * rate)
+  // Use stored taxAmount on the purchase bill if available; otherwise derive per-item.
+  const purchaseTotal = pur.totalAmount || 0;
+  const purchaseVat = pur.taxAmount
+  ? pur.taxAmount
+  : (pur.items || []).reduce((sum: number, item: any) => {
+  const rate = (item.taxRate !== undefined ? item.taxRate : 0) / 100;
+  const cost = (item.cost || 0) * (item.quantity || 1);
+  if (item.taxType === 'inclusive') {
+  return sum + Math.round((cost * rate / (1 + rate)) * 100) / 100;
+  } else if (rate > 0) {
+  return sum + Math.round(cost * rate * 100) / 100;
+  }
+  return sum;
+  }, 0);
 
- if (hasInclusiveItems) {
- // Use the total purchase bill amount
- const purchaseTotal = pur.totalAmount || 0;
- const purchaseVat = pur.taxAmount || 0;
- const netAmount = Math.round((purchaseTotal - purchaseVat) * 100) / 100;
+  const netAmount = Math.round((purchaseTotal - purchaseVat) * 100) / 100;
 
- if (isReturn) {
- purchases.returnStandard.amount += netAmount;
- purchases.returnStandard.vat += Math.round(purchaseVat * 100) / 100;
- } else {
- purchases.standard.amount += netAmount;
- purchases.standard.vat += Math.round(purchaseVat * 100) / 100;
- }
- } else {
- // All items are exclusive or zero-rated → no input VAT claimable
- // Still record as zero-rated purchase for reporting completeness
- const purchaseTotal = pur.totalAmount || 0;
- if (isReturn) {
- purchases.returnZero.amount += purchaseTotal;
- } else {
- purchases.zero.amount += purchaseTotal;
- }
- }
- }
+  if (purchaseVat > 0) {
+  // Has claimable input VAT
+  if (isReturn) {
+  purchases.returnStandard.amount += netAmount;
+  purchases.returnStandard.vat += Math.round(purchaseVat * 100) / 100;
+  } else {
+  purchases.standard.amount += netAmount;
+  purchases.standard.vat += Math.round(purchaseVat * 100) / 100;
+  }
+  } else {
+  // Zero-rated or no tax purchase
+  if (isReturn) {
+  purchases.returnZero.amount += purchaseTotal;
+  } else {
+  purchases.zero.amount += purchaseTotal;
+  }
+  }
+  }
 
  // 3. Calculate Nets
  // Net Sales = (Std + Zero) - (RetStd + RetZero)

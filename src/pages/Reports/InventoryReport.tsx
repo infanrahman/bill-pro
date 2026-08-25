@@ -71,89 +71,90 @@ const InventoryReport: React.FC = () => {
  };
 
  return (
- <div className="space-y-8 fade-in slide-in-from-bottom-4">
+ <div className="space-y-6 md:space-y-8 fade-in slide-in-from-bottom-4">
  {/* Premium Header Controls */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
- <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
- <div className="flex flex-col md:flex-row items-center gap-6">
- <div className="flex gap-2 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
+ <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4 md:gap-8 relative z-10">
+ <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 md:gap-6">
+ <div className="flex gap-2 bg-slate-100 dark:bg-slate-900 p-1 md:p-1.5 rounded-lg md:rounded-xl border border-slate-200/50 dark:border-slate-800/50 overflow-x-auto custom-scrollbar">
  <button type="button"
  onClick={() => setMode('summary')}
  className={clsx(
-"flex items-center gap-3 px-6 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider",
+ "flex items-center justify-center gap-2 md:gap-3 px-4 md:px-6 py-2 md:py-3 rounded-md md:rounded-xl text-[10px] md:text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 flex-1 md:flex-none",
  mode === 'summary'
- ? 'bg-white text-slate-900 dark:text-white '
+ ? 'bg-white text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-700 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'
-)}
+ )}
  >
- <PieChart size={18} />
+ <PieChart size={16} className="md:w-[18px] md:h-[18px]" />
  {t('reports.stock_summary')}
  </button>
  <button type="button"
  onClick={() => setMode('performance')}
  className={clsx(
-"flex items-center gap-3 px-6 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider",
+ "flex items-center justify-center gap-2 md:gap-3 px-4 md:px-6 py-2 md:py-3 rounded-md md:rounded-xl text-[10px] md:text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 flex-1 md:flex-none",
  mode === 'performance'
- ? 'bg-white text-slate-900 dark:text-white '
+ ? 'bg-white text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-700 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'
-)}
+ )}
  >
- <ArrowLeftRight size={18} />
+ <ArrowLeftRight size={16} className="md:w-[18px] md:h-[18px]" />
  {t('reports.item_performance')}
  </button>
  </div>
 
  {mode === 'performance' && (
- <div className="flex flex-wrap items-center gap-3 fade-in zoom-in">
- <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200/50 dark:border-slate-800">
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 fade-in zoom-in w-full md:w-auto">
+ <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg md:rounded-xl border border-slate-200/50 dark:border-slate-800 overflow-x-auto custom-scrollbar">
  {(['today', 'week', 'month', 'year'] as DateRange[]).map((r: any) => (
  <button type="button"
  key={r}
  onClick={() => { setRange(r); setStartDate(''); setEndDate(''); }}
  className={clsx(
-"px-4 py-2 text-[9px] font-semibold uppercase tracking-wider rounded-lg",
+ "px-3 md:px-4 py-2 text-[9px] font-semibold uppercase tracking-wider rounded-md md:rounded-lg whitespace-nowrap shrink-0 flex-1 sm:flex-none text-center",
  range === r && !startDate
- ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white dark:text-white '
+ ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-600 hover:text-slate-600 dark:hover:text-slate-200'
-)}
+ )}
  >
  {t(`reports.range_${r}`)}
  </button>
-))}
+ ))}
  </div>
 
- <div className="flex items-center gap-4 bg-white dark:bg-slate-900 rounded-xl p-2 px-4 border border-slate-200/50 dark:border-slate-800">
- <Calendar size={16} className="text-slate-900 dark:text-white shrink-0"/>
- <div className="flex items-center gap-3">
+ <div className="flex items-center gap-2 md:gap-4 bg-slate-50 dark:bg-slate-900 rounded-lg md:rounded-xl p-2 px-3 md:px-4 border border-slate-200/50 dark:border-slate-800">
+ <Calendar size={16} className="text-slate-900 dark:text-white shrink-0 hidden sm:block"/>
+ <div className="flex items-center gap-2 flex-1 min-w-0">
  <input
  type="datetime-local"
  value={startDate}
  onChange={(e) => { setStartDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-[10px] font-semibold uppercase tracking-tight w-[130px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-[10px] font-semibold uppercase tracking-tight w-full md:w-[130px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
- <ArrowRight size={12} className="text-slate-300"/>
+ <ArrowRight size={12} className="text-slate-300 shrink-0"/>
  <input
  type="datetime-local"
  value={endDate}
  onChange={(e) => { setEndDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-[10px] font-semibold uppercase tracking-tight w-[130px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-[10px] font-semibold uppercase tracking-tight w-full md:w-[130px] focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
  </div>
  </div>
  </div>
-)}
+ )}
  </div>
 
- <div className="flex gap-2">
+ <div className="flex gap-2 w-full xl:w-auto">
  <button type="button"
  
  
  onClick={handlePrint} 
- className="p-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border border-white dark:border-slate-700"
+ className="flex items-center justify-center gap-2 p-3 md:p-4 w-full xl:w-auto bg-indigo-600 xl:bg-white dark:xl:bg-slate-800 text-white xl:text-slate-900 dark:text-white rounded-xl md:rounded-2xl border border-transparent xl:border-slate-200 dark:xl:border-slate-700"
  >
- <Printer size={20} />
+ <Printer size={20} className="md:w-[24px] md:h-[24px]" />
+ <span className="xl:hidden font-medium text-sm">Print Report</span>
  </button>
  </div>
  </div>

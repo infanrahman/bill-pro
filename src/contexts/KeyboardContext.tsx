@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 
 type KeyHandler = (e: KeyboardEvent) => void;
 
@@ -73,8 +73,10 @@ export const KeyboardProvider: React.FC<{ children: React.ReactNode }> = ({ chil
  return () => window.removeEventListener('keydown', handleKeyDown);
  }, [shortcuts]);
 
+ const contextValue = useMemo(() => ({ registerShortcut, unregisterShortcut, shortcuts }), [registerShortcut, unregisterShortcut, shortcuts]);
+
  return (
- <KeyboardContext.Provider value={{ registerShortcut, unregisterShortcut, shortcuts }}>
+ <KeyboardContext.Provider value={contextValue}>
  {children}
  </KeyboardContext.Provider>
 );

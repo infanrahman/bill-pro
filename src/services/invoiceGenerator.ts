@@ -23,7 +23,13 @@ export interface BusinessDetails {
 }
 
 // --- HTML GENERATOR ---
-export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDetails | null, qrCodeOverride?: string): Promise<string | null> => {
+export const getInvoiceHTML = async (
+  invoice: Invoice,
+  businessRaw: BusinessDetails | null,
+  qrCodeOverride?: string,
+  settingsOverride?: { currency?: string; decimals?: number; dateFormat?: string },
+  printerConfigOverride?: Record<string, any>
+): Promise<string | null> => {
 
  // Safety Fallback for Business Details
  const business: BusinessDetails = businessRaw || {
@@ -54,35 +60,43 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
    }
  }
 
- // 1. Load Settings
- const savedConfig = localStorage.getItem('printerConfig');
- 
- const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+  // 1. Load Settings — accept caller-provided overrides to avoid localStorage divergence,
+  // fall back to localStorage for backward-compatible callers that don't pass settings.
+  const savedConfig = printerConfigOverride ?? (localStorage.getItem('printerConfig') ? JSON.parse(localStorage.getItem('printerConfig')!) : {});
+  
+  const fullConfig = savedConfig;
 
- const config = fullConfig.regular || {};
- // const pageSize = config.pageSize || fullConfig.pageSize || 'a4';
- // const orientation = config.orientation || 'portrait';
+  const config = fullConfig.regular || {};
+  // const pageSize = config.pageSize || fullConfig.pageSize || 'a4';
+  // const orientation = config.orientation || 'portrait';
 
- // Global Settings
- const printCompanyName = fullConfig.printCompanyName ?? true;
- const printLanguage = fullConfig.printLanguage || 'english';
- const showTerms = fullConfig.showTerms || false;
- const termsContent = fullConfig.termsContent || '';
+  // Global Settings
+  const printCompanyName = fullConfig.printCompanyName ?? true;
+  const printLanguage = fullConfig.printLanguage || 'english';
+  const showTerms = fullConfig.showTerms || false;
+  const termsContent = fullConfig.termsContent || '';
 
 
- // Parse App Settings for Formatting
- const savedAppSettings = localStorage.getItem('appSettings');
- const appSettings = savedAppSettings ? JSON.parse(savedAppSettings) : { currency: '$', decimals: 2, dateFormat: 'dd/MM/yyyy' };
+  // Parse App Settings for Formatting — use caller-provided override when available
+  const savedAppSettingsRaw = localStorage.getItem('appSettings');
+  const savedAppSettingsParsed = savedAppSettingsRaw ? JSON.parse(savedAppSettingsRaw) : { currency: '$', decimals: 2, dateFormat: 'dd/MM/yyyy' };
+  const appSettings = settingsOverride ? { ...savedAppSettingsParsed, ...settingsOverride } : savedAppSettingsParsed;
 
- // Helper Formatters
- const formatCurrency = (amount: number) => appSettings.currency + Number(amount).toFixed(appSettings.decimals);
- const formatDate = (date: Date) => {
- try {
- return format(date, appSettings.dateFormat + ' hh:mm a');
- } catch (e) {
- return format(date, 'dd/MM/yyyy hh:mm a');
- }
- };
+  // Helper Formatters (H10 & H11 Fix)
+  const formatCurrency = (amount: any) => {
+    const val = Number(amount);
+    const num = isNaN(val) ? 0 : val;
+    return (appSettings.currency || '$') + num.toFixed(appSettings.decimals ?? 2);
+  };
+  const formatDate = (date: any) => {
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '---';
+      return format(d, (appSettings.dateFormat || 'dd/MM/yyyy') + ' hh:mm a');
+    } catch {
+      return '---';
+    }
+  };
 
 
  // If Thermal, we actually usually delegate, but if we need HTML for download, we generate it.
@@ -168,55 +182,57 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
  }
  }
 
- return`
- <!DOCTYPE html>
- <html>
- <head>
- <meta charset="UTF-8">
- <style>
- @media print {
- @page { size: ${config.pageSize === 'letter' ? 'Letter' : 'A4'} ${config.orientation === 'landscape' ? 'landscape' : 'portrait'}; margin: 0; }
- body { margin: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
- * { text-shadow: none !important; box-shadow: none !important; }
- body, .invoice-table th, .invoice-table td, .total-row, .footer, .terms { background-color: white !important; color: black !important; }
- .invoice-table th { border-bottom: 2px solid black !important; font-weight: 900 !important; background: #eee !important; }
- .invoice-table td { border-bottom: 1px solid #ccc !important; }
- .total-row.final { border: 2px solid black !important; background: #f3f4f6 !important; color: black !important; }
- }
- body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; background: #fff; padding: 25px; max-width: 800px; margin: 0 auto; }
- .ar { font-family: 'Tahoma', sans-serif; direction: rtl; }
- .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1e40af; padding-bottom: 15px; margin-bottom: 5px; }
- .inv-header .logo img { max-height: 70px; max-width: 180px; }
- .inv-header .company { text-align: right; }
- .inv-header .primary-title { font-size: 24px; font-weight: 800; color: #1e40af; margin-bottom: 2px; }
- .inv-header .secondary-title { font-size: 16px; font-weight: 600; color: #475569; margin-bottom: 3px; }
- .inv-header .company-name { font-size: 22px; font-weight: 800; color: #1e40af; margin-bottom: 3px; }
- .inv-header .company div { font-size: 12px; color: #475569; line-height: 1.6; }
- .inv-header .company strong { color: #1e293b; }
- .inv-title { text-align: center; padding: 8px 0; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; }
- .inv-title h2 { margin: 0; font-size: 16px; font-weight: 700; color: #1e40af; letter-spacing: 1px; text-transform: uppercase; }
- .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
- .meta-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; }
- .meta-box .title { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #1e40af; margin-bottom: 8px; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
- .meta-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; color: #334155; }
- .meta-row strong { color: #0f172a; }
- .invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
- .invoice-table th { background: #1e40af; color: #fff; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
- .invoice-table th.right { text-align: right; }
- .invoice-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b; }
- .invoice-table td.right { text-align: right; }
- .invoice-table tbody tr:nth-child(even) td { background: #f8fafc; }
- .totals-container { display: flex; justify-content: flex-end; margin-bottom: 20px; }
- .totals-box { width: 300px; }
- .total-row { display: flex; justify-content: space-between; padding: 7px 12px; font-size: 13px; color: #334155; border-bottom: 1px solid #e2e8f0; }
- .total-row.final { background: #1e40af; color: #fff; font-weight: 800; font-size: 16px; padding: 12px; border-radius: 6px; margin-top: 8px; border: none; }
- .total-row.discount { color: #dc2626; }
- .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px; }
- .terms { background: #f8fafc; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin-top: 20px; border: 1px solid #e2e8f0; }
- .qr-section { text-align: center; margin-top: 15px; }
- .qr-section img { width: 120px; height: 120px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px; }
- .bilingual-text { display: flex; align-items: baseline; gap: 5px; }
- </style>
+ return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+  <meta charset="UTF-8">
+  <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @media print {
+  @page { size: ${config.pageSize === 'letter' ? 'Letter' : 'A4'} ${config.orientation === 'landscape' ? 'landscape' : 'portrait'}; margin: 0; }
+  body { margin: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  * { text-shadow: none !important; box-shadow: none !important; }
+  body, .invoice-table th, .invoice-table td, .total-row, .footer, .terms { background-color: white !important; color: black !important; }
+  .invoice-table th { border-bottom: 2px solid black !important; font-weight: 800 !important; background: #f8fafc !important; color: #0f172a !important; }
+  .invoice-table td { border-bottom: 1px solid #e2e8f0 !important; }
+  .total-row.final { border: 2px solid black !important; background: #f1f5f9 !important; color: black !important; }
+  }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #334155; background: #fff; padding: 30px; max-width: 800px; margin: 0 auto; line-height: 1.5; }
+  .ar { font-family: 'Tahoma', sans-serif; direction: rtl; }
+  .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; margin-bottom: 20px; }
+  .inv-header .logo img { max-height: 80px; max-width: 200px; object-fit: contain; }
+  .inv-header .company { text-align: right; }
+  .inv-header .primary-title { font-size: 26px; font-weight: 800; color: #0f172a; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .inv-header .secondary-title { font-size: 16px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+  .inv-header .company-name { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+  .inv-header .company div { font-size: 13px; color: #64748b; line-height: 1.6; }
+  .inv-header .company strong { color: #334155; }
+  .inv-title { text-align: center; padding: 12px 0; margin-bottom: 25px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px; }
+  .inv-title h2 { margin: 0; font-size: 18px; font-weight: 700; color: #0f172a; letter-spacing: 1.5px; text-transform: uppercase; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+  .meta-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+  .meta-box .title { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 12px; letter-spacing: 0.8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+  .meta-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #475569; }
+  .meta-row strong { color: #0f172a; font-weight: 600; }
+  .invoice-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 30px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+  .invoice-table th { background: #f8fafc; color: #475569; text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; }
+  .invoice-table th.right { text-align: right; }
+  .invoice-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 13.5px; color: #334155; }
+  .invoice-table td.right { text-align: right; }
+  .invoice-table tbody tr:last-child td { border-bottom: none; }
+  .invoice-table tbody tr:hover td { background: #f8fafc; }
+  .totals-container { display: flex; justify-content: flex-end; margin-bottom: 30px; }
+  .totals-box { width: 320px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13.5px; color: #475569; }
+  .total-row.final { background: #0f172a; color: #fff; font-weight: 700; font-size: 16px; padding: 16px; border-radius: 8px; margin-top: 12px; align-items: center; }
+  .total-row.discount { color: #ef4444; }
+  .footer { margin-top: 40px; text-align: center; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  .terms { background: #f8fafc; padding: 16px; border-radius: 8px; font-size: 12px; color: #64748b; margin-top: 24px; border: 1px solid #e2e8f0; line-height: 1.6; }
+  .qr-section { text-align: center; margin-top: 20px; }
+  .qr-section img { width: 140px; height: 140px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .bilingual-text { display: flex; align-items: baseline; gap: 5px; }
+  </style>
  </head>
  <body>
  <!-- HEADER -->
@@ -256,7 +272,7 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
  </div>`: ''}
  <div class="meta-row">
  <span>${tLabel('Date & Time', 'التاريخ والوقت')}</span>
- <span>${formatDate(new Date(invoice.createdAt))}</span>
+ <span>${formatDate(invoice.createdAt)}</span>
  </div>
  ${(appSettings.cafeMode && invoice.orderType) ?`<div class="meta-row">
  <span>${tLabel('Order Type', 'نوع الطلب')}</span>
@@ -268,7 +284,7 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
  </div>
  ${invoice.dueDate ? `<div class="meta-row">
  <span>${tLabel('Due Date', 'تاريخ الاستحقاق')}</span>
- <span>${formatDate(new Date(invoice.dueDate)).split(' ')[0]}</span>
+ <span>${formatDate(invoice.dueDate).split(' ')[0]}</span>
  </div>` : ''}
  ${barcodeImg ? `
  <div style="text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #e2e8f0;">
@@ -322,6 +338,7 @@ export const getInvoiceHTML = async (invoice: Invoice, businessRaw: BusinessDeta
  <td>
  ${item.name}
  ${isBilingual && (item.arabicName || item.nameAr) ?`<div class="ar">${item.arabicName || item.nameAr}</div>`: ''}
+ ${item.serialNumber ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">S/N: ${item.serialNumber}</div>` : ''}
  </td>
  <td class="right">${item.quantity}${item.unit === 'kg' ? ' kg' : ''}</td>
  <td class="right">${formatCurrency(item.price)}</td>
@@ -413,6 +430,21 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
  const isRtl = printLanguage === 'arabic' || printLanguage === 'ar';
  const t = (en: string, ar: string) => isBilingual ?`${en} / <span dir="rtl"style="font-family: Arial, sans-serif;">${ar}</span>`: (isRtl ? ar : en);
 
+  const formatCurrency = (amount: any) => {
+    const val = Number(amount);
+    const num = isNaN(val) ? 0 : val;
+    return (appSettings.currency || 'SAR') + ' ' + num.toFixed(appSettings.decimals ?? 2);
+  };
+  const formatDate = (date: any) => {
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '---';
+      return format(d, (appSettings.dateFormat || 'dd/MM/yyyy') + ' hh:mm a');
+    } catch {
+      return '---';
+    }
+  };
+
  const template = fullConfig.thermalTemplate || {
  showLogo: true,
  showBusinessName: true,
@@ -434,26 +466,23 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
  };
 
  try {
- const formatDate = (date: Date) => {
- try {
- return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
- } catch (e) { return date.toISOString().split('T')[0]; }
- };
 
   // --- BARCODE FOR SALES ORDERS ---
   let barcodeImg = '';
   if (invoice.type === 'order') {
     try {
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, invoice.invoiceNumber, {
-        format: "CODE128",
-        displayValue: true,
-        fontSize: 14,
-        margin: 5,
-        width: 2,
-        height: 40
-      });
-      barcodeImg = canvas.toDataURL('image/png');
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        JsBarcode(canvas, invoice.invoiceNumber, {
+          format: "CODE128",
+          displayValue: true,
+          fontSize: 14,
+          margin: 5,
+          width: 2,
+          height: 40
+        });
+        barcodeImg = canvas.toDataURL('image/png');
+      }
     } catch (e) {
       console.error("Barcode generation failed for thermal invoice", e);
     }
@@ -599,7 +628,7 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
  <!-- Invoice Meta -->
  <div class="row">
  <span>${t('Inv', 'فاتورة')}: ${invoice.invoiceNumber}</span>
- <span>${formatDate(new Date(invoice.createdAt))}</span>
+ <span>${formatDate(invoice.createdAt)}</span>
  </div>
  ${template.showToken && invoice.tokenNumber ?`<div style="text-align: center; margin: 10px 0; line-height: 1.1;">
  <div style="font-size: 12px; font-weight: bold; text-transform: uppercase;">${t('TOKEN NUMBER', 'رقم الطلب')}</div>
@@ -641,6 +670,7 @@ export const getThermalInvoiceHTML = async (invoice: Invoice, businessRaw: Busin
  <div class="item-line">
  <div class="item-name">${item.name}</div>
  ${(template.showArabicName && isBilingual && (item.arabicName || item.nameAr)) ?`<div style="font-size: 10px; margin-bottom:1px;">${item.arabicName || item.nameAr}</div>`: ''}
+ ${item.serialNumber ? `<div style="font-size: 9px; color: #555; margin-bottom:1px;">S/N: ${item.serialNumber}</div>` : ''}
  <div class="item-meta">
  <span class="item-calc">${item.quantity}${item.unit === 'kg' ? 'kg' : ''} x ${Number(taxableAmount / item.quantity).toFixed(2)} ${template.showLineVat && showVatColumn && itemTax > 0 ?`(+VAT ${Number(itemTax).toFixed(2)})`: ''}</span>
  <span>${Number(lineTotal).toFixed(2)}</span>
@@ -972,6 +1002,197 @@ export const getPaymentReceiptHTML = async (
 `;
 };
 
+export const generatePaymentReceiptPDF = async (payment: any, businessRaw: BusinessDetails | null, customerName: string) => {
+    const business: BusinessDetails = businessRaw || { name: 'Business', address: '', phone: '', email: '' };
+    const savedConfig = localStorage.getItem('printerConfig');
+    const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+    const useThermal = fullConfig.printerType === 'thermal';
+    let html: string | null = '';
+    let printerName = '';
+    let pageSize = 'A4';
+
+    const custObj = { name: customerName };
+    html = await getPaymentReceiptHTML(payment, custObj, business);
+    
+    if (useThermal) {
+        printerName = fullConfig.thermal?.printerName || fullConfig.selectedPrinter || '';
+        pageSize = '80mm';
+    } else {
+        printerName = fullConfig.regular?.printerName || fullConfig.selectedPrinter || '';
+        pageSize = 'A4';
+    }
+
+    if (!html) return;
+
+    await printContent(html, {
+        selectedPrinter: printerName,
+        silent: true,
+        pageSize: pageSize,
+        copies: 1
+    });
+};
+
+export const getPaymentReportHTML = (
+    payments: any[], 
+    business: BusinessDetails, 
+    filters: any,
+    useThermal: boolean
+) => {
+    const savedAppSettings = localStorage.getItem('appSettings');
+    const appSettings = savedAppSettings ? JSON.parse(savedAppSettings) : { currency: 'SAR', decimals: 2, dateFormat: 'dd/MM/yyyy' };
+    const formatCurrency = (amount: number) => appSettings.currency + ' ' + Number(amount).toFixed(appSettings.decimals);
+    const formatDate = (date: Date) => format(date, (appSettings.dateFormat || 'dd/MM/yyyy') + ' hh:mm a');
+
+    const cssA4 = `
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @media print {
+            @page { size: A4 portrait; margin: 10mm; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        body { font-family: 'Inter', sans-serif; padding: 30px; color: #334155; }
+        .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px; }
+        .title { font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 5px; }
+        .filters { display: flex; justify-content: space-between; background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
+        .table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; }
+        .table th { background: #f1f5f9; text-align: left; padding: 10px; font-weight: 600; color: #475569; border-bottom: 2px solid #cbd5e1; }
+        .table td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
+        .table td.right, .table th.right { text-align: right; }
+        .summary { background: #0f172a; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-around; }
+        .summary-item { text-align: center; }
+        .summary-label { font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 600; letter-spacing: 1px; }
+        .summary-value { font-size: 20px; font-weight: 800; margin-top: 5px; }
+    `;
+
+    const cssThermal = `
+        @page { margin: 0; size: 80mm auto; }
+        body { font-family: 'Courier New', monospace; font-size: 11px; width: 72mm; margin: 0 auto; padding: 2mm; color: #000; font-weight: 800; }
+        .center { text-align: center; }
+        .hr { border-bottom: 1px dashed #000; margin: 5px 0; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+        .table { width: 100%; }
+        .table td, .table th { text-align: left; padding: 2px 0; }
+        .table th { border-bottom: 1px dashed #000; }
+        .right { text-align: right !important; }
+        .total-box { border: 2px solid #000; padding: 5px; margin-top: 10px; font-size: 14px; text-align: center; font-weight: 900; }
+    `;
+
+    let rowsHtml = '';
+    payments.forEach(p => {
+        if (useThermal) {
+            rowsHtml += `
+                <div class="row">
+                    <span>${formatDate(new Date(p.date)).split(' ')[0]}</span>
+                    <span>${p.paymentMode}</span>
+                </div>
+                <div class="row" style="margin-bottom: 6px;">
+                    <span style="padding-left:10px;">${p.customerId?.substring(0,8) || '-'}</span>
+                    <span>${formatCurrency(p.amount)}</span>
+                </div>
+            `;
+        } else {
+            rowsHtml += `
+                <tr>
+                    <td>${formatDate(new Date(p.date))}</td>
+                    <td style="text-transform: uppercase">${p.paymentMode}</td>
+                    <td>${p.reference || '-'}</td>
+                    <td class="right font-bold text-green-600">+${formatCurrency(p.amount)}</td>
+                </tr>
+            `;
+        }
+    });
+
+    const summaryHtml = useThermal ? `
+        <div class="hr"></div>
+        <div class="total-box">
+            TOTAL: ${formatCurrency(filters.totals.total)}
+        </div>
+        ${Object.entries(filters.totals.byMethod).map(([m, a]) => `
+            <div class="row"><span>${m.toUpperCase()}</span><span>${formatCurrency(a as number)}</span></div>
+        `).join('')}
+    ` : `
+        <div class="summary">
+            <div class="summary-item">
+                <div class="summary-label">Total Amount</div>
+                <div class="summary-value">${formatCurrency(filters.totals.total)}</div>
+            </div>
+            ${Object.entries(filters.totals.byMethod).map(([m, a]) => `
+                <div class="summary-item">
+                    <div class="summary-label">${m}</div>
+                    <div class="summary-value">${formatCurrency(a as number)}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>${useThermal ? cssThermal : cssA4}</style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">${business.name || 'Payment Report'}</div>
+                <div>Payments Received Report</div>
+            </div>
+            
+            ${!useThermal ? `
+            <div class="filters">
+                <div><strong>Mode:</strong> ${filters.mode.toUpperCase()}</div>
+                <div><strong>Date:</strong> ${filters.dateType === 'range' ? filters.start + ' to ' + filters.end : (filters.dateType === 'single' ? filters.start : 'All Time')}</div>
+            </div>
+            ` : `
+            <div class="center">
+                Type: ${filters.mode.toUpperCase()}<br/>
+                ${filters.dateType !== 'all' ? filters.start : 'All Time'}
+            </div>
+            <div class="hr"></div>
+            `}
+
+            ${useThermal ? rowsHtml : `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Method</th>
+                        <th>Reference</th>
+                        <th class="right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+            `}
+            
+            ${summaryHtml}
+            
+            <div class="${useThermal ? 'center' : 'header'}" style="margin-top: 30px; font-size: 11px; border-top: none;">
+                Report Generated: ${new Date().toLocaleString()}
+            </div>
+        </body>
+        </html>
+    `;
+};
+
+export const generatePaymentReportPDF = async (payments: any[], businessRaw: BusinessDetails | null, filters: any) => {
+    const business: BusinessDetails = businessRaw || { name: 'Business', address: '', phone: '', email: '' };
+    const savedConfig = localStorage.getItem('printerConfig');
+    const fullConfig = savedConfig ? JSON.parse(savedConfig) : {};
+    const useThermal = fullConfig.printerType === 'thermal';
+    
+    const html = getPaymentReportHTML(payments, business, filters, useThermal);
+    
+    let printerName = useThermal ? (fullConfig.thermal?.printerName || fullConfig.selectedPrinter || '') : (fullConfig.regular?.printerName || fullConfig.selectedPrinter || '');
+    let pageSize = useThermal ? '80mm' : 'A4';
+
+    await printContent(html, {
+        selectedPrinter: printerName,
+        silent: true,
+        pageSize: pageSize,
+        copies: 1
+    });
+};
+
 export const getPurchaseHTML = async (
  purchase: Purchase,
  businessRaw: BusinessDetails | null,
@@ -1082,38 +1303,66 @@ export const getPurchaseHTML = async (
  </div>
  </div>
  <div>
- <div class="box-title">${toLabel}</div>
- <div class="box-content">
+  <div class="box-title">${toLabel}</div>
+  <div class="box-content">
   ${business.name ? `<div style="font-weight: bold; font-size: 16px;">${business.name}</div>` : ''}
   ${business.address ? `<div>${business.address}</div>` : ''}
   ${business.phone ? `<div>${business.phone}</div>` : ''}
   ${business.email ? `<div>${business.email}</div>` : ''}
- </div>
- </div>
- </div>
+  </div>
+  </div>
+  </div>
 
- <table class="table">
- <thead>
- <tr>
- <th style="width: 50px;">#</th>
- <th>${t('common.description') || 'Item Description'}</th>
- <th class="right">${t('common.qty') || 'Quantity'}</th>
- <th class="right">${t('purchases.unit_cost') || 'Unit Cost'}</th>
- <th class="right">${t('common.total') || 'Total'}</th>
- </tr>
- </thead>
- <tbody>
- ${purchase.items.map((item, index) =>`
- <tr>
- <td style="color: #94a3b8;">${index + 1}</td>
- <td style="font-weight: 500;">${item.name}</td>
- <td class="right">${item.quantity}</td>
- <td class="right">${formatCurrency(item.cost)}</td>
- <td class="right"style="font-weight: bold;">${formatCurrency(item.quantity * item.cost)}</td>
- </tr>
-`).join('')}
- </tbody>
- </table>
+  <table class="table">
+  <thead>
+  <tr>
+  <th style="width: 40px;">#</th>
+  <th>${t('common.description') || 'Item Description'}</th>
+  <th class="right">${t('common.qty') || 'Quantity'}</th>
+  <th class="right">${t('purchases.unit_cost') || 'Unit Cost'}</th>
+  <th class="right">${t('purchases.before_vat_amount') || 'Before VAT Amount'}</th>
+  <th class="right">${t('purchases.vat_amount') || 'VAT Amount'}</th>
+  <th class="right">${t('purchases.total_with_vat') || 'Total Amount with VAT'}</th>
+  </tr>
+  </thead>
+  <tbody>
+  ${purchase.items.map((item, index) => {
+    const qty = item.quantity;
+    const cost = item.cost;
+    const taxRate = item.taxRate ?? 0;
+    const taxType = item.taxType || 'exclusive';
+
+    let beforeVat = item.subtotalBeforeTax ?? 0;
+    let lineTax = item.taxAmount ?? 0;
+    let totalWithVat = item.total ?? 0;
+
+    if (!beforeVat || (taxRate > 0 && lineTax === 0) || !totalWithVat) {
+      if (taxType === 'inclusive') {
+        const basePrice = cost / (1 + taxRate / 100);
+        beforeVat = basePrice * qty;
+        lineTax = (cost - basePrice) * qty;
+        totalWithVat = cost * qty;
+      } else {
+        beforeVat = cost * qty;
+        lineTax = (cost * (taxRate / 100)) * qty;
+        totalWithVat = beforeVat + lineTax;
+      }
+    }
+
+    return `
+    <tr>
+    <td style="color: #94a3b8;">${index + 1}</td>
+    <td style="font-weight: 500;">${item.name}</td>
+    <td class="right">${item.quantity}</td>
+    <td class="right">${formatCurrency(item.cost)}</td>
+    <td class="right">${formatCurrency(beforeVat)}</td>
+    <td class="right">${formatCurrency(lineTax)}</td>
+    <td class="right" style="font-weight: bold;">${formatCurrency(totalWithVat)}</td>
+    </tr>
+    `;
+  }).join('')}
+  </tbody>
+  </table>
 
  <div class="totals">
  <div class="totals-box">
@@ -1309,6 +1558,7 @@ export const getKitchenTicketHTML = async (invoice: Invoice) => {
  <div class="item-details">
  <div class="item-name">${item.name}</div>
  ${(isBilingual && (item.arabicName || item.nameAr)) ?`<div class="item-name-ar">${item.arabicName || item.nameAr}</div>`: ''}
+ ${item.serialNumber ? `<div style="font-size: 11px; font-weight: bold; margin-top: 2px;">S/N: ${item.serialNumber}</div>` : ''}
  </div>
  <div class="item-qty">${item.quantity}${item.unit === 'kg' ? '<span style="font-size: 14px; margin-left: 2px;">kg</span>' : ''}</div>
  </div>

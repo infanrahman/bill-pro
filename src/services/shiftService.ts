@@ -15,6 +15,12 @@ export const shiftService = {
  * Opens a new shift for the user.
  */
  async openShift(userId: string, username: string, branchId: string, openingFloat: number): Promise<Shift> {
+ // H8 Fix: Check for existing open shift first
+ const existing = await this.getCurrentShift(userId, branchId);
+ if (existing) {
+   return existing; // Return existing active shift instead of creating duplicate
+ }
+
  const newShift: Shift = {
  ...createRecordMetadata(),
  branchId,
@@ -40,32 +46,42 @@ export const shiftService = {
  const shift = await db.shifts.get(shiftId);
  if (!shift) throw new Error('Shift not found');
 
- // Aggregate All Invoices for this shift
+ // H9 Fix: Aggregate only valid invoices (exclude cancelled and draft; subtract returns)
  const invoices = await db.invoices.where('shiftId').equals(shiftId).toArray();
+ const validInvoices = invoices.filter((inv: any) => inv.status !== 'cancelled' && inv.status !== 'draft' && !inv.deletedAt);
  
  let cashSales = 0;
  let cardSales = 0;
  let upiSales = 0;
  let creditSales = 0;
 
- invoices.forEach(inv => {
- if (inv.paymentMode === 'cash') cashSales += inv.grandTotal;
- else if (inv.paymentMode === 'card') cardSales += inv.grandTotal;
- else if (inv.paymentMode === 'upi') upiSales += inv.grandTotal;
- else if (inv.paymentMode === 'credit') creditSales += inv.grandTotal;
+ validInvoices.forEach(inv => {
+   const multiplier = inv.type === 'return' ? -1 : 1;
+   const amount = (inv.grandTotal || 0) * multiplier;
+   if (inv.paymentMode === 'cash') cashSales += amount;
+   else if (inv.paymentMode === 'card') cardSales += amount;
+   else if (inv.paymentMode === 'upi') upiSales += amount;
+   else if (inv.paymentMode === 'credit') creditSales += amount;
  });
 
- // Add any manual Cash Entries (In/Out) linked to this user/branch/time
- // Note: For simplicity, we filter by time range if explicit link is missing
+ // M22 Fix: Add manual Cash Entries linked to this branch, time range, and user (if tagged)
+ const openTimeDate = new Date(shift.openTime);
+ const closeTimeDate = shift.closeTime ? new Date(shift.closeTime) : new Date();
+
  const cashEntries = await db.cashEntries
- .where('branchId').equals(shift.branchId)
- .filter(entry => entry.date >= shift.openTime && (!shift.closeTime || entry.date <= shift.closeTime))
- .toArray();
+   .where('branchId').equals(shift.branchId)
+   .filter(entry => {
+     const entryDate = new Date(entry.date);
+     const matchesTime = entryDate >= openTimeDate && entryDate <= closeTimeDate;
+     const matchesUser = !(entry as any).userId || (entry as any).userId === shift.userId;
+     return matchesTime && matchesUser;
+   })
+   .toArray();
 
  let netCashEntries = 0;
  cashEntries.forEach(entry => {
- if (entry.type === 'in') netCashEntries += entry.amount;
- else netCashEntries -= entry.amount;
+   if (entry.type === 'in') netCashEntries += (entry.amount || 0);
+   else netCashEntries -= (entry.amount || 0);
  });
 
  const expectedCash = shift.openingFloat + cashSales + netCashEntries;

@@ -3,215 +3,216 @@ import type { Invoice } from './db';
 
 // --- Types ---
 interface BusinessDetails {
- gstin: string; // VAT Number
- name: string;
- address: string;
- streetName?: string;
- buildingNumber?: string;
- plotIdentification?: string;
- citySubdivisionName?: string;
- cityName?: string;
- postalZone?: string;
- countrySubentity?: string; // Province
+  gstin: string;          // VAT Number (BT-31 / CompanyID in PartyTaxScheme)
+  name: string;
+  address: string;
+  crNo?: string;          // Commercial Registration Number (CRN) — PartyIdentification schemeID="CRN"
+  streetName?: string;
+  buildingNumber?: string;
+  plotIdentification?: string;
+  citySubdivisionName?: string;
+  cityName?: string;
+  postalZone?: string;
+  countrySubentity?: string;
 }
 
-// --- CONSTANTS ---
-const UBL_URN = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
-const CAC_URI = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
-const CBC_URI = 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2';
-const EXT_URI = 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2';
-// Simplified Invoice (B2C) Profile
-const PROFILE_ID = 'reporting:1.0';
-// For Simplified: 0200000 (Simplified)
-const SUBTYPE_SIMPLIFIED = '0211010';
-
+/**
+ * Generates a ZATCA-compliant signed invoice XML for production Sale Bills.
+ *
+ * ARCHITECTURE:
+ * Uses the SAME zatca-xml-js library pipeline that passed ZATCA compliance onboarding
+ * (Samples 1/2/3). Instead of constructing XML by hand, this function builds an
+ * `invoiceProps` object and passes it as JSON to `signInvoiceXml` in the Electron
+ * main process. The `signInvoiceXml` method detects the JSON string and delegates to
+ * `new ZATCASimplifiedTaxInvoice({ props: invoiceProps })`, which:
+ *   - Generates correctly ordered UBL 2.1 XML (fixes XSD_ZATCA_INVALID)
+ *   - Creates line-level TaxTotal with TaxAmount + RoundingAmount only (no TaxSubtotal)
+ *   - Creates TWO document-level TaxTotal blocks (one with subtotals, one without)
+ *   - Handles PrepaidAmount correctly
+ *   - Computes all line/document totals consistently
+ *
+ * ROOT CAUSES OF PREVIOUS XSD_ZATCA_INVALID ERROR:
+ *   • Line-level <cac:TaxTotal> contained <cac:TaxSubtotal> — forbidden by ZATCA UBL 2.1 XSD.
+ *     Schema requires line-level TaxTotal to have ONLY TaxAmount + RoundingAmount.
+ *   • Missing second document-level TaxTotal (without subtotals) — required by BR-KSA-EN16931-09.
+ *   • <cbc:ID schemeID="CRN"> was populated with the VAT number not the CRN.
+ *
+ * @param invoice         The Sale Bill invoice from the database.
+ * @param business        Business/branch details (VAT, CRN, address, etc.).
+ * @param privateKeyPem   EC private key PEM (decrypted by signInvoiceXml).
+ * @param certificatePem  Production CSID certificate (base64 PEM).
+ * @param previousInvoiceHash  PIH from branch.lastInvoiceHash for chain integrity.
+ * @param invoiceCounterValue  ICV from branch.invoiceCounter (sequential per device).
+ */
 export const generateZatcaXML = async (
- invoice: Invoice,
- business: BusinessDetails,
- privateKeyPem: string,
- certificatePem: string,
- previousInvoiceHash: string = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=' // Base64 of 0x0
+  invoice: Invoice,
+  business: BusinessDetails,
+  privateKeyPem: string,
+  certificatePem: string,
+  previousInvoiceHash: string = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=',
+  invoiceCounterValue: number = 1
 ): Promise<{ xml: string; hash: string; qr: string; uuid: string }> => {
 
- // 1. Prepare Data
- const issueDate = format(new Date(invoice.createdAt), 'yyyy-MM-dd');
- const issueTime = format(new Date(invoice.createdAt), 'HH:mm:ss');
- const vatNumber = business.gstin;
+  // --- 1. Timestamps ---
+  const issueDate = format(new Date(invoice.createdAt), 'yyyy-MM-dd');
+  // IssueTime: zatca-xml-js has a known bug where it reformats in local time and appends 'Z'.
+  // The workaround in zatcaService.ts passes local time + 'Z' so the library outputs correctly.
+  const issueTime = format(new Date(invoice.createdAt), 'HH:mm:ss') + 'Z';
 
- // Default Address if missing detailed fields (best effort mapping)
- const street = business.streetName || business.address || 'Unknown Street';
- const building = business.buildingNumber || '0000';
- const district = business.citySubdivisionName || 'District';
- const city = business.cityName || 'Riyadh';
- const zip = business.postalZone || '00000';
+  // --- 2. UUID ---
+  const uuid = generateUUID();
 
- // Totals
- const totalTax = invoice.taxAmount;
- const totalAmount = invoice.grandTotal;
- const subTotal = invoice.subTotal;
+  // --- 3. Address fields ---
+  const street = business.streetName || business.address || 'Unknown Street';
+  const building = business.buildingNumber || '0000';
+  const plotId = business.plotIdentification || building || '0000';
+  const district = business.citySubdivisionName || 'District';
+  const city = business.cityName || 'Riyadh';
+  const zip = business.postalZone || '00000';
 
- // Generate UUID once
- const uuid = generateUUID();
+  // --- 4. Line items → zatca-xml-js format ---
+  // The library takes tax_exclusive_price (unit price BEFORE VAT) and VAT_percent (decimal).
+  // It computes line subtotals, VAT amounts, RoundingAmount, and document totals internally,
+  // ensuring mathematical consistency across all ZATCA-required fields.
+  const line_items = invoice.items.map((item, index) => {
+    const vatDecimal = (item.taxRate || 15) / 100;
 
- const invoiceTypeCode = invoice.type === 'return' ? '381' : '388';
- const subtypeCode = SUBTYPE_SIMPLIFIED;
+    let taxExclusiveUnitPrice: number;
+    if (item.netAmount !== undefined && item.netAmount !== null && item.quantity > 0) {
+      // netAmount = line total after discounts (may include or exclude VAT)
+      if (item.taxType === 'inclusive') {
+        // Extract pre-VAT amount from inclusive total
+        taxExclusiveUnitPrice = (item.netAmount / (1 + vatDecimal)) / item.quantity;
+      } else {
+        // Already exclusive
+        taxExclusiveUnitPrice = item.netAmount / item.quantity;
+      }
+    } else if (item.price > 0 && item.quantity > 0) {
+      // Fallback to unit price
+      if (item.taxType === 'inclusive') {
+        taxExclusiveUnitPrice = item.price / (1 + vatDecimal);
+      } else {
+        taxExclusiveUnitPrice = item.price;
+      }
+    } else {
+      taxExclusiveUnitPrice = 0;
+    }
 
- const unsignedXML =`<?xml version="1.0"encoding="UTF-8"?>
-<Invoice xmlns="${UBL_URN}"xmlns:cac="${CAC_URI}"xmlns:cbc="${CBC_URI}"xmlns:ext="${EXT_URI}"><ext:UBLExtensions>SET_UBL_EXTENSIONS_STRING</ext:UBLExtensions>
- 
- <cbc:ProfileID>${PROFILE_ID}</cbc:ProfileID>
- <cbc:ID>${invoice.invoiceNumber}</cbc:ID>
- <cbc:UUID>${uuid}</cbc:UUID>
- <cbc:IssueDate>${issueDate}</cbc:IssueDate>
- <cbc:IssueTime>${issueTime}</cbc:IssueTime>
- <cbc:InvoiceTypeCode name="${subtypeCode}">${invoiceTypeCode}</cbc:InvoiceTypeCode>
- <cbc:DocumentCurrencyCode>SAR</cbc:DocumentCurrencyCode>
- <cbc:TaxCurrencyCode>SAR</cbc:TaxCurrencyCode>
- <cac:AdditionalDocumentReference>
- <cbc:ID>ICV</cbc:ID>
- <cbc:UUID>${invoice.id || 1}</cbc:UUID> 
- </cac:AdditionalDocumentReference>
- <cac:AdditionalDocumentReference>
- <cbc:ID>PIH</cbc:ID>
- <cac:Attachment>
- <cbc:EmbeddedDocumentBinaryObject mimeCode="text/plain">${previousInvoiceHash}</cbc:EmbeddedDocumentBinaryObject>
- </cac:Attachment>
- </cac:AdditionalDocumentReference>
- <cac:AdditionalDocumentReference>
- <cbc:ID>QR</cbc:ID>
- <cac:Attachment>
- <cbc:EmbeddedDocumentBinaryObject mimeCode="text/plain">SET_QR_CODE_DATA</cbc:EmbeddedDocumentBinaryObject>
- </cac:Attachment>
- </cac:AdditionalDocumentReference>
- <cac:Signature>
- <cbc:ID>urn:oasis:names:specification:ubl:signature:Invoice</cbc:ID>
- <cbc:SignatureMethod>urn:oasis:names:specification:ubl:dsig:enveloped:xades</cbc:SignatureMethod>
- </cac:Signature>
- <cac:AccountingSupplierParty>
- <cac:Party>
- <cac:PartyIdentification>
- <cbc:ID schemeID="CRN">${business.gstin}</cbc:ID> 
- </cac:PartyIdentification>
- <cac:PartyName>
- <cbc:Name>${business.name}</cbc:Name>
- </cac:PartyName>
- <cac:PostalAddress>
- <cbc:StreetName>${street}</cbc:StreetName>
- <cbc:BuildingNumber>${building}</cbc:BuildingNumber>
- <cbc:CitySubdivisionName>${district}</cbc:CitySubdivisionName>
- <cbc:CityName>${city}</cbc:CityName>
- <cbc:PostalZone>${zip}</cbc:PostalZone>
- <cac:Country>
- <cbc:IdentificationCode>SA</cbc:IdentificationCode>
- </cac:Country>
- </cac:PostalAddress>
- <cac:PartyTaxScheme>
- <cbc:CompanyID>${vatNumber}</cbc:CompanyID>
- <cac:TaxScheme>
- <cbc:ID>VAT</cbc:ID>
- </cac:TaxScheme>
- </cac:PartyTaxScheme>
- <cac:PartyLegalEntity>
- <cbc:RegistrationName>${business.name}</cbc:RegistrationName>
- </cac:PartyLegalEntity>
- </cac:Party>
- </cac:AccountingSupplierParty>
- <cac:TaxTotal>
- <cbc:TaxAmount currencyID="SAR">${totalTax.toFixed(2)}</cbc:TaxAmount>
- <cac:TaxSubtotal>
- <cbc:TaxableAmount currencyID="SAR">${subTotal.toFixed(2)}</cbc:TaxableAmount>
- <cbc:TaxAmount currencyID="SAR">${totalTax.toFixed(2)}</cbc:TaxAmount>
- <cac:TaxCategory>
- <cbc:ID>S</cbc:ID>
- <cbc:Percent>15.00</cbc:Percent>
- <cac:TaxScheme>
- <cbc:ID>VAT</cbc:ID>
- </cac:TaxScheme>
- </cac:TaxCategory>
- </cac:TaxSubtotal>
- </cac:TaxTotal>
- <cac:TaxTotal>
- <cbc:TaxAmount currencyID="SAR">${totalTax.toFixed(2)}</cbc:TaxAmount>
- </cac:TaxTotal>
- <cac:LegalMonetaryTotal>
- <cbc:LineExtensionAmount currencyID="SAR">${subTotal.toFixed(2)}</cbc:LineExtensionAmount>
- <cbc:TaxExclusiveAmount currencyID="SAR">${subTotal.toFixed(2)}</cbc:TaxExclusiveAmount>
- <cbc:TaxInclusiveAmount currencyID="SAR">${totalAmount.toFixed(2)}</cbc:TaxInclusiveAmount>
- <cbc:AllowanceTotalAmount currencyID="SAR">0.00</cbc:AllowanceTotalAmount>
- <cbc:PrepaidAmount currencyID="SAR">0.00</cbc:PrepaidAmount>
- <cbc:PayableAmount currencyID="SAR">${totalAmount.toFixed(2)}</cbc:PayableAmount>
- </cac:LegalMonetaryTotal>
- ${invoice.items.map((item, index) => {
- const taxableAmount = item.netAmount || (item.price * item.quantity);
- const unitPriceExclusive = taxableAmount / item.quantity;
- return`
- <cac:InvoiceLine>
- <cbc:ID>${index + 1}</cbc:ID>
- <cbc:InvoicedQuantity unitCode="PCE">${item.quantity}</cbc:InvoicedQuantity>
- <cbc:LineExtensionAmount currencyID="SAR">${taxableAmount.toFixed(2)}</cbc:LineExtensionAmount>
- <cac:TaxTotal>
- <cbc:TaxAmount currencyID="SAR">${(item.taxAmount || 0).toFixed(2)}</cbc:TaxAmount>
- <cac:TaxSubtotal>
- <cbc:TaxableAmount currencyID="SAR">${taxableAmount.toFixed(2)}</cbc:TaxableAmount>
- <cbc:TaxAmount currencyID="SAR">${(item.taxAmount || 0).toFixed(2)}</cbc:TaxAmount>
- <cac:TaxCategory>
- <cbc:ID>S</cbc:ID>
- <cbc:Percent>${(item.taxRate || 15).toFixed(2)}</cbc:Percent>
- <cac:TaxScheme>
- <cbc:ID>VAT</cbc:ID>
- </cac:TaxScheme>
- </cac:TaxCategory>
- </cac:TaxSubtotal>
- </cac:TaxTotal>
- <cac:Item>
- <cbc:Name>${item.name}</cbc:Name>
- <cac:ClassifiedTaxCategory>
- <cbc:ID>S</cbc:ID>
- <cbc:Percent>${(item.taxRate || 15).toFixed(2)}</cbc:Percent>
- <cac:TaxScheme>
- <cbc:ID>VAT</cbc:ID>
- </cac:TaxScheme>
- </cac:ClassifiedTaxCategory>
- </cac:Item>
- <cac:Price>
- <cbc:PriceAmount currencyID="SAR">${unitPriceExclusive.toFixed(2)}</cbc:PriceAmount>
- </cac:Price>
- </cac:InvoiceLine>`;
- }).join('')}
-</Invoice>`;
+    return {
+      id: index + 1,
+      name: item.name || `Item ${index + 1}`,
+      tax_exclusive_price: parseFloat(taxExclusiveUnitPrice.toFixed(4)),
+      quantity: item.quantity,
+      VAT_percent: vatDecimal,
+    };
+  });
 
- let signedXml = '';
- let hashBase64 = '';
- let qrText = '';
+  // --- 5. Invoice type & cancelation (for return/credit note) ---
+  const isReturn = invoice.type === 'return';
+  const cancelation = isReturn ? {
+    cancelation_type: '381' as const,
+    canceled_invoice_number: Math.max(1, invoiceCounterValue - 1),
+    payment_method: '10', // Cash
+    reason: 'Customer Return',
+  } : undefined;
 
- try {
- if (typeof window !== 'undefined' && (window as any).electron?.zatca?.signInvoiceXml) {
- const result = await (window as any).electron.zatca.signInvoiceXml(unsignedXML, certificatePem, privateKeyPem);
- signedXml = result.signedXml;
- hashBase64 = result.hash;
- qrText = result.qr;
- } else {
- console.log('Running in browser - returning mock signature');
- signedXml = unsignedXML.replace('SET_UBL_EXTENSIONS_STRING', '<mock>Signature</mock>').replace('SET_QR_CODE_DATA', 'MOCK_QR');
- hashBase64 = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=';
- qrText = 'MOCK_QR';
- }
- } catch (e) {
- console.error('ZATCA signing failed:', e);
- throw e;
- }
+  // --- 6. Customer name for BR-KSA-71 (summary simplified invoices require buyer name) ---
+  const customerName = invoice.customerName?.trim() || 'Customer';
 
- return {
- xml: signedXml,
- hash: hashBase64,
- qr: qrText,
- uuid: uuid
- };
+  // --- 7. Build invoiceProps for zatca-xml-js ---
+  // The _customer_name field is read by zatcaService.signInvoiceXml to inject
+  // cac:AccountingCustomerParty with the actual customer name (not hardcoded).
+  const invoiceProps: Record<string, any> = {
+    invoice_serial_number: invoice.invoiceNumber,
+    egs_info: {
+      uuid,
+      CRN_number: business.crNo || '',
+      location: {
+        street,
+        building,
+        plot_identification: plotId,
+        city_subdivision: district,
+        city,
+        postal_zone: zip,
+      },
+      VAT_number: business.gstin,
+      VAT_name: business.name,
+    },
+    issue_date: issueDate,
+    issue_time: issueTime,
+    previous_invoice_hash: previousInvoiceHash,
+    invoice_counter_number: invoiceCounterValue,
+    line_items,
+    // Private field read by zatcaService.ts to inject correct buyer name
+    _customer_name: customerName,
+  };
+
+  if (cancelation) {
+    invoiceProps.cancelation = cancelation;
+  }
+
+  // --- 8. Safe diagnostics (no private key / secret material logged) ---
+  console.log('[ZATCA SALE INVOICE] ========== CRYPTO TRACE ==========');
+  console.log('[ZATCA SALE INVOICE] UUID              :', uuid);
+  console.log('[ZATCA SALE INVOICE] Invoice Number    :', invoice.invoiceNumber);
+  console.log('[ZATCA SALE INVOICE] Invoice Type      :', isReturn ? '381 Credit Note' : '388 Simplified Invoice');
+  console.log('[ZATCA SALE INVOICE] ICV               :', invoiceCounterValue);
+  console.log('[ZATCA SALE INVOICE] Issue Date/Time   :', issueDate, issueTime);
+  console.log('[ZATCA SALE INVOICE] Seller VAT        :', business.gstin);
+  console.log('[ZATCA SALE INVOICE] Seller CRN        :', business.crNo || '(not configured)');
+  console.log('[ZATCA SALE INVOICE] Customer Name     :', customerName);
+  console.log('[ZATCA SALE INVOICE] Line Items        :', line_items.length);
+  line_items.forEach((li, i) => {
+    const lineTaxable = li.tax_exclusive_price * li.quantity;
+    const lineVAT = lineTaxable * li.VAT_percent;
+    console.log(
+      `[ZATCA SALE INVOICE] Line ${i + 1}: "${li.name}" ` +
+      `qty=${li.quantity} unitPrice(excl)=${li.tax_exclusive_price.toFixed(2)} ` +
+      `taxable=${lineTaxable.toFixed(2)} VAT=${lineVAT.toFixed(2)} VAT%=${li.VAT_percent * 100}`
+    );
+  });
+
+  // --- 9. Sign via the Electron ZATCA service (same pipeline as compliance samples) ---
+  // signInvoiceXml detects JSON string (starts with '{') and routes through:
+  //   new ZATCASimplifiedTaxInvoice({ props: invoiceProps })
+  // This guarantees correct UBL 2.1 structure identical to accepted compliance samples.
+  const propsJson = JSON.stringify(invoiceProps);
+
+  let signedXml = '';
+  let hashBase64 = '';
+  let qrText = '';
+
+  try {
+    if (typeof window !== 'undefined' && (window as any).electron?.zatca?.signInvoiceXml) {
+      const result = await (window as any).electron.zatca.signInvoiceXml(
+        propsJson,
+        certificatePem,
+        privateKeyPem
+      );
+      signedXml = result.signedXml;
+      hashBase64 = result.hash;
+      qrText = result.qr;
+
+      console.log('[ZATCA SALE INVOICE] Invoice Hash      :', hashBase64);
+      console.log('[ZATCA SALE INVOICE] Signing           : COMPLETE ✓');
+      console.log('[ZATCA SALE INVOICE] =============================================');
+    } else {
+      console.warn('[ZATCA SALE INVOICE] Electron not available — using mock (browser mode only)');
+      signedXml = '<!-- MOCK SIGNED XML -->';
+      hashBase64 = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=';
+      qrText = 'MOCK_QR';
+    }
+  } catch (e) {
+    console.error('[ZATCA SALE INVOICE] Signing FAILED:', e);
+    throw e;
+  }
+
+  return { xml: signedXml, hash: hashBase64, qr: qrText, uuid };
 };
 
-function generateUUID() {
- return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
- const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
- return v.toString(16);
- });
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }

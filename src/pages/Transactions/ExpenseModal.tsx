@@ -22,6 +22,7 @@ const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onSave, ed
 
  useEffect(() => {
  if (isOpen) {
+ setTimeout(() => {
  if (editingExpense) {
  setDescription(editingExpense.description);
  setAmount(editingExpense.amount.toString());
@@ -33,6 +34,7 @@ const ExpenseModal: React.FC<ExpenseModalProps> = ({ isOpen, onClose, onSave, ed
  setCategory('General');
  setNotes('');
  }
+ }, 0);
  }
  }, [isOpen, editingExpense]);
 

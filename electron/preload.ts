@@ -68,10 +68,12 @@ contextBridge.exposeInMainWorld('electron', {
         signHash: (hashBase64: string, privateKeyPem: string) => ipcRenderer.invoke('zatca:sign-hash', { hashBase64, privateKeyPem }),
         signInvoiceXml: (unsignedXml: string, certificatePem: string, privateKeyPem: string) => 
             ipcRenderer.invoke('zatca:sign-invoice-xml', { unsignedXml, certificatePem, privateKeyPem }),
+        runDiagnostic: () => ipcRenderer.invoke('zatca:run-diagnostic'),
     },
 
     // Auto Updater
     updater: {
+        getVersion: () => ipcRenderer.invoke('app:getVersion'),
         check: () => ipcRenderer.invoke('updater:check'),
         install: () => ipcRenderer.invoke('updater:install'),
         onMessage: (callback: (message: any) => void) => {

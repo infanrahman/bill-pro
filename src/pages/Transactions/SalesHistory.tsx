@@ -5,6 +5,7 @@ import { db, type Invoice, softDeleteMetadata, getCurrentBranchId } from '../../
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Search, Printer, Download, Trash2, RotateCcw, Eye, ShieldCheck, ShieldAlert, Clock, CreditCard, RefreshCw, History } from 'lucide-react';
 import { generateInvoicePDF } from '../../services/invoiceGenerator';
+import { printContent } from '../../services/printerService';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -56,6 +57,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  const [currentPage, setCurrentPage] = useState(1);
  const [pageSize, setPageSize] = useState(20);
 
+ const [paymentMode, setPaymentMode] = useState('all');
+
  const [shareModalOpen, setShareModalOpen] = useState(false);
  const [selectedInvoiceForShare, setSelectedInvoiceForShare] = useState<Invoice | null>(null);
  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
@@ -63,7 +66,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  // Reset pagination on filter change
  useEffect(() => {
  setCurrentPage(1);
- }, [search, startDate, endDate, pageSize]);
+ }, [search, startDate, endDate, paymentMode, pageSize]);
 
  // ==========================================
  // OPTIMIZED QUERY: Single fetch, client-side pagination
@@ -89,7 +92,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  // Step 2: Apply filters in a single pass
  const searchLower = search.toLowerCase();
  const startDateTime = startDate ? new Date(startDate).getTime() : 0;
- const endDateTime = endDate ? new Date(endDate).getTime() : Infinity;
+ // M12 Fix: Include the full end date
+ const endDateTime = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
 
  return collection.filter((inv: any) => {
  // Skip orders (Pay Later) - only show invoices in History
@@ -97,6 +101,9 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
 
  // Skip soft-deleted records
  if (inv.deletedAt) return false;
+
+ // Payment Mode Filter
+ if (paymentMode !== 'all' && inv.paymentMode !== paymentMode) return false;
 
  // Date range filter (use timestamps for fast comparison)
  const invTime = new Date(inv.createdAt).getTime();
@@ -111,7 +118,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
 
  return true;
  }).toArray();
- }, [search, startDate, endDate, activeBranchId, activeBranch?.isMaster]);
+ }, [search, startDate, endDate, paymentMode, activeBranchId, activeBranch?.isMaster]);
 
  // Client-side pagination (instant page switching, no re-query)
  const totalItems = allFilteredInvoices?.length || 0;
@@ -183,7 +190,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  { ...safeBusinessDetails, gstin: vatNumber },
  zatcaConfig.privateKey,
  activeCsid,
- currentPIH
+ currentPIH,
+ branch?.invoiceCounter || 1
 );
 
  const { reportInvoice } = await import('../../services/zatcaApi');
@@ -199,11 +207,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  env
 );
 
- const nextICV = (branch?.invoiceCounter || 0) + 1;
- await db.branches.update(activeBranchId, {
- lastInvoiceHash: result.hash,
- invoiceCounter: nextICV
- });
+  // H26 Fix: Do NOT increment branch invoiceCounter during a RETRY.
+  // The ICV counter was already assigned when the invoice was generated.
 
  if (reportResult.status === 'REPORTED') {
  await db.invoices.update(invoice.id, {
@@ -279,11 +284,103 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  addToast(t('transactions.download_success'), 'success');
  } catch (e) {
  console.error(e);
- addToast(t('common.error'), 'error');
- }
- };
+  addToast(t('common.error'), 'error');
+  }
+  };
 
- return (
+  const handlePrintDayReport = async () => {
+    try {
+        const dataToPrint = allFilteredInvoices || [];
+        if (dataToPrint.length === 0) {
+            addToast(t('common.no_records') || 'No records', 'info');
+            return;
+        }
+        addToast('Generating report...', 'info');
+
+        const totals = { total: 0, cash: 0, card: 0, credit: 0, upi: 0, split: 0, return: 0 };
+        dataToPrint.forEach(inv => {
+            if (inv.type === 'return') {
+                totals.return += inv.grandTotal;
+                totals.total -= inv.grandTotal;
+            } else {
+                totals.total += inv.grandTotal;
+                const mode = inv.paymentMode || 'cash';
+                if (totals[mode as keyof typeof totals] !== undefined) {
+                    (totals[mode as keyof typeof totals] as number) += inv.grandTotal;
+                }
+            }
+        });
+
+        const saved = localStorage.getItem('businessDetails');
+        const biz = saved ? JSON.parse(saved) : { name: 'My Shop' };
+
+        const html = `
+            <html>
+                <head>
+                    <style>
+                        body { font-family: monospace; font-size: 12px; margin: 0; padding: 10px; color: #000; }
+                        .center { text-align: center; }
+                        .bold { font-weight: bold; }
+                        .line { border-bottom: 1px dashed #000; margin: 5px 0; }
+                        .flex { display: flex; justify-content: space-between; }
+                        table { width: 100%; text-align: left; border-collapse: collapse; margin-top: 10px; }
+                        th, td { padding: 4px 0; border-bottom: 1px dotted #ccc; font-size: 10px; }
+                        th { font-weight: bold; border-bottom: 1px dashed #000; }
+                    </style>
+                </head>
+                <body>
+                    <div class="center bold" style="font-size: 16px;">${biz.name}</div>
+                    <div class="center bold" style="margin-top:5px;">DAY BUSINESS REPORT</div>
+                    <div class="line"></div>
+                    <div class="flex"><span>Date:</span> <span>${formatDate(new Date())}</span></div>
+                    <div class="flex"><span>Filtered:</span> <span>${startDate ? formatDate(new Date(startDate)) : 'All'} - ${endDate ? formatDate(new Date(endDate)) : 'All'}</span></div>
+                    <div class="line"></div>
+                    
+                    <div class="bold" style="margin-top: 10px;">SUMMARY</div>
+                    <div class="flex"><span>Total Sales:</span> <span>${formatCurrency(totals.total)}</span></div>
+                    <div class="flex"><span>Total Returns:</span> <span>${formatCurrency(totals.return)}</span></div>
+                    <div class="flex"><span>Cash:</span> <span>${formatCurrency(totals.cash)}</span></div>
+                    <div class="flex"><span>Card:</span> <span>${formatCurrency(totals.card)}</span></div>
+                    <div class="flex"><span>UPI:</span> <span>${formatCurrency(totals.upi)}</span></div>
+                    <div class="flex"><span>Credit:</span> <span>${formatCurrency(totals.credit)}</span></div>
+                    <div class="flex"><span>Split:</span> <span>${formatCurrency(totals.split)}</span></div>
+                    
+                    <div class="line" style="margin-top: 10px;"></div>
+                    <div class="bold center">INVOICES (${dataToPrint.length})</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Inv #</th>
+                                <th>Type</th>
+                                <th>Pay</th>
+                                <th style="text-align:right">Amt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dataToPrint.map(inv => `
+                                <tr>
+                                    <td>${inv.invoiceNumber}</td>
+                                    <td>${inv.type === 'return' ? 'RET' : 'INV'}</td>
+                                    <td>${(inv.paymentMode || 'cash').substring(0, 4).toUpperCase()}</td>
+                                    <td style="text-align:right">${formatCurrency(inv.grandTotal)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div class="line" style="margin-top: 10px;"></div>
+                    <div class="center">*** END OF REPORT ***</div>
+                </body>
+            </html>
+        `;
+
+        printContent(html, { pageSize: 'thermal', silent: false }).catch(console.error);
+    } catch (e) {
+        console.error(e);
+        addToast(t('common.error'), 'error');
+    }
+  };
+
+  return (
  <div className="space-y-6">
  <h1 className="text-2xl font-semibold dark:text-white uppercase tracking-tight flex items-center gap-4">
  <div className="p-3 bg-slate-900 dark:bg-white text-white rounded-2xl">
@@ -292,50 +389,73 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  {t('transactions.title')}
  </h1>
 
- <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-wrap gap-6 items-center relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row flex-wrap gap-4 md:gap-6 items-stretch md:items-center relative overflow-hidden group">
  
- <div className="relative flex-1 min-w-[200px] z-10">
- <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"size={20} />
+ <div className="relative flex-1 w-full md:w-auto min-w-[200px] z-10">
+ <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={20} />
  <input
  type="text"
  placeholder={t('transactions.search_placeholder')}
  value={search}
  onChange={(e) => setSearch(e.target.value)}
- className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-sm"
+ className="w-full pl-12 pr-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-sm"
  />
  </div>
 
- <div className="flex flex-wrap items-center gap-4 z-10">
- <div className="flex flex-col">
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 z-10 w-full md:w-auto">
+ <div className="flex flex-col flex-1">
  <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.from')}</label>
  <input
  type="datetime-local"
  value={startDate}
  onChange={(e) => setStartDate(e.target.value)}
- className="px-4 py-3 rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
  />
  </div>
- <div className="flex flex-col">
+ <div className="flex flex-col flex-1">
  <label className="text-[10px] uppercase font-semibold text-slate-600 pl-1 tracking-wider">{t('transactions.to')}</label>
  <input
  type="datetime-local"
  value={endDate}
  onChange={(e) => setEndDate(e.target.value)}
- className="px-4 py-3 rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
  />
  </div>
+ <div className="flex flex-col flex-1">
+ <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.payment') || 'Payment'}</label>
+ <select
+ value={paymentMode}
+ onChange={(e) => setPaymentMode(e.target.value)}
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+ >
+ <option value="all">{t('common.all') || 'All'}</option>
+ <option value="cash">{t('common.cash') || 'Cash'}</option>
+ <option value="card">{t('common.card') || 'Card'}</option>
+ <option value="credit">{t('common.credit') || 'Credit'}</option>
+ <option value="upi">{t('common.upi') || 'UPI'}</option>
+ <option value="split">{t('common.split') || 'Split'}</option>
+ </select>
+ </div>
  </div>
 
-
- {settings.enableExcelExport && (
- <button type="button"
- onClick={handleExportExcel}
- className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider ml-auto z-10"
- >
- <FileSpreadsheet size={18} strokeWidth={2.5} />
- <span>{t('common.export_excel')}</span>
- </button>
-)}
+ <div className="flex gap-2 ml-auto z-10">
+  <button type="button"
+  onClick={handlePrintDayReport}
+  className="flex items-center gap-3 px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
+  >
+  <Printer size={18} strokeWidth={2.5} />
+  <span>{t('transactions.print_report') || 'Print Report'}</span>
+  </button>
+  {settings.enableExcelExport && (
+  <button type="button"
+  onClick={handleExportExcel}
+  className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
+  >
+  <FileSpreadsheet size={18} strokeWidth={2.5} />
+  <span>{t('common.export_excel')}</span>
+  </button>
+ )}
+ </div>
  </div>
 
  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">

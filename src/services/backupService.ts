@@ -1,199 +1,332 @@
 import { db } from './db';
 
-// Current backup format version — bump this when schema changes
-const BACKUP_VERSION = '1.2.0';
+const BACKUP_VERSION = '2.0.0';
 
-export interface BackupData {
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- items: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- invoices: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- expenses: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- purchases: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- customers: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- suppliers: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- customerPayments: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- users: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- activityLogs: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- notifications: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- cashEntries: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- cashParties: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- purchasePayments: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- categories?: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- spreadsheets?: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- scales?: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- branches?: any[];
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- shifts?: any[];
- businessDetails: string | null;
- printerConfig: string | null;
- timestamp: number;
- version: string;
+export interface BackupMetadata {
+  tableNames: string[];
+  recordCounts: Record<string, number>;
 }
 
-// Fix #2 & #3: Strict schema validation — checks required fields are arrays
+export interface BackupData {
+  // Legacy explicitly named tables for backward compatibility with v1 restores
+  items?: any[];
+  invoices?: any[];
+  expenses?: any[];
+  purchases?: any[];
+  customers?: any[];
+  suppliers?: any[];
+  customerPayments?: any[];
+  users?: any[];
+  activityLogs?: any[];
+  notifications?: any[];
+  cashEntries?: any[];
+  cashParties?: any[];
+  purchasePayments?: any[];
+  categories?: any[];
+  spreadsheets?: any[];
+  scales?: any[];
+  branches?: any[];
+  shifts?: any[];
+
+  // Legacy localStorage strings
+  businessDetails?: string | object | null;
+  businessProfile?: string | object | null;
+  printerConfig?: string | object | null;
+  appSettings?: string | object | null;
+  zatca_config?: string | object | null;
+  reminderSettings?: string | object | null;
+
+  // V2 Dynamic Fields
+  databaseData?: Record<string, any[]>;
+  localStorageData?: Record<string, string>;
+  metadata?: BackupMetadata;
+
+  timestamp: number;
+  version: string;
+}
+
+// Strict schema validation — checks integrity using metadata if available
 const validateBackupData = (data: unknown): data is BackupData => {
- if (!data || typeof data !== 'object') return false;
- const d = data as Record<string, unknown>;
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
 
- // Required top-level array fields
- const requiredArrayFields = ['items', 'invoices', 'expenses', 'purchases', 'customers', 'suppliers', 'customerPayments', 'users'];
- for (const field of requiredArrayFields) {
- if (!Array.isArray(d[field])) {
- console.error(`Backup validation failed:"${field}"is missing or not an array.`);
- return false;
- }
- }
+  // Timestamp must be a finite number
+  if (typeof d['timestamp'] !== 'number' || !isFinite(d['timestamp'] as number)) {
+    console.error('Backup validation failed: "timestamp" is invalid.');
+    return false;
+  }
 
- // Timestamp must be a finite number
- if (typeof d['timestamp'] !== 'number' || !isFinite(d['timestamp'] as number)) {
- console.error('Backup validation failed:"timestamp"is invalid.');
- return false;
- }
+  // V2 Dynamic Integrity Check
+  if (d['metadata'] && d['databaseData']) {
+    const metadata = d['metadata'] as BackupMetadata;
+    const databaseData = d['databaseData'] as Record<string, any[]>;
+    
+    if (!Array.isArray(metadata.tableNames) || typeof metadata.recordCounts !== 'object') {
+      console.error('Backup validation failed: metadata is malformed.');
+      return false;
+    }
+    
+    for (const tableName of metadata.tableNames) {
+      const tableData = databaseData[tableName];
+      if (!Array.isArray(tableData)) {
+        console.error(`Backup validation failed: data for table "${tableName}" is missing or not an array.`);
+        return false;
+      }
+      if (tableData.length !== metadata.recordCounts[tableName]) {
+        console.error(`Backup validation failed: record count mismatch for table "${tableName}". Expected ${metadata.recordCounts[tableName]}, got ${tableData.length}.`);
+        return false;
+      }
+    }
+  } else {
+    // V1 Legacy Structure Check
+    const requiredArrayFields = ['items', 'invoices', 'expenses', 'purchases', 'customers', 'suppliers', 'customerPayments', 'users'];
+    for (const field of requiredArrayFields) {
+      if (!Array.isArray(d[field])) {
+        console.error(`Backup validation failed (legacy mode): "${field}" is missing or not an array.`);
+        return false;
+      }
+    }
+  }
 
- return true;
+  return true;
+};
+
+/**
+ * Serialises a localStorage value for inclusion in the backup JSON.
+ */
+const readLocalStorageKey = (key: string): string | null => {
+  return localStorage.getItem(key);
 };
 
 export const generateBackupData = async (): Promise<string> => {
- const exportData: BackupData = {
- items: await db.items.toArray(),
- invoices: await db.invoices.toArray(),
- expenses: await db.expenses.toArray(),
- purchases: await db.purchases.toArray(),
- customers: await db.customers.toArray(),
- suppliers: await db.suppliers.toArray(),
- customerPayments: await db.customerPayments.toArray(),
- users: await db.users.toArray(),
- activityLogs: await db.activityLogs.toArray(),
- notifications: await db.notifications.toArray(),
- cashEntries: await db.cashEntries.toArray(),
- cashParties: await db.cashParties.toArray(),
- purchasePayments: await db.purchasePayments.toArray(),
- categories: await db.categories.toArray(),
- spreadsheets: await db.spreadsheets.toArray(),
- scales: await db.scales.toArray(),
- branches: await db.branches.toArray(),
- shifts: await db.shifts.toArray(),
- businessDetails: localStorage.getItem('businessDetails'),
- printerConfig: localStorage.getItem('printerConfig'),
- timestamp: Date.now(),
- version: BACKUP_VERSION // Fix #17: use constant, not hardcoded string
- };
- return JSON.stringify(exportData, null, 2);
+  const databaseData: Record<string, any[]> = {};
+  const metadata: BackupMetadata = {
+    tableNames: [],
+    recordCounts: {}
+  };
+
+  // 1. Export all tables dynamically (future-proof)
+  for (const table of db.tables) {
+    const records = await table.toArray();
+    databaseData[table.name] = records;
+    metadata.tableNames.push(table.name);
+    metadata.recordCounts[table.name] = records.length;
+  }
+
+  // 2. Export all localStorage dynamically (future-proof)
+  const localStorageData: Record<string, string> = {};
+  // Exclude transient or machine-specific tokens that shouldn't be backed up
+  const EXCLUDED_KEYS = ['user', 'currentUser', 'token', 'lastAutoBackupTime'];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && !EXCLUDED_KEYS.includes(key)) {
+      localStorageData[key] = localStorage.getItem(key) || '';
+    }
+  }
+
+  const businessDetailsRaw = localStorage.getItem('businessDetails') || localStorage.getItem('businessProfile') || null;
+
+  const exportData: BackupData = {
+    // V2 Dynamic payload
+    databaseData,
+    localStorageData,
+    metadata,
+    
+    // V1 legacy payload (preserved for downgrading to older app versions)
+    items: databaseData['items'] || [],
+    invoices: databaseData['invoices'] || [],
+    expenses: databaseData['expenses'] || [],
+    purchases: databaseData['purchases'] || [],
+    customers: databaseData['customers'] || [],
+    suppliers: databaseData['suppliers'] || [],
+    customerPayments: databaseData['customerPayments'] || [],
+    users: databaseData['users'] || [],
+    activityLogs: databaseData['activityLogs'] || [],
+    notifications: databaseData['notifications'] || [],
+    cashEntries: databaseData['cashEntries'] || [],
+    cashParties: databaseData['cashParties'] || [],
+    purchasePayments: databaseData['purchasePayments'] || [],
+    categories: databaseData['categories'] || [],
+    spreadsheets: databaseData['spreadsheets'] || [],
+    scales: databaseData['scales'] || [],
+    branches: databaseData['branches'] || [],
+    shifts: databaseData['shifts'] || [],
+
+    businessDetails: businessDetailsRaw,
+    businessProfile: businessDetailsRaw,
+    printerConfig: readLocalStorageKey('printerConfig'),
+    appSettings: readLocalStorageKey('appSettings'),
+    zatca_config: readLocalStorageKey('zatca_config'),
+    reminderSettings: readLocalStorageKey('reminderSettings'),
+
+    timestamp: Date.now(),
+    version: BACKUP_VERSION,
+  };
+  return JSON.stringify(exportData, null, 2);
 };
 
-export const restoreBackupData = async (jsonContent: string) => {
- let data: unknown;
- try {
- data = JSON.parse(jsonContent);
- } catch {
- throw new Error('Invalid backup file: could not parse JSON.');
- }
+/**
+ * Restores all application data from a backup JSON string.
+ * - Validates completeness and integrity before proceeding.
+ * - Clears all IndexedDB tables and dynamically restores them.
+ * - Restores all localStorage settings dynamically.
+ */
+export const restoreBackupData = async (jsonContent: string): Promise<void> => {
+  let data: unknown;
+  try {
+    data = JSON.parse(jsonContent);
+  } catch {
+    throw new Error('Invalid backup file: could not parse JSON.');
+  }
 
- // Fix #2: Validate structure before touching the DB
- if (!validateBackupData(data)) {
- throw new Error('Invalid backup file: required fields are missing or malformed.');
- }
+  if (!validateBackupData(data)) {
+    throw new Error('Invalid backup file: integrity check failed. The backup file is corrupted or incomplete.');
+  }
 
- // Fix #3: Use actual Dexie primary keys instead of hardcoding`.id`
- // safeAddMissing uses the table's own primaryKeys() — works for all key types
- const safeAddMissing = async (table: ReturnType<typeof db.table>, items: unknown[]) => {
- if (!items || items.length === 0) return;
+  const backup = data as BackupData;
+  const isV2 = !!(backup.metadata && backup.databaseData);
 
- // Fetch all existing primary key values from the table
- const existingKeys = new Set(await table.toCollection().primaryKeys());
+  // Helper to revive ISO date strings in objects
+  const reviveDates = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(reviveDates);
+    const result: any = {};
+    for (const key in obj) {
+      const val = obj[key];
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+        result[key] = new Date(val);
+      } else if (val !== null && typeof val === 'object') {
+        result[key] = reviveDates(val);
+      } else {
+        result[key] = val;
+      }
+    }
+    return result;
+  };
 
- // Get this table's primary key field name from Dexie's schema
- const pkField = table.schema.primKey.keyPath as string ?? 'id';
+  const processRecords = (records: any[]) => records.map(reviveDates);
 
- // Filter to only new records
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const newItems = (items as any[]).filter((item: any) => !existingKeys.has(item[pkField]));
+  // Helper: safely restore a localStorage setting from the backup (for V1).
+  const restoreLocalStorageKey = (key: string, value: string | object | null | undefined) => {
+    if (value === null || value === undefined) {
+      localStorage.removeItem(key);
+      return;
+    }
+    if (typeof value === 'string') {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+  };
 
- if (newItems.length > 0) {
- await table.bulkAdd(newItems);
- }
- };
+  // ── 1. Restore all IndexedDB tables inside a single read-write transaction ──
+  // Passing db.tables allows dynamic access to all registered tables
+  await db.transaction('rw', db.tables, async () => {
+    // Clear every table first
+    for (const table of db.tables) {
+      await table.clear();
+    }
 
- // Helper to fix dates
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
- const fixDates = (arr: any[], dateFields: string[]) => arr.map((item: any) => {
- const newItem = { ...item };
- dateFields.forEach(f => {
- if (newItem[f]) newItem[f] = new Date(newItem[f]);
- });
- return newItem;
- });
+    if (isV2 && backup.databaseData) {
+      // V2: Dynamic restore based on tables in the backup
+      for (const table of db.tables) {
+        const tableData = backup.databaseData[table.name];
+        if (tableData && Array.isArray(tableData) && tableData.length > 0) {
+          await table.bulkAdd(processRecords(tableData));
+        }
+      }
+    } else {
+      // V1: Legacy explicit mapping
+      const legacyMap: Record<string, any[] | undefined> = {
+        branches: backup.branches,
+        items: backup.items,
+        customers: backup.customers,
+        customerPayments: backup.customerPayments,
+        invoices: backup.invoices,
+        expenses: backup.expenses,
+        purchases: backup.purchases,
+        purchasePayments: backup.purchasePayments,
+        suppliers: backup.suppliers,
+        users: backup.users,
+        activityLogs: backup.activityLogs,
+        notifications: backup.notifications,
+        cashEntries: backup.cashEntries,
+        cashParties: backup.cashParties,
+        spreadsheets: backup.spreadsheets,
+        scales: backup.scales,
+        categories: backup.categories,
+        shifts: backup.shifts,
+      };
 
- await db.transaction('rw', [
- db.items, db.invoices, db.expenses, db.purchases,
- db.customers, db.suppliers, db.customerPayments,
- db.users, db.notifications, db.activityLogs,
- db.cashEntries, db.cashParties, db.purchasePayments,
- db.categories, db.spreadsheets, db.scales, db.branches, db.shifts
- ], async () => {
+      for (const table of db.tables) {
+        const tableData = legacyMap[table.name];
+        if (tableData && Array.isArray(tableData) && tableData.length > 0) {
+          await table.bulkAdd(processRecords(tableData));
+        }
+      }
+    }
+  });
 
- // Merge strategy: Add records that don't already exist locally.
- await safeAddMissing(db.items, data.items || []);
- await safeAddMissing(db.invoices, fixDates(data.invoices || [], ['createdAt', 'dueDate']));
- await safeAddMissing(db.expenses, fixDates(data.expenses || [], ['date']));
- await safeAddMissing(db.purchases, fixDates(data.purchases || [], ['date', 'orderDate', 'dueDate']));
- await safeAddMissing(db.customers, fixDates(data.customers || [], ['createdAt', 'updatedAt']));
- await safeAddMissing(db.suppliers, data.suppliers || []);
- await safeAddMissing(db.customerPayments, fixDates(data.customerPayments || [], ['date']));
- await safeAddMissing(db.users, data.users || []);
- await safeAddMissing(db.activityLogs, fixDates(data.activityLogs || [], ['timestamp']));
- await safeAddMissing(db.notifications, fixDates(data.notifications || [], ['date']));
- await safeAddMissing(db.cashEntries, fixDates(data.cashEntries || [], ['date']));
- await safeAddMissing(db.cashParties, fixDates(data.cashParties || [], ['createdAt']));
- await safeAddMissing(db.purchasePayments, fixDates(data.purchasePayments || [], ['date']));
- await safeAddMissing(db.categories, data.categories || []);
- await safeAddMissing(db.spreadsheets, fixDates(data.spreadsheets || [], ['createdAt']));
- await safeAddMissing(db.scales, data.scales || []);
- await safeAddMissing(db.branches, data.branches || []);
- await safeAddMissing(db.shifts, fixDates(data.shifts || [], ['startTime', 'endTime']));
+  // ── 2. Restore all localStorage settings ──
+  if (isV2 && backup.localStorageData) {
+    // V2: Dynamically restore all localStorage items
+    for (const [key, value] of Object.entries(backup.localStorageData)) {
+      if (value !== null && value !== undefined) {
+        localStorage.setItem(key, value);
+      }
+    }
+  } else {
+    // V1: Legacy explicit restore
+    const businessValue = backup.businessDetails ?? backup.businessProfile ?? null;
+    restoreLocalStorageKey('businessDetails', businessValue);
+    restoreLocalStorageKey('businessProfile', businessValue);
 
- // Optional: Overwrite settings if user imports them
- if (data.businessDetails) {
- const detailsStr = typeof data.businessDetails === 'string'
- ? data.businessDetails
- : JSON.stringify(data.businessDetails);
- localStorage.setItem('businessDetails', detailsStr);
- }
- if (data.printerConfig) {
- const printerStr = typeof data.printerConfig === 'string'
- ? data.printerConfig
- : JSON.stringify(data.printerConfig);
- localStorage.setItem('printerConfig', printerStr);
- }
- });
+    restoreLocalStorageKey('printerConfig', backup.printerConfig);
+    restoreLocalStorageKey('appSettings', backup.appSettings);
+    restoreLocalStorageKey('zatca_config', backup.zatca_config);
+    restoreLocalStorageKey('reminderSettings', backup.reminderSettings);
+  }
 
- // Ensure a valid branch is selected after restore
- const currentBranchId = localStorage.getItem('currentBranchId');
- const dbBranches = await db.branches.toArray();
- if (dbBranches.length > 0) {
- const exists = dbBranches.some(b => b.id === currentBranchId);
- if (!exists) {
- localStorage.setItem('currentBranchId', dbBranches[0].id);
- }
- }
+  // ── 3. Post-Restore Fallbacks and Normalization ──
+  const branchesTable = isV2 && backup.databaseData ? backup.databaseData['branches'] : backup.branches;
+  
+  if (branchesTable && branchesTable.length > 0) {
+    const currentBranchId = localStorage.getItem('currentBranchId');
+    const exists = branchesTable.some((b: { id: string }) => b.id === currentBranchId);
+    if (!exists) {
+      localStorage.setItem('currentBranchId', branchesTable[0].id);
+    }
+  }
 
- return true;
+  // Fallback: if business profile is entirely missing, derive from master branch
+  const finalBusinessDetails = localStorage.getItem('businessDetails');
+  if (!finalBusinessDetails && branchesTable && branchesTable.length > 0) {
+    const masterBranch = branchesTable.find((b: any) => b.isMaster) ?? branchesTable[0];
+    if (masterBranch) {
+      const gstin = masterBranch.gstin || masterBranch.vatNo || '';
+      const derived = JSON.stringify({
+        name: masterBranch.name || '',
+        address: masterBranch.location || '',
+        phone: masterBranch.phone || '',
+        email: masterBranch.email || '',
+        gstin,
+        vatNo: gstin,
+        crNo: masterBranch.crNo || '',
+        logoUrl: masterBranch.logoUrl || '',
+        country: masterBranch.country || 'Saudi Arabia',
+        taxName: masterBranch.taxName || 'VAT',
+        taxRate: masterBranch.taxRate ?? 15,
+        pincode: masterBranch.pincode || '',
+        terms: masterBranch.terms || '',
+        primaryTitle: masterBranch.primaryTitle || '',
+        secondaryTitle: masterBranch.secondaryTitle || '',
+      });
+      localStorage.setItem('businessDetails', derived);
+      localStorage.setItem('businessProfile', derived);
+    }
+  }
+
+  console.log('Backup restored successfully.');
 };
 
 // Fix #1 & #10: Returns a result object so the caller can show user-facing notifications.
@@ -214,8 +347,8 @@ export const checkAndPerformAutoBackup = async (): Promise<AutoBackupResult> => 
  const now = Date.now();
  const twentyFourHours = 24 * 60 * 60 * 1000;
 
- // If never backed up, or last backup was > 24 hours ago
- if (lastBackup && (now - parseInt(lastBackup)) <= twentyFourHours) {
+ // Skip only if last backup was LESS than 24 hours ago (fix: was incorrectly using <=)
+ if (lastBackup && (now - parseInt(lastBackup, 10)) < twentyFourHours) {
  return { status: 'skipped', reason: 'not_due' };
  }
 

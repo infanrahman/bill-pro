@@ -123,8 +123,9 @@ export const useBillProfitData = (range: DateRange, customStartStr?: string, cus
  const finalNetSales = netSales * multiplier;
  const finalCost = invoiceCost * multiplier;
 
- // Margin
- const margin = finalNetSales !== 0 ? (profit / finalNetSales) * 100 : 0;
+ // Margin (M15 Fix: handle 0 sales or cost safely)
+ const rawMargin = finalNetSales !== 0 ? (profit / finalNetSales) * 100 : 0;
+ const margin = isNaN(rawMargin) || !isFinite(rawMargin) ? 0 : Math.round(rawMargin * 10) / 10;
 
  totalSales += finalNetSales;
  totalCost += finalCost;

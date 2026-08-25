@@ -12,11 +12,14 @@ interface CartItemProps {
  total: number;
  unit: string;
  taxType?: 'inclusive' | 'exclusive';
+ trackSerial?: boolean;
+ serialNumber?: string;
  };
- onRemove: (id: string) => void;
+ onRemove: (id: string, index?: number) => void;
  onUpdateQuantity: (id: string, qty: number) => void;
  onUpdatePrice: (id: string, price: number) => void;
  onFetchScaleWeight?: (id: string) => void;
+ onSetSerial?: () => void;
 }
 
 const CartItem: React.FC<CartItemProps> = ({
@@ -24,7 +27,8 @@ const CartItem: React.FC<CartItemProps> = ({
  onRemove,
  onUpdateQuantity,
  onUpdatePrice,
- onFetchScaleWeight
+ onFetchScaleWeight,
+ onSetSerial
 }) => {
  const { t } = useTranslation();
  const { formatCurrency } = useSettings();
@@ -52,6 +56,21 @@ const CartItem: React.FC<CartItemProps> = ({
  </span>
 )}
  </div>
+ {item.trackSerial && (
+   <div className="mt-1.5">
+     <button 
+       type="button" 
+       onClick={onSetSerial}
+       className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border ${
+         item.serialNumber 
+           ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/20' 
+           : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-500/20 animate-pulse'
+       }`}
+     >
+       {item.serialNumber ? `S/N: ${item.serialNumber}` : '⚠️ MISSING SERIAL'}
+     </button>
+   </div>
+ )}
  </div>
  <button type="button"
  onClick={() => onRemove(item.itemId)}
@@ -88,8 +107,9 @@ const CartItem: React.FC<CartItemProps> = ({
  type="number"
  value={item.quantity}
  step={isWeighted ? 0.001 : 1}
+ disabled={item.trackSerial}
  onChange={(e) => onUpdateQuantity(item.itemId, parseFloat(e.target.value) || 0)}
- className="w-full h-8 px-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 focus:border-slate-900 dark:focus:border-white outline-none dark:text-white"
+ className="w-full h-8 px-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 focus:border-slate-900 dark:focus:border-white outline-none dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
  />
  {isWeighted && onFetchScaleWeight && (
  <button type="button"

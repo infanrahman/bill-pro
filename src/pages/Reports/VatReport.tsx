@@ -7,6 +7,7 @@ import { Calendar, Printer, TrendingUp, TrendingDown, DollarSign, FileSpreadshee
 import StatsCard from '../../components/Reports/StatsCard';
 import { exportVatToPDF, exportVatToExcel } from '../../utils/vatExport';
 import { generateVatReportA4, generateVatReportThermal } from './vatPrintTemplates';
+import clsx from 'clsx';
 
 const VatReport: React.FC = () => {
  const { t, i18n } = useTranslation();
@@ -86,64 +87,68 @@ const VatReport: React.FC = () => {
  return (
  <div className={`space-y-6 fade-in ${loading ? 'opacity-50 pointer-events-none select-none' : ''}`}>
  {/* Controls */}
- <div className="flex flex-col xl:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
- <div className="flex flex-wrap gap-2 w-full md:w-auto">
- <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex">
+ <div className="flex flex-col xl:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+ <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full xl:w-auto">
+ <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex overflow-x-auto custom-scrollbar">
  {periods.map((p: any) => (
  <button type="button"
  key={p.id}
  onClick={() => handlePeriodChange(p.id)}
- className={`px-3 py-1.5 rounded-md text-sm font-medium ${period === p.id && !startDate
- ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white '
+ className={clsx(
+ "px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap shrink-0",
+ period === p.id && !startDate
+ ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-700 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-300'
- }`}
+ )}
  >
  {p.label}
  </button>
-))}
+ ))}
  </div>
 
- <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg px-2">
- <Calendar size={16} className="text-slate-600"/>
+ <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-2 rounded-lg w-full sm:w-auto">
+ <Calendar size={16} className="text-slate-600 shrink-0 hidden sm:block"/>
+ <div className="flex items-center gap-2 flex-1 min-w-0">
  <input
  type="datetime-local"
  value={startDate}
  onChange={(e) => { setStartDate(e.target.value); setPeriod('custom'); }}
- className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-sm w-full md:w-36 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
- <span className="text-slate-600">-</span>
+ <span className="text-slate-600 shrink-0">-</span>
  <input
  type="datetime-local"
  value={endDate}
  onChange={(e) => { setEndDate(e.target.value); setPeriod('custom'); }}
- className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-sm w-full md:w-36 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
  </div>
  </div>
+ </div>
 
- <div className="flex gap-2 w-full md:w-auto justify-end">
+ <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full xl:w-auto justify-start xl:justify-end">
  <button type="button"
  onClick={handleExportExcel}
- className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+ className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
  title="Export to Excel"
  >
  <FileSpreadsheet size={18} />
- <span className="hidden md:inline">Excel</span>
+ <span>Excel</span>
  </button>
  <button type="button"
  onClick={handleExportPDF}
- className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+ className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
  title="Export to PDF"
  >
  <FileText size={18} />
- <span className="hidden md:inline">PDF</span>
+ <span>PDF</span>
  </button>
  <button type="button"
  onClick={handlePrint}
- className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+ className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
  >
  <Printer size={18} />
- {t('common.print')}
+ <span>{t('common.print')}</span>
  </button>
  </div>
  </div>

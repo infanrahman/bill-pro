@@ -56,6 +56,7 @@ export interface PrinterConfig {
  copies: number;
  orientation: 'portrait' | 'landscape';
  numberMapping: Record<string, string>;
+ enableRandomCostCode?: boolean;
  };
 }
 
@@ -93,7 +94,8 @@ const InvoicePrintTab: React.FC = () => {
  labelHeight: '25mm',
  copies: 1,
  orientation: 'portrait',
- numberMapping: { '1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '0': '' }
+ numberMapping: { '1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '0': '' },
+ enableRandomCostCode: false
  }
  });
 

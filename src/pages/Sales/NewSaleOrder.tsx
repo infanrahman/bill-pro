@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { db, createRecordMetadata } from '../../services/db';
 import type { Invoice, InvoiceItem, Item } from '../../services/db';
@@ -9,6 +9,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import Modal from '../../components/UI/Modal';
+import ItemForm from '../Inventory/ItemForm';
 
 const NewSaleOrder = () => {
     const { t } = useTranslation();
@@ -66,25 +67,27 @@ const NewSaleOrder = () => {
         }
     };
 
-    const addToOrder = (item: Item) => {
-        const existing = items.find(i => i.itemId === item.id);
-        if (existing) {
-            setItems(items.map((i: any) =>
-                i.itemId === item.id ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.price } : i
-            ));
-        } else {
-            setItems([...items, {
-                itemId: item.id!,
-                name: item.name,
-                quantity: 1,
-                price: item.salePrice,
-                purchasePrice: item.purchasePrice,
-                total: item.salePrice,
-                taxType: item.taxType,
-                taxRate: item.taxRate
-            }]);
-        }
-    };
+    const addToOrder = useCallback((item: Item) => {
+        setItems(prevItems => {
+            const existing = prevItems.find((i: any) => i.itemId === item.id);
+            if (existing) {
+                return prevItems.map((i: any) =>
+                    i.itemId === item.id ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.price } : i
+                );
+            } else {
+                return [...prevItems, {
+                    itemId: item.id!,
+                    name: item.name,
+                    quantity: 1,
+                    price: item.salePrice,
+                    purchasePrice: item.purchasePrice,
+                    total: item.salePrice,
+                    taxType: item.taxType,
+                    taxRate: item.taxRate
+                }];
+            }
+        });
+    }, []);
 
     const updateItem = (itemId: string, field: keyof InvoiceItem, value: any) => {
         setItems(items.map((i: any) => {
@@ -246,6 +249,21 @@ const NewSaleOrder = () => {
         }
     };
 
+    if (isAddItemOpen) {
+        return (
+            <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+                <ItemForm 
+                    isInline 
+                    onSuccess={(item) => {
+                        addToOrder(item);
+                        setIsAddItemOpen(false);
+                    }} 
+                    onCancel={() => setIsAddItemOpen(false)} 
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
             {/* Page Header */}
@@ -305,18 +323,13 @@ const NewSaleOrder = () => {
                         className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"
                     >
                         {visibleItems?.map((item: any) => (
-                            <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => addToOrder(item)}
-                                className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                <p className="font-medium text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
-                                <div className="flex justify-between mt-0.5">
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('common.stock')}: {item.stock ?? 0}</span>
-                                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(item.salePrice)}</span>
-                                </div>
-                            </button>
+                            <SaleOrderItemCard 
+                                key={item.id} 
+                                item={item} 
+                                onAdd={addToOrder} 
+                                formatCurrency={formatCurrency}
+                                t={t} 
+                            />
                         ))}
                         {(!visibleItems || visibleItems.length === 0) && (
                             <div className="p-6 text-center text-slate-400 text-sm">{t('common.no_results')}</div>
@@ -460,35 +473,29 @@ const NewSaleOrder = () => {
                 </div>
             </div>
 
-            {/* Quick Add Item Modal */}
-            <Modal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} title={t('sales.add_item_title')} maxWidth="md">
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.item_name')}</label>
-                        <input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder={t('sales.item_name_placeholder')} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.purchase_cost')}</label>
-                            <input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="0.00" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.selling_price')}</label>
-                            <input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="0.00" />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.initial_stock')}</label>
-                        <input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} placeholder="0" />
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsAddItemOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-xl">{t('common.cancel')}</button>
-                        <button onClick={handleAddNewItem} className="px-5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium">{t('common.save')}</button>
-                    </div>
-                </div>
-            </Modal>
+            {/* Quick Add Item Modal Replaced by Inline ItemForm Page */}
         </div>
     );
 };
-
 export default NewSaleOrder;
+
+interface SaleOrderItemCardProps {
+    item: any;
+    onAdd: (item: any) => void;
+    formatCurrency: (amount: number) => string;
+    t: any;
+}
+
+const SaleOrderItemCard = memo(({ item, onAdd, formatCurrency, t }: SaleOrderItemCardProps) => (
+    <button
+        type="button"
+        onClick={() => onAdd(item)}
+        className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors"
+    >
+        <p className="font-medium text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
+        <div className="flex justify-between mt-0.5">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('common.stock')}: {item.stock ?? 0}</span>
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(item.salePrice)}</span>
+        </div>
+    </button>
+));

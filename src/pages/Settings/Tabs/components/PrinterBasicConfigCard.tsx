@@ -55,7 +55,7 @@ const PrinterBasicConfigCard: React.FC<Props> = ({ config, updateConfig }) => {
  <select
  value={config.printLanguage}
  onChange={(e) => updateConfig({ printLanguage: e.target.value as any })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white min-w-[180px]"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[180px]"
  >
  <option value="english">English Only</option>
  <option value="bilingual">Bilingual (EN + AR)</option>

@@ -26,6 +26,10 @@ const MainLayout: React.FC = () => {
 
     useEffect(() => {
         const handleKvKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'F1') {
+                e.preventDefault();
+                navigate('/pos');
+            }
             if (e.key === 'F9') {
                 e.preventDefault();
                 setIsQuickPayOpen(true);
@@ -34,12 +38,12 @@ const MainLayout: React.FC = () => {
 
         window.addEventListener('keydown', handleKvKeyDown);
         return () => window.removeEventListener('keydown', handleKvKeyDown);
-    }, []);
+    }, [navigate]);
 
     // Close sidebar on page navigation for mobile/tablet screens only
     useEffect(() => {
         if (window.innerWidth < 1280) {
-            setIsSidebarOpen(false);
+            setTimeout(() => setIsSidebarOpen(false), 0);
         }
     }, [location.pathname]);
 
@@ -75,7 +79,7 @@ const MainLayout: React.FC = () => {
                 }
                 barcodeBuffer = '';
             } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-                if (timeDelta > 80) {
+                if (timeDelta > 300) {
                     barcodeBuffer = '';
                 }
                 barcodeBuffer += e.key;

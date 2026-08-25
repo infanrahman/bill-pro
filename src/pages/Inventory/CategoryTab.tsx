@@ -13,7 +13,11 @@ import ConfirmationModal from '../../components/UI/ConfirmationModal';
 import Modal from '../../components/UI/Modal';
 import clsx from 'clsx';
 
-const CategoryTab: React.FC = () => {
+interface CategoryTabProps {
+  onSelectCategory?: (categoryId: string) => void;
+}
+
+const CategoryTab: React.FC<CategoryTabProps> = ({ onSelectCategory }) => {
  const { t } = useTranslation();
  const { addToast } = useNotification();
  const { activeBranchId, activeBranch } = useAuth();
@@ -24,6 +28,18 @@ const CategoryTab: React.FC = () => {
  const [formData, setFormData] = useState({ name: '', description: '', color: '#3B82F6' });
 
  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
+ const itemCounts = useLiveQuery(async () => {
+   const query = (activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId)) as any;
+   const items = await query.filter((i: any) => !i.deletedAt).toArray();
+   const counts: Record<string, number> = {};
+   items.forEach((i: any) => {
+     if (i.categoryId) {
+       counts[i.categoryId] = (counts[i.categoryId] || 0) + 1;
+     }
+   });
+   return counts;
+ }, [activeBranchId, activeBranch?.isMaster]);
 
  const categories = useLiveQuery(
  () => {
@@ -147,44 +163,61 @@ const CategoryTab: React.FC = () => {
  <p className="text-slate-700 font-medium">{t('inventory.no_categories_desc')}</p>
  </div>
 ) : (
- categories.map((category: Category, idx: number) => (
- <div
- key={category.id}
- 
- 
- 
- className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 group relative overflow-hidden flex flex-col justify-between hover:border-indigo-500/30"
- >
- 
- 
- <div>
- <div className="flex justify-between items-start mb-4">
- <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-white/20"style={{ backgroundColor: category.color || '#3B82F6', color: 'white' }}>
- <Hash size={24} />
- </div>
- <div className="flex gap-1 opacity-0 group-hover:opacity-100">
- <button type="button"onClick={() => handleOpenForm(category)} className="p-2 bg-white dark:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-600 text-slate-900 dark:text-white"><Edit size={14} /></button>
- <button type="button"onClick={() => setCategoryToDelete(category.id!)} className="p-2 bg-white dark:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-600 text-rose-500"><Trash size={14} /></button>
- </div>
- </div>
+        categories.map((category: Category, idx: number) => (
+          <div
+            key={category.id}
+            onClick={() => {
+              if (onSelectCategory && category.id) {
+                onSelectCategory(category.id);
+              }
+            }}
+            className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 group relative overflow-hidden flex flex-col justify-between hover:border-indigo-500/50 hover:shadow-lg transition-all cursor-pointer"
+          >
+            <div>
+              <div className="flex justify-between items-start mb-4">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-white/20" style={{ backgroundColor: category.color || '#3B82F6', color: 'white' }}>
+                  <Hash size={24} />
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleOpenForm(category); }}
+                    className="p-2 bg-white dark:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-600 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                    title={t('common.edit')}
+                  >
+                    <Edit size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setCategoryToDelete(category.id!); }}
+                    className="p-2 bg-white dark:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-600 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                    title={t('common.delete')}
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
+              </div>
 
- <h3 className="text-xl font-semibold dark:text-white uppercase tracking-tight mb-2 line-clamp-1">{category.name}</h3>
- <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider line-clamp-2 min-h-[30px]">
- {category.description || 'No description provided'}
- </p>
- </div>
+              <h3 className="text-xl font-semibold dark:text-white uppercase tracking-tight mb-2 line-clamp-1">{category.name}</h3>
+              <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider line-clamp-2 min-h-[30px]">
+                {category.description || 'No description provided'}
+              </p>
+            </div>
 
- <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
- <div className="flex items-center gap-2">
- <div className="w-2 h-2 rounded-full"style={{ backgroundColor: category.color || '#3B82F6' }} />
- <span className="text-[9px] font-semibold text-slate-600 uppercase tracking-wider">{t('inventory.active') || 'Active Status'}</span>
- </div>
- <div className="p-2 bg-slate-100 dark:bg-slate-900 rounded-lg text-slate-600 group-hover:text-indigo-500">
- <ArrowRight size={14} />
- </div>
- </div>
- </div>
-))
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: category.color || '#3B82F6' }} />
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  {itemCounts?.[category.id!] || 0} {t('inventory.items') || 'Products'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
+                <span>{t('inventory.view_products') || 'View Products'}</span>
+                <ArrowRight size={14} />
+              </div>
+            </div>
+          </div>
+        ))
 )}
  </>
  </div>

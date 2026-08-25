@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Users, Trash2, Wallet, ShieldOff, Search, Phone, Mail, Sparkles, Filter, ChevronDown, ArrowUpRight, TrendingUp, History } from 'lucide-react';
+import { Plus, Users, Trash2, Wallet, ShieldOff, Search, Phone, Mail, Sparkles, Filter, ChevronDown, ArrowUpRight, TrendingUp, History, Edit } from 'lucide-react';
 import { db, type Customer, softDeleteMetadata } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
 import CustomerForm from './CustomerForm';
@@ -124,15 +124,15 @@ const CustomerList: React.FC = () => {
  }
 
  return (
- <div className="p-8 space-y-8 pb-20">
+ <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-20">
  {/* Header Section */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
- <div className="flex flex-col md:flex-row justify-between md:items-center gap-8 relative z-10">
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 md:gap-8 relative z-10">
  <div>
- <h1 className="text-4xl font-semibold dark:text-white tracking-tight uppercase flex items-center gap-4">
- <Users size={40} className="text-indigo-600 dark:text-indigo-400"/>
+ <h1 className="text-2xl md:text-4xl font-semibold dark:text-white tracking-tight uppercase flex items-center gap-3 md:gap-4">
+ <Users className="text-indigo-600 dark:text-indigo-400 w-8 h-8 md:w-10 md:h-10"/>
  {t('customers.title')}
  </h1>
  <p className="text-slate-700 dark:text-slate-300 font-bold mt-2 text-[10px] uppercase tracking-wider">
@@ -140,13 +140,13 @@ const CustomerList: React.FC = () => {
  </p>
  </div>
 
- <div className="flex items-center gap-4">
+ <div className="flex items-center gap-4 w-full md:w-auto">
  {hasPermission('customers_add') && (
  <button type="button"
  
  
  onClick={() => setShowForm(true)}
- className="flex items-center gap-3 bg-slate-900 dark:bg-indigo-600 text-white px-8 py-4 rounded-2xl font-semibold text-xs uppercase tracking-wider"
+ className="flex items-center justify-center gap-2 md:gap-3 bg-slate-900 dark:bg-indigo-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-semibold text-xs uppercase tracking-wider w-full sm:w-auto"
  >
  <Plus size={18} />
  {t('common.add')}
@@ -242,7 +242,7 @@ const CustomerList: React.FC = () => {
  
  
  
- className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 text-left flex flex-col justify-between min-h-[340px] h-full group relative overflow-hidden cursor-pointer hover: hover:border-indigo-500/30"
+ className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 text-left flex flex-col justify-between min-h-[340px] h-full group relative overflow-hidden cursor-pointer hover: hover:border-indigo-500/30"
  >
  
  
@@ -311,6 +311,15 @@ const CustomerList: React.FC = () => {
  {t('customers.pay')}
  </button>
 )}
+  {hasPermission('customers_edit') && (
+  <button type="button"
+  onClick={(e) => { e.stopPropagation(); setEditingCustomer(customer); setShowForm(true); }}
+  className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl hover:bg-indigo-500 hover:text-white"
+  title="Edit Customer"
+  >
+  <Edit size={16} />
+  </button>
+  )}
  {isAdmin && (
  <button type="button"
  onClick={(e) => { e.stopPropagation(); setCustomerToDelete(customer.id!); }}

@@ -9,6 +9,7 @@ import {
 import SettingsCard from '../components/SettingsCard';
 import FormRow from '../components/FormRow';
 import SettingsSectionHeader from '../components/SettingsSectionHeader';
+import { SoftwareUpdateCard } from '../../../components/UI/SoftwareUpdateCard';
 
 const GeneralTab: React.FC = () => {
  const { settings, updateSettings } = useSettings();
@@ -42,6 +43,9 @@ const GeneralTab: React.FC = () => {
  description={t('settings.general.subtitle')} 
  />
 
+ {/* Software Update Section */}
+ <SoftwareUpdateCard />
+
  <div className="grid grid-cols-1 gap-10">
  {/* 1. Localization & Visuals */}
  <SettingsCard title={t('settings.sections.localization', 'Localization & Regional')} icon={Languages}>
@@ -54,7 +58,7 @@ const GeneralTab: React.FC = () => {
  <select
  value={i18n.language}
  onChange={(e) => i18n.changeLanguage(e.target.value)}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-w-[220px] cursor-pointer"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white sm:min-w-[220px] cursor-pointer"
  >
  <option value="en">English (US)</option>
  <option value="hi">Hindi (हिन्दी)</option>
@@ -71,7 +75,7 @@ const GeneralTab: React.FC = () => {
  <select
  value={settings.currency}
  onChange={(e) => updateSettings({ currency: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-w-[220px] cursor-pointer"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white sm:min-w-[220px] cursor-pointer"
  >
  {currencies.map((curr: any) => (
  <option key={curr.code} value={curr.symbol}>
@@ -89,7 +93,7 @@ const GeneralTab: React.FC = () => {
  <select
  value={settings.dateFormat}
  onChange={(e) => updateSettings({ dateFormat: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-w-[220px] cursor-pointer"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white sm:min-w-[220px] cursor-pointer"
  >
  {dateFormats.map((fmt: any) => (
  <option key={fmt.value} value={fmt.value}>
@@ -169,7 +173,7 @@ const GeneralTab: React.FC = () => {
  <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-3 ml-1">Rate (%)</label>
  <input 
  type="number"
- value={settings.taxRate || 15}
+ value={settings.taxRate ?? 15}
  onChange={(e) => updateSettings({ taxRate: Number(e.target.value) })}
  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold uppercase tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
  placeholder="15"
@@ -186,7 +190,7 @@ const GeneralTab: React.FC = () => {
  type="text"
  value={settings.invoicePrefix || 'INV-'}
  onChange={(e) => updateSettings({ invoicePrefix: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-5 py-3 text-sm font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-w-[220px] text-right font-mono"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-5 py-3 text-sm font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white sm:min-w-[220px] text-left sm:text-right font-mono"
  placeholder="INV-"
  />
  </FormRow>
@@ -222,6 +226,38 @@ const GeneralTab: React.FC = () => {
  type="checkbox"
  checked={settings.enableShiftManagement}
  onChange={(e) => updateSettings({ enableShiftManagement: e.target.checked })}
+ className="sr-only peer"
+ />
+ <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after: dark:border-slate-600 peer-checked:bg-slate-900 dark:peer-checked:bg-white"></div>
+ </label>
+ </FormRow>
+
+ <FormRow 
+ label={t('settings.general.enable_serial_tracking', 'IMEI & Serial Number Tracking')} 
+ description={t('settings.general.enable_serial_tracking_desc', 'Allow tracking of unique serial numbers for electronics and appliances')}
+ icon={Hash}
+ >
+ <label className="relative inline-flex items-center cursor-pointer">
+ <input
+ type="checkbox"
+ checked={settings.enableSerialTracking}
+ onChange={(e) => updateSettings({ enableSerialTracking: e.target.checked })}
+ className="sr-only peer"
+ />
+ <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after: dark:border-slate-600 peer-checked:bg-slate-900 dark:peer-checked:bg-white"></div>
+ </label>
+ </FormRow>
+
+ <FormRow 
+ label={t('settings.general.hardware_scanner', 'Use Camera Barcode Scanner')} 
+ description={t('settings.general.hardware_scanner_desc', 'Disable this if you use a physical Bluetooth/USB scanner or Android PDA scanner')}
+ icon={Zap}
+ >
+ <label className="relative inline-flex items-center cursor-pointer">
+ <input
+ type="checkbox"
+ checked={settings.scannerType !== 'hardware'}
+ onChange={(e) => updateSettings({ scannerType: e.target.checked ? 'camera' : 'hardware' })}
  className="sr-only peer"
  />
  <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after: dark:border-slate-600 peer-checked:bg-slate-900 dark:peer-checked:bg-white"></div>

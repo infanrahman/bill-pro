@@ -3,12 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Helper to get current branch ID (Placeholder until Phase 4)
 export const getCurrentBranchId = () => {
- const saved = localStorage.getItem('currentBranchId');
- if (saved) return saved;
- // Default/Master Branch ID - for single store setup
- const defaultId = '00000000-0000-0000-0000-000000000000';
- if (!saved) localStorage.setItem('currentBranchId', defaultId);
- return saved || defaultId;
+  const saved = localStorage.getItem('currentBranchId');
+  if (saved) return saved;
+  // Default/Master Branch ID - for single store setup
+  const defaultId = '00000000-0000-0000-0000-000000000000';
+  localStorage.setItem('currentBranchId', defaultId);
+  return defaultId;
 };
 
 // Helper to create record metadata
@@ -43,7 +43,7 @@ export interface SyncEntity {
 }
 
 // Item Interface
-export interface Item extends SyncEntity {
+ export interface Item extends SyncEntity {
  name: string;
  arabicName?: string;
  barcode: string;
@@ -59,6 +59,7 @@ export interface Item extends SyncEntity {
  supplierId?: string; // Link to specific supplier (UUID)
  categoryId?: string; // Link to specific category (Market Mode) (UUID)
  itemCode?: string; // Scale PLU / Item Code
+ trackSerial?: boolean; // New: IMEI/Serial tracking for electronics
 }
 
 // Category Interface (Market Mode)
@@ -128,6 +129,8 @@ export interface InvoiceItem {
  discountAmount?: number; // Prorated discount from global, or explicit line discount
  netAmount?: number; // Gross total - discountAmount
  purchasePrice?: number; // Added for historical profit tracking
+ serialNumber?: string; // New: IMEI/Serial Number tracked for this specific item
+ trackSerial?: boolean; // New: internal flag to require serial prompt
 }
 
 export interface Expense extends SyncEntity {
@@ -140,15 +143,16 @@ export interface Expense extends SyncEntity {
 }
 
 export interface PurchaseItem {
- itemId: string; // UUID
- name: string;
- quantity: number;
- cost: number;
- unit?: string;
- taxRate?: number;
- taxType?: 'inclusive' | 'exclusive';
- taxAmount?: number;
- total?: number;
+  itemId: string; // UUID
+  name: string;
+  quantity: number;
+  cost: number;
+  unit?: string;
+  taxRate?: number;
+  taxType?: 'inclusive' | 'exclusive';
+  subtotalBeforeTax?: number;
+  taxAmount?: number;
+  total?: number;
 }
 
 export interface Purchase extends SyncEntity {
@@ -310,6 +314,9 @@ export interface Branch extends SyncEntity {
  gstin?: string; // Tax Registration No
  vatNo?: string; // Legacy/Additional VAT No
  crNo?: string; // Commercial Registration No
+ buildingNumber?: string;
+ district?: string;
+ city?: string;
  logoUrl?: string;
  country?: string;
  taxName?: string;
@@ -325,8 +332,17 @@ export interface Branch extends SyncEntity {
  secondaryTitle?: string;
 }
 
+export interface HeldBill extends SyncEntity {
+ name: string;
+ cartItems: any[];
+ customerId: string | null;
+ orderType: 'dine_in' | 'parcel' | 'pickup' | 'delivery';
+ kitchenNote?: string;
+ createdAt: Date;
+}
+
 // Database Class
-class AppDatabase extends Dexie {
+export class AppDatabase extends Dexie {
  branches!: Table<Branch>;
  items!: Table<Item>;
  customers!: Table<Customer>;
@@ -346,6 +362,7 @@ class AppDatabase extends Dexie {
  categories!: Table<Category>; // New Table v17
  scaleLogs!: Table<ScaleSyncLog>; // New Table v18
  shifts!: Table<Shift>; // New: Shift Management
+ heldBills!: Table<HeldBill>; // New: POS Hold/Resume
 
  constructor() {
  super('MyShopDB'); // Ensuring name is consistent with what was likely used or acceptable
@@ -492,9 +509,12 @@ class AppDatabase extends Dexie {
  // Update main ID
  if (tableIdMap && tableIdMap.has(record.id)) {
  record.id = tableIdMap.get(record.id);
- record.branchId = branchId;
- record.updatedAt = now;
  }
+ // H4 Fix: Ensure branchId is backfilled on all records including existing string UUIDs
+ if (!record.branchId) {
+ record.branchId = branchId;
+ }
+ record.updatedAt = record.updatedAt || now;
 
  // Map Foreign Keys
  if (tableName === 'items') {
@@ -539,9 +559,10 @@ class AppDatabase extends Dexie {
  }
  }
 
- // 3. Save migrated records back to the table atomicity
- await table.clear();
- await table.bulkAdd(records);
+ // 3. Save migrated records safely (H5 Fix: bulkPut avoids clear() data loss risk)
+ if (records.length > 0) {
+ await table.bulkPut(records);
+ }
  }
  console.log("Database successfully migrated to Version 20 (UUID with preserved relations)");
  console.log("Database successfully migrated to Version 20 (UUID & Cloud Sync Foundation)");
@@ -552,8 +573,27 @@ class AppDatabase extends Dexie {
  invoices: '++id, invoiceNumber, customerId, createdAt, type, paymentStatus, status, zatcaStatus, branchId, [branchId+createdAt]'
  });
 
- // Version 22: Final Cleanup
- this.version(22).stores({});
+ // Version 22: Stability – carry forward all schemas explicitly to prevent regression
+ this.version(22).stores({
+ branches: '++id, name, status',
+ items: '++id, name, barcode, itemCode, categoryId, stock, branchId',
+ customers: '++id, name, phone, branchId',
+ customerPayments: '++id, customerId, date, branchId',
+ invoices: '++id, invoiceNumber, customerId, createdAt, type, paymentStatus, status, zatcaStatus, branchId',
+ expenses: '++id, category, date, branchId',
+ purchases: '++id, orderNumber, supplierId, date, status, type, branchId',
+ purchasePayments: '++id, supplierId, date, purchaseId, branchId',
+ suppliers: '++id, name, phone, branchId',
+ users: '++id, username, role, branchId',
+ activityLogs: '++id, userId, action, timestamp, branchId',
+ notifications: '++id, type, date, read, branchId',
+ cashEntries: '++id, type, date, category, partyId, branchId',
+ cashParties: '++id, name, type, branchId',
+ spreadsheets: '++id, name, createdAt, branchId',
+ scales: '++id, name, ipAddress, status, branchId',
+ categories: '++id, name, branchId',
+ scaleLogs: '++id, scaleIp, action, pluNo, status, createdAt, branchId'
+ });
 
  // Version 23: Shift Management
  this.version(23).stores({
@@ -587,6 +627,30 @@ class AppDatabase extends Dexie {
  categories: '++id, name, branchId',
  scaleLogs: '++id, scaleIp, action, pluNo, status, createdAt, branchId',
  shifts: '++id, userId, status, branchId'
+ });
+
+ // Version 26: POS Held Bills
+ this.version(26).stores({
+ branches: '++id, name, status',
+ items: '++id, name, barcode, itemCode, categoryId, stock, branchId',
+ customers: '++id, name, phone, branchId',
+ customerPayments: '++id, customerId, date, branchId',
+ invoices: '++id, invoiceNumber, customerId, createdAt, type, paymentStatus, status, zatcaStatus, branchId, shiftId, [branchId+createdAt]',
+ expenses: '++id, category, date, branchId',
+ purchases: '++id, orderNumber, supplierId, date, status, type, branchId',
+ purchasePayments: '++id, supplierId, date, purchaseId, branchId',
+ suppliers: '++id, name, phone, branchId',
+ users: '++id, username, role, branchId',
+ activityLogs: '++id, userId, action, timestamp, branchId',
+ notifications: '++id, type, date, read, branchId',
+ cashEntries: '++id, type, date, category, partyId, branchId',
+ cashParties: '++id, name, type, branchId',
+ spreadsheets: '++id, name, createdAt, branchId',
+ scales: '++id, name, ipAddress, status, branchId',
+ categories: '++id, name, branchId',
+ scaleLogs: '++id, scaleIp, action, pluNo, status, createdAt, branchId',
+ shifts: '++id, userId, status, branchId',
+ heldBills: '++id, name, branchId, createdAt'
  });
 
  }
@@ -640,6 +704,15 @@ export const resetApplicationData = async () => {
 
  // 3. Restore Admin Users
  await db.users.bulkAdd(adminUsers);
+
+  // 3b. H6 Fix: Re-seed default Master Branch so active branch lookups don't crash
+  await db.branches.add({
+  ...createRecordMetadata(),
+  id: '00000000-0000-0000-0000-000000000000',
+  name: 'Default Store',
+  isMaster: true,
+  status: 'active'
+  } as any);
  });
 
  // 4. Clear LocalStorage (Filtering specific keys)

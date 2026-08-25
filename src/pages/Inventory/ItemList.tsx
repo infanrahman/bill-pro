@@ -6,7 +6,7 @@ import {
  Search, Plus, Edit, Trash, ShieldOff, Upload, 
  QrCode, LayoutGrid, Tags, Wand2, PackageOpen, 
  List, Filter, ChevronDown, Sparkles, TrendingUp, 
- AlertTriangle, Banknote, MapPin, Box, ArrowUpRight
+ AlertTriangle, Banknote, MapPin, Box, ArrowUpRight, X, Printer
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { read, utils } from 'xlsx';
@@ -34,6 +34,8 @@ const ItemList: React.FC = () => {
 
  // Pagination & Filter State
  const [search, setSearch] = useState('');
+ const [selectedCategory, setSelectedCategory] = useState<string>('all');
+ const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
  const [currentPage, setCurrentPage] = useState(1);
  const [pageSize, setPageSize] = useState(settings.cafeMode ? 12 : 10);
 
@@ -49,66 +51,94 @@ const ItemList: React.FC = () => {
  const fileInputRef = useRef<HTMLInputElement>(null);
  const [isImporting, setIsImporting] = useState(false);
 
- // Page Level Guard
- if (!hasPermission('inventory_view')) {
- return (
- <div className="flex flex-col items-center justify-center h-screen text-center p-8">
- <ShieldOff size={48} className="text-slate-300 mb-4"/>
- <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
- <p className="text-slate-700">{t('inventory.access_denied_view')}</p>
- </div>
-);
- }
+ // Categories Query to populate filter dropdown & resolve names
+ const categories = useLiveQuery(
+   () => {
+     const query = (activeBranch?.isMaster ? db.categories : db.categories.where('branchId').equals(activeBranchId)) as any;
+     return query.filter((c: any) => !c.deletedAt).toArray();
+   },
+   [activeBranchId, activeBranch?.isMaster]
+ );
 
- // Reset to page 1 when search changes
- useEffect(() => {
- setCurrentPage(1);
- }, [search, pageSize]);
+ const categoryMap = React.useMemo(() => {
+   const map = new Map<string, { name: string; color?: string }>();
+   if (categories) {
+     categories.forEach((c: any) => {
+       if (c.id) map.set(String(c.id), { name: c.name, color: c.color });
+     });
+   }
+   return map;
+ }, [categories]);
+
+  // Reset to page 1 when search or category filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, selectedCategory, selectedSupplier, pageSize]);
 
  // Query for total count (for pagination)
  const totalItems = useLiveQuery(
- () => {
- const query = (activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId)) as any;
- if (search) {
- return query
- .filter((item: any) => !item.deletedAt && (
- (item.name || '').toLowerCase().includes(search.toLowerCase()) ||
- (item.barcode || '').includes(search) ||
- (!!item.itemCode && item.itemCode.includes(search))
-))
- .count();
- }
- return query.filter((item: any) => !item.deletedAt).count();
- },
- [search, activeBranchId, activeBranch?.isMaster]
-) || 0;
+   () => {
+     const query = (activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId)) as any;
+     return query
+       .filter((item: any) => {
+         if (item.deletedAt) return false;
+         if (selectedCategory !== 'all' && item.categoryId !== selectedCategory) return false;
+         if (selectedSupplier !== 'all' && item.supplierId !== selectedSupplier) return false;
+         if (search) {
+           const searchLower = search.toLowerCase();
+           return (
+             (item.name || '').toLowerCase().includes(searchLower) ||
+             (item.barcode || '').includes(searchLower) ||
+             (!!item.itemCode && item.itemCode.toLowerCase().includes(searchLower))
+           );
+         }
+         return true;
+       })
+       .count();
+   },
+   [search, selectedCategory, selectedSupplier, activeBranchId, activeBranch?.isMaster]
+ ) || 0;
 
  // Paginated Data Query
  const items = useLiveQuery(
- () => {
- const offset = (currentPage - 1) * pageSize;
- const query = (activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId)) as any;
- if (search) {
- return query
- .filter((item: any) => !item.deletedAt && (
- (item.name || '').toLowerCase().includes(search.toLowerCase()) ||
- (item.barcode || '').includes(search) ||
- (!!item.itemCode && item.itemCode.includes(search))
-))
- .offset(offset)
- .limit(pageSize)
- .toArray();
- }
- return query
- .filter((item: any) => !item.deletedAt)
- .offset(offset)
- .limit(pageSize)
- .toArray();
- },
- [search, currentPage, pageSize, activeBranchId, activeBranch?.isMaster]
-);
+   () => {
+     const offset = (currentPage - 1) * pageSize;
+     const query = (activeBranch?.isMaster ? db.items : db.items.where('branchId').equals(activeBranchId)) as any;
+     return query
+       .filter((item: any) => {
+         if (item.deletedAt) return false;
+         if (selectedCategory !== 'all' && item.categoryId !== selectedCategory) return false;
+         if (selectedSupplier !== 'all' && item.supplierId !== selectedSupplier) return false;
+         if (search) {
+           const searchLower = search.toLowerCase();
+           return (
+             (item.name || '').toLowerCase().includes(searchLower) ||
+             (item.barcode || '').includes(searchLower) ||
+             (!!item.itemCode && item.itemCode.toLowerCase().includes(searchLower))
+           );
+         }
+         return true;
+       })
+       .offset(offset)
+       .limit(pageSize)
+       .toArray();
+   },
+   [search, selectedCategory, selectedSupplier, currentPage, pageSize, activeBranchId, activeBranch?.isMaster]
+ );
 
  const loading = items === undefined;
+
+ // Suppliers query to resolve supplier names
+ const suppliers = useLiveQuery(() => db.suppliers.filter((s: any) => !s.deletedAt).toArray(), []);
+ const supplierMap = React.useMemo(() => {
+   const map = new Map<string, string>();
+   if (suppliers) {
+     suppliers.forEach((s: any) => {
+       if (s.id) map.set(String(s.id), s.name);
+     });
+   }
+   return map;
+ }, [suppliers]);
 
  // Stats Query
  const inventoryStats = useLiveQuery(async () => {
@@ -120,9 +150,10 @@ const ItemList: React.FC = () => {
  
  await query.filter((i: any) => !i.deletedAt).each((i: any) => {
  total++;
- if ((i.stock || 0) <= (i.minStock || 0)) {
- lowStock++;
- }
+  // L4 Fix: Only flag low stock if minStock threshold > 0
+  if ((i.minStock || 0) > 0 && (i.stock || 0) <= (i.minStock || 0)) {
+  lowStock++;
+  }
  totalValue += ((i.stock || 0) * (i.purchasePrice || 0));
  });
  
@@ -187,31 +218,41 @@ const ItemList: React.FC = () => {
  }
  };
 
- const handleAutoFillBarcodes = async () => {
- try {
- const allItems = await db.items.toArray();
- const itemsWithoutBarcode = allItems.filter((item: any) => !item.barcode || item.barcode.trim() === '');
+  const handleAutoFillBarcodes = async () => {
+    try {
+      const allItems = await db.items.toArray();
+      const itemsWithoutBarcode = allItems.filter((item: any) => !item.barcode || item.barcode.trim() === '');
 
- if (itemsWithoutBarcode.length === 0) {
- addToast(t('inventory.all_items_have_barcodes'), 'info');
- return;
- }
+      if (itemsWithoutBarcode.length === 0) {
+        addToast(t('inventory.all_items_have_barcodes'), 'info');
+        return;
+      }
 
- const confirm = window.confirm(t('inventory.confirm_auto_barcode', { count: itemsWithoutBarcode.length }));
- if (!confirm) return;
+      const confirm = window.confirm(t('inventory.confirm_auto_barcode', { count: itemsWithoutBarcode.length }));
+      if (!confirm) return;
 
- const updatedItems = itemsWithoutBarcode.map((item: any) => {
- const newBarcode = Math.floor(10000000 + Math.random() * 90000000).toString();
- return { ...item, barcode: newBarcode };
- });
+      const existingBarcodes = new Set(
+        allItems.filter((item: any) => item.barcode && item.barcode.trim() !== '').map((item: any) => item.barcode)
+      );
 
- await db.items.bulkPut(updatedItems);
- addToast(t('inventory.barcodes_generated', { count: updatedItems.length }), 'success');
- } catch (error) {
- console.error('Failed to auto-generate barcodes:', error);
- addToast(t('inventory.barcode_gen_error'), 'error');
- }
- };
+      const updatedItems = itemsWithoutBarcode.map((item: any) => {
+        let newBarcode = '';
+        let attempts = 0;
+        do {
+          newBarcode = Math.floor(10000000 + Math.random() * 90000000).toString();
+          attempts++;
+        } while (existingBarcodes.has(newBarcode) && attempts < 50);
+        existingBarcodes.add(newBarcode);
+        return { ...item, barcode: newBarcode };
+      });
+
+      await db.items.bulkPut(updatedItems);
+      addToast(t('inventory.barcodes_generated', { count: updatedItems.length }), 'success');
+    } catch (error) {
+      console.error('Failed to auto-generate barcodes:', error);
+      addToast(t('inventory.barcode_gen_error'), 'error');
+    }
+  };
 
  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
  const file = e.target.files?.[0];
@@ -273,6 +314,7 @@ const ItemList: React.FC = () => {
 
  itemsToAdd.push({
  ...createRecordMetadata(),
+ branchId: activeBranchId || '', // H21 Fix
  name: String(row[nameIdx]),
  arabicName: arabicNameIdx !== -1 && row[arabicNameIdx] ? String(row[arabicNameIdx]) : undefined,
  barcode: barcodeIdx !== -1 && row[barcodeIdx] ? String(row[barcodeIdx]) : '',
@@ -302,10 +344,21 @@ const ItemList: React.FC = () => {
  }
  };
 
- return (
- <div className="p-8 space-y-8 pb-20 max-w-[1600px] mx-auto">
+  // Page Level Guard
+  if (!hasPermission('inventory_view')) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-center p-8">
+        <ShieldOff size={48} className="text-slate-300 mb-4"/>
+        <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
+        <p className="text-slate-700">{t('inventory.access_denied_view')}</p>
+      </div>
+    );
+  }
+
+  return (
+ <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-20 max-w-[1600px] mx-auto">
  {/* Header Section */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
  <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
@@ -324,12 +377,7 @@ const ItemList: React.FC = () => {
  <div className="flex flex-wrap items-center gap-4">
  <>
  {selectedIds.length > 0 && (
- <div 
- 
- 
- 
- className="flex items-center gap-2 bg-slate-900 dark:bg-slate-700 p-2 rounded-2xl"
- >
+ <div className="flex items-center gap-2 bg-slate-900 dark:bg-slate-700 p-2 rounded-2xl">
  <span className="text-white text-[10px] font-semibold uppercase px-4 border-r border-white/20">{selectedIds.length} {t('common.selected')}</span>
  <button type="button"
  onClick={() => {
@@ -337,10 +385,10 @@ const ItemList: React.FC = () => {
  setSelectedItemForLabel(selectedItems);
  setIsLabelModalOpen(true);
  }}
- className="p-3 text-white hover:bg-white rounded-xl"
- title={t('inventory.print_label')}
+ className="p-3 text-white hover:bg-white hover:text-slate-900 rounded-xl transition-colors"
+ title={t('inventory.print_label') || 'Print Labels'}
  >
- <QrCode size={18} />
+ <Printer size={18} />
  </button>
  <button type="button"
  onClick={handleBulkDeleteClick}
@@ -355,8 +403,6 @@ const ItemList: React.FC = () => {
 
  <div className="flex items-center gap-3">
  <button type="button"
- 
- 
  onClick={handleAutoFillBarcodes}
  className="p-4 bg-white dark:bg-slate-800 text-purple-500 rounded-2xl border border-white dark:border-slate-700"
  title={t('inventory.auto_fill_barcodes')}
@@ -366,8 +412,6 @@ const ItemList: React.FC = () => {
  
  <input type="file"ref={fileInputRef} className="hidden"onChange={handleImportExcel} accept=".xlsx, .xls, .csv"/>
  <button type="button"
- 
- 
  onClick={() => fileInputRef.current?.click()}
  disabled={isImporting}
  className="p-4 bg-white dark:bg-slate-800 text-emerald-500 rounded-2xl border border-white dark:border-slate-700"
@@ -376,8 +420,6 @@ const ItemList: React.FC = () => {
  </button>
 
  <button type="button"
- 
- 
  onClick={() => navigate('/inventory/add')}
  className="flex items-center gap-3 bg-slate-900 dark:bg-white text-white px-8 py-4 rounded-2xl font-semibold text-xs uppercase tracking-wider"
  >
@@ -398,9 +440,6 @@ const ItemList: React.FC = () => {
  ].map((stat, i) => (
  <div
  key={i}
- 
- 
- 
  className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex items-center gap-6"
  >
  <div className={clsx(
@@ -441,53 +480,109 @@ const ItemList: React.FC = () => {
 ))}
  </div>
 
- <div className="flex items-center gap-4 w-full md:w-auto">
- <div className="relative flex-1 group min-w-[200px] md:min-w-[400px]">
- <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"size={20} />
- <input
- type="text"
- placeholder={t('inventory.search_placeholder')}
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- className="w-full pl-16 pr-6 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
- />
- </div>
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+          {activeTab === 'items' && categories && categories.length > 0 && (
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-4 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-xs outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
+            >
+              <option value="all">{t('inventory.all_categories') || 'All Categories'}</option>
+              {categories.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
 
- <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
- <button type="button"
- onClick={() => setViewMode('list')}
- className={clsx(
-"p-3 rounded-xl",
- viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
-)}
- >
- <List size={20} />
- </button>
- <button type="button"
- onClick={() => setViewMode('grid')}
- className={clsx(
-"p-3 rounded-xl",
- viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
-)}
- >
- <LayoutGrid size={20} />
- </button>
- </div>
- </div>
- </div>
+          {activeTab === 'items' && suppliers && suppliers.length > 0 && (
+            <select
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
+              className="px-4 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-xs outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
+            >
+              <option value="all">{t('inventory.supplier') || 'All Suppliers'}</option>
+              {suppliers.map((s: any) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
 
- {/* Content Area */}
- <>
- {activeTab === 'categories' ? (
- <div key="categories">
- <CategoryTab />
- </div>
+          <div className="relative flex-1 group min-w-[200px] md:min-w-[300px]">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white" size={20} />
+            <input
+              type="text"
+              placeholder={t('inventory.search_placeholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-16 pr-6 py-4 bg-white dark:bg-slate-800 border border-white/50 dark:border-slate-700/30 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
+            />
+          </div>
+
+          <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={clsx(
+                "p-3 rounded-xl",
+                viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
+              )}
+            >
+              <List size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={clsx(
+                "p-3 rounded-xl",
+                viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-600'
+              )}
+            >
+              <LayoutGrid size={20} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {activeTab === 'items' && selectedCategory !== 'all' && (
+        <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/50 px-5 py-3 rounded-2xl w-fit">
+          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: categoryMap.get(selectedCategory)?.color || '#6366F1' }} />
+          <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
+            {t('inventory.category') || 'Category'}: <span className="font-extrabold">{categoryMap.get(selectedCategory)?.name || selectedCategory}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            className="ml-2 text-indigo-500 hover:text-rose-500 font-bold p-1 rounded-lg transition-colors flex items-center gap-1 text-[10px] uppercase"
+            title="Clear category filter"
+          >
+            <X size={14} />
+            {t('common.clear') || 'Clear'}
+          </button>
+        </div>
+      )}
+
+      {/* Content Area */}
+      <>
+        {activeTab === 'categories' ? (
+          <div key="categories">
+            <CategoryTab
+              onSelectCategory={(catId) => {
+                setSelectedCategory(catId);
+                setActiveTab('items');
+              }}
+            />
+          </div>
 ) : (
  <div key="items">
- {viewMode === 'list' ? (
+ {loading || (items && items.length > 0) ? (
+  viewMode === 'list' ? (
  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
  <div className="overflow-x-auto">
- <table className="w-full text-left whitespace-nowrap">
+ <table className="w-full text-left whitespace-nowrap min-w-[800px]">
  <thead>
  <tr className="border-b border-slate-100 dark:border-slate-700/50">
  <th className="p-6 w-12 text-center">
@@ -498,11 +593,12 @@ const ItemList: React.FC = () => {
  onChange={toggleSelectAll}
  />
  </th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{t('inventory.item_name')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{t('inventory.barcode')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{t('inventory.stock')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{t('inventory.sale_price')}</th>
- <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 text-right">{t('common.actions')}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.item_name')}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.barcode')}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.stock')}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.sale_price')}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('inventory.supplier') || t('suppliers.title') || 'Supplier'}</th>
+ <th className="p-6 text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right">{t('common.actions')}</th>
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
@@ -514,6 +610,7 @@ const ItemList: React.FC = () => {
  <td className="p-6"><Skeleton width={120} height={20} /></td>
  <td className="p-6"><Skeleton width={80} height={20} /></td>
  <td className="p-6"><Skeleton width={100} height={20} /></td>
+ <td className="p-6"><Skeleton width={100} height={20} /></td>
  <td className="p-6 text-right"><Skeleton width={100} height={32} /></td>
  </tr>
 ))
@@ -521,9 +618,6 @@ const ItemList: React.FC = () => {
  items.map((item: Item, idx: number) => (
  <tr 
  key={item.id}
- 
- 
- 
  className="hover:bg-slate-50 dark:hover:bg-slate-700 group"
  >
  <td className="p-6 text-center">
@@ -541,12 +635,16 @@ const ItemList: React.FC = () => {
 )}
  <div>
  <p className="font-semibold dark:text-white uppercase tracking-tight">{item.name}</p>
- <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider mt-1">{item.itemCode || '---'}</p>
+ {item.itemCode && (
+ <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">
+ PLU: {item.itemCode}
+ </span>
+)}
  </div>
  </div>
  </td>
  <td className="p-6">
- <span className="font-mono text-[10px] font-semibold bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-lg text-slate-600 tracking-wider">
+ <span className="font-mono text-xs font-semibold bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 tracking-wider inline-block">
  {item.barcode || '---'}
  </span>
  </td>
@@ -564,11 +662,16 @@ const ItemList: React.FC = () => {
  <td className="p-6">
  <p className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</p>
  </td>
+ <td className="p-6">
+ <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-tight">
+ {item.supplierId ? (supplierMap.get(item.supplierId) || '---') : '---'}
+ </span>
+ </td>
  <td className="p-6 text-right">
  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100">
- <button type="button"onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border border-slate-100 dark:border-slate-700"><Edit size={16} /></button>
- <button type="button"onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-800 text-indigo-600 rounded-xl border border-slate-100 dark:border-slate-700"><QrCode size={16} /></button>
- <button type="button"onClick={() => handleDeleteClick(item.id!)} className="p-3 bg-white dark:bg-slate-800 text-rose-500 rounded-xl border border-slate-100 dark:border-slate-700"><Trash size={16} /></button>
+ <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
+ <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-700" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
+ <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-3 bg-white dark:bg-slate-800 text-rose-500 rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
  </div>
  </td>
  </tr>
@@ -583,9 +686,6 @@ const ItemList: React.FC = () => {
  {items?.map((item: Item, idx: number) => (
  <div
  key={item.id}
- 
- 
- 
  className={clsx(
 "bg-white dark:bg-slate-800 p-6 rounded-2xl border group relative",
  selectedIds.includes(item.id!) ?"border-slate-900/50 dark:border-white/50":"border-white/50 dark:border-slate-700/30"
@@ -614,14 +714,20 @@ const ItemList: React.FC = () => {
  </div>
 
  <h3 className="text-xl font-semibold dark:text-white uppercase tracking-tight mb-2 line-clamp-1">{item.name}</h3>
- <div className="flex items-center gap-2 mb-6">
- <span className="font-mono text-[9px] font-semibold text-slate-600 uppercase bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded tracking-wider">{item.barcode || 'NO BARCODE'}</span>
- {item.location && (
- <span className="flex items-center gap-1 text-[8px] font-semibold text-slate-600 uppercase tracking-wider">
- <MapPin size={10} /> {item.location}
- </span>
-)}
- </div>
+              <div className="flex items-center gap-2 mb-6 flex-wrap">
+                <span className="font-mono text-[9px] font-semibold text-slate-600 uppercase bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded tracking-wider">{item.barcode || 'NO BARCODE'}</span>
+                {item.categoryId && categoryMap.has(item.categoryId) && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryMap.get(item.categoryId)?.color || '#6366f1' }} />
+                    {categoryMap.get(item.categoryId)?.name}
+                  </span>
+                )}
+                {item.location && (
+                  <span className="flex items-center gap-1 text-[8px] font-semibold text-slate-600 uppercase tracking-wider">
+                    <MapPin size={10} /> {item.location}
+                  </span>
+                )}
+              </div>
 
  <div className={clsx(
 "flex items-center justify-between p-4 rounded-2xl border mb-6",
@@ -639,17 +745,18 @@ const ItemList: React.FC = () => {
  </div>
 
  <div className="flex gap-2">
- <button type="button"onClick={() => navigate(`/inventory/edit/${item.id}`)} className="flex-1 flex items-center justify-center gap-2 py-3 bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-xl text-[9px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:bg-slate-900 dark:hover:bg-white hover:text-white">
+ <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="flex-1 flex items-center justify-center gap-2 py-3 bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-xl text-[9px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:bg-slate-900 dark:hover:bg-white hover:text-white transition-colors">
  <Edit size={14} /> {t('common.edit')}
  </button>
- <button type="button"onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-xl text-indigo-500 hover:bg-indigo-500 hover:text-white">
- <QrCode size={16} />
+ <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-xl text-indigo-500 hover:bg-indigo-500 hover:text-white transition-colors" title={t('inventory.print_label') || 'Print Label'}>
+ <Printer size={16} />
  </button>
  </div>
  </div>
 ))}
  </div>
-)}
+)
+ ) : null}
  </div>
 )}
  </>
@@ -670,16 +777,16 @@ const ItemList: React.FC = () => {
 
  {/* Empty State */}
  {!loading && activeTab === 'items' && items?.length === 0 && (
- <div className="py-40 text-center bg-white dark:bg-slate-800 rounded-[4rem] border-4 border-dashed border-slate-200 dark:border-slate-800 max-w-4xl mx-auto">
- <PackageOpen size={80} strokeWidth={1} className="mx-auto mb-6 text-slate-300"/>
- <h3 className="text-2xl font-semibold dark:text-white uppercase tracking-tight mb-2">{search ? t('common.no_results') : t('inventory.no_items')}</h3>
- <p className="text-slate-700 font-medium mb-8">{search ? t('common.try_different_search') : t('inventory.no_items_desc')}</p>
+ <div className="py-20 md:py-40 px-6 text-center bg-white dark:bg-slate-800 rounded-3xl md:rounded-[4rem] border-4 border-dashed border-slate-200 dark:border-slate-800 max-w-4xl mx-auto">
+ <PackageOpen size={64} strokeWidth={1} className="mx-auto mb-6 text-slate-300 md:w-20 md:h-20"/>
+ <h3 className="text-xl md:text-2xl font-semibold dark:text-white uppercase tracking-tight mb-2">{search ? t('common.no_results') : t('inventory.no_items')}</h3>
+ <p className="text-slate-700 font-medium mb-8 text-sm md:text-base">{search ? t('common.try_different_search') : t('inventory.no_items_desc')}</p>
  {hasPermission('inventory_add') && !search && (
  <button type="button"
  onClick={() => navigate('/inventory/add')}
- className="bg-slate-900 dark:bg-white text-white px-10 py-4 rounded-2xl font-semibold text-xs uppercase tracking-wider"
+ className="bg-slate-900 dark:bg-white text-white px-8 md:px-10 py-3 md:py-4 rounded-2xl font-semibold text-[10px] md:text-xs uppercase tracking-wider"
  >
- {t('common.add_your_first')}
+ {t('inventory.add_item', 'Add New Item')}
  </button>
 )}
  </div>

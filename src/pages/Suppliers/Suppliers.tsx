@@ -160,34 +160,34 @@ const Suppliers: React.FC = () => {
  const paginatedSuppliers = filteredSuppliers.slice(offset, offset + pageSize);
 
  return (
- <div className="space-y-8 pb-10">
+ <div className="space-y-6 md:space-y-8 pb-10">
  {/* Header Bar */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
- <div className="flex flex-col md:flex-row justify-between md:items-center gap-8 relative z-10">
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 md:gap-8 relative z-10">
  <div>
- <h1 className="text-4xl font-semibold dark:text-white flex items-center gap-4 tracking-tight uppercase">
- <div className="p-4 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl">
- <Building size={32} strokeWidth={2.5} />
+ <h1 className="text-2xl md:text-4xl font-semibold dark:text-white flex items-center gap-3 md:gap-4 tracking-tight uppercase">
+ <div className="p-3 md:p-4 bg-slate-800 dark:bg-slate-700 text-white rounded-xl md:rounded-2xl">
+ <Building size={24} className="md:w-8 md:h-8" strokeWidth={2.5} />
  </div>
  <span>{t('suppliers.title')}</span>
  </h1>
- <p className="text-slate-700 dark:text-slate-300 font-bold mt-2 ml-2 text-xs uppercase tracking-wider flex items-center gap-2">
+ <p className="text-slate-700 dark:text-slate-300 font-bold mt-2 ml-1 md:ml-2 text-[10px] md:text-xs uppercase tracking-wider flex items-center gap-2">
  <Sparkles size={14} className="text-amber-500"/>
  {t('suppliers.manage_vendors')}
  </p>
  </div>
 
- <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4 w-full md:w-auto">
  <div className="relative w-full sm:w-80 group">
- <Search className="w-5 h-5 absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"/>
+ <Search className="w-5 h-5 absolute left-4 md:left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"/>
  <input
  type="text"
  placeholder={t('common.search') || 'Search suppliers...'}
  value={searchQuery}
  onChange={(e) => setSearchQuery(e.target.value)}
- className="w-full pl-14 pr-6 py-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-xl font-bold text-sm focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+ className="w-full pl-12 md:pl-14 pr-4 md:pr-6 py-3 md:py-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-lg md:rounded-xl font-bold text-sm focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
  />
  </div>
  {hasPermission('suppliers_add') && (
@@ -195,7 +195,7 @@ const Suppliers: React.FC = () => {
  
  
  onClick={() => { resetForm(); setIsModalOpen(true); }}
- className="flex items-center gap-3 bg-slate-800 dark:bg-slate-700 text-white px-8 py-4 rounded-xl font-semibold text-xs uppercase tracking-wider hover:bg-black group shrink-0 w-full sm:w-auto"
+ className="flex items-center justify-center gap-2 md:gap-3 bg-slate-800 dark:bg-slate-700 text-white px-6 md:px-8 py-3 md:py-4 rounded-lg md:rounded-xl font-semibold text-xs uppercase tracking-wider hover:bg-black group shrink-0 w-full sm:w-auto"
  >
  <Plus className="w-5 h-5"/>
  <span>{t('common.add')}</span>
@@ -206,10 +206,10 @@ const Suppliers: React.FC = () => {
  </div>
 
   {/* Modern List Table Layout */}
-  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/30 overflow-hidden shadow-sm">
+  <div className="bg-white dark:bg-slate-800 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-700/30 overflow-hidden shadow-sm">
     {paginatedSuppliers.length > 0 ? (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left whitespace-nowrap">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left whitespace-nowrap min-w-[700px]">
           <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 font-semibold text-xs text-slate-600 dark:text-slate-400 uppercase tracking-wider">
             <tr>
               <th className="px-6 py-4">{t('suppliers.name') || 'Supplier'}</th>
@@ -267,10 +267,10 @@ const Suppliers: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 text-right">
                   <span className={clsx(
-                    "text-sm font-bold tracking-tight px-3 py-1 rounded-xl border inline-block",
+                    "text-lg font-black tracking-tight px-4 py-2 rounded-xl border inline-block",
                     supplier.balance > 0 
-                      ? "bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-900/30" 
-                      : "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
+                      ? "bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 shadow-sm" 
+                      : "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50 shadow-sm"
                   )}>
                     {formatCurrency(supplier.balance)}
                   </span>

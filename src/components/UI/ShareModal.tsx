@@ -1,66 +1,72 @@
 import React, { useState } from 'react';
-import { X, Send, Mail } from 'lucide-react'; // Removed FileSpreadsheet, FileText
+import { X, Send, Mail, Share2 } from 'lucide-react'; 
 import { useTranslation } from 'react-i18next';
-// Removed excelGenerator, downloadInvoicePDF imports
 import { generateInvoiceText } from '../../utils/shareUtils';
 import type { Invoice, Purchase } from '../../services/db';
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
 
 interface ShareModalProps {
- isOpen: boolean;
- onClose: () => void;
- data: Invoice | Purchase;
- type: 'invoice' | 'purchase';
+  isOpen: boolean;
+  onClose: () => void;
+  data: Invoice | Purchase;
+  type: 'invoice' | 'purchase';
 }
 
 const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, data, type }) => {
- const { t } = useTranslation();
- // Removed format state
- const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
 
- if (!isOpen) return null;
+  if (!isOpen) return null;
 
- const handleShare = async (platform: 'whatsapp' | 'email') => {
- setLoading(true);
- try {
- const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || 'null');
- const title = type === 'invoice' ? t('sales.invoice') || 'Invoice' : t('purchases.bill') || 'Bill';
+  const handleShare = async (platform: 'whatsapp' | 'email' | 'native') => {
+    setLoading(true);
+    try {
+      const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || 'null');
+      const title = type === 'invoice' ? t('sales.invoice') || 'Invoice' : t('purchases.bill') || 'Bill';
 
- // Generate formatted text
- const invoiceText = generateInvoiceText(data, type, businessDetails, title);
- const encodedText = encodeURIComponent(invoiceText);
+      // Generate formatted text
+      const invoiceText = generateInvoiceText(data, type, businessDetails, title);
+      const encodedText = encodeURIComponent(invoiceText);
 
- // Get contact info
- const phone = (data as any).customerPhone || (data as any).phone || '';
- const email = (data as any).email || (data as any).customerEmail || '';
+      // Get contact info
+      const phone = (data as any).customerPhone || (data as any).phone || '';
+      const email = (data as any).email || (data as any).customerEmail || '';
 
- if (platform === 'whatsapp') {
- // Smart Linking: Try App (whatsapp://) -> Fallback Web (https://web.whatsapp.com)
- const appUrl =`whatsapp://send?phone=${phone}&text=${encodedText}`;
- const webUrl =`https://web.whatsapp.com/send?phone=${phone}&text=${encodedText}`;
+      if (platform === 'native' && Capacitor.isNativePlatform()) {
+        await Share.share({
+          title: `${title} #${(data as any).invoiceNumber || (data as any).orderNumber}`,
+          text: invoiceText,
+          dialogTitle: 'Share with',
+        });
+      } else if (platform === 'whatsapp') {
+        // Smart Linking: Try App (whatsapp://) -> Fallback Web (https://web.whatsapp.com)
+        const appUrl = `whatsapp://send?phone=${phone}&text=${encodedText}`;
+        const webUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${encodedText}`;
 
- if (window.electron && window.electron.openExternal) {
- // Try to open external link (App)
- const success = await window.electron.openExternal(appUrl);
- if (!success) {
- console.warn("WhatsApp App not found, falling back to Web.");
- window.open(webUrl, '_blank');
- }
- } else {
- // Browser Fallback (Usually opens same tab or redirect)
- window.open(webUrl, '_blank');
- }
- } else {
- // Email
- window.open(`mailto:${email}?subject=${type.toUpperCase()} #${(data as any).invoiceNumber || (data as any).orderNumber}&body=${encodedText}`, '_blank');
- }
+        if (window.electron && window.electron.openExternal) {
+          // Try to open external link (App)
+          const success = await window.electron.openExternal(appUrl);
+          if (!success) {
+            console.warn("WhatsApp App not found, falling back to Web.");
+            window.open(webUrl, '_blank');
+          }
+        } else {
+          // Browser Fallback (Usually opens same tab or redirect)
+          window.open(webUrl, '_blank');
+        }
+      } else if (platform === 'email') {
+        // Email
+        window.open(`mailto:${email}?subject=${type.toUpperCase()} #${(data as any).invoiceNumber || (data as any).orderNumber}&body=${encodedText}`, '_blank');
+      }
 
- onClose();
- } catch (error) {
- console.error("Sharing failed", error);
- } finally {
- setLoading(false);
- }
- };
+      onClose();
+    } catch (error) {
+      console.error("Sharing failed", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
  return (
  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-md p-4">
@@ -83,6 +89,16 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, data, type }) 
 
  {/* Actions */}
  <div className="space-y-3">
+ {Capacitor.isNativePlatform() && (
+ <button type="button"
+ onClick={() => handleShare('native')}
+ disabled={loading}
+ className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+ >
+ <Share2 size={20} />
+ {t('common.share_native') || 'Share via Device'}
+ </button>
+ )}
  <button type="button"
  onClick={() => handleShare('whatsapp')}
  disabled={loading}

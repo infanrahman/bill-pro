@@ -184,23 +184,23 @@ const SupplierDetails = () => {
 );
 
  return (
- <div className="space-y-8 pb-10">
+ <div className="space-y-6 md:space-y-8 pb-10">
  {/* Header Bar */}
- <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 relative overflow-hidden group">
  
  
- <div className="flex flex-col md:flex-row justify-between md:items-center gap-8 relative z-10">
- <div className="flex items-center gap-6">
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 md:gap-8 relative z-10">
+ <div className="flex items-center gap-4 md:gap-6">
  <button type="button"
  
  
  onClick={() => navigate('/suppliers')}
- className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-600 hover:text-slate-900 dark:hover:text-white"
+ className="p-3 md:p-4 bg-white dark:bg-slate-800 rounded-xl md:rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-600 hover:text-slate-900 dark:hover:text-white shrink-0"
  >
- <ArrowLeft size={24} />
+ <ArrowLeft size={24} className="w-5 h-5 md:w-6 md:h-6" />
  </button>
  <div>
- <h1 className="text-3xl font-semibold dark:text-white tracking-tight uppercase">{supplier.name}</h1>
+ <h1 className="text-xl md:text-3xl font-semibold dark:text-white tracking-tight uppercase line-clamp-1">{supplier.name}</h1>
  <p className="text-slate-700 dark:text-slate-300 font-bold mt-1 text-[10px] uppercase tracking-wider flex items-center gap-2">
  <Building size={12} className="text-slate-900 dark:text-white"/>
  {t('suppliers.title')} / {t('common.details')}
@@ -208,13 +208,13 @@ const SupplierDetails = () => {
  </div>
  </div>
 
- <div className="bg-rose-500/10 dark:bg-rose-500/5 border border-rose-500/20 p-5 rounded-2xl flex items-center gap-6">
- <div className="p-4 bg-rose-500 text-white rounded-2xl">
- <TrendingDown size={24} />
+ <div className="bg-rose-500/10 dark:bg-rose-500/5 border border-rose-500/20 p-4 md:p-5 rounded-xl md:rounded-2xl flex items-center gap-4 md:gap-6 w-full md:w-auto">
+ <div className="p-3 md:p-4 bg-rose-500 text-white rounded-xl md:rounded-2xl shrink-0">
+ <TrendingDown size={24} className="w-5 h-5 md:w-6 md:h-6" />
  </div>
  <div>
  <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider mb-1">{t('purchases.balance_due')}</p>
- <p className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
+ <p className="text-2xl md:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
  {formatCurrency(supplier.balance)}
  </p>
  </div>
@@ -251,10 +251,9 @@ const SupplierDetails = () => {
  </div>
 
  {/* Right Side: Bills & History */}
- <div className="lg:col-span-3 space-y-8">
- {/* Tabs & Search Header */}
- <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row items-center justify-between gap-4">
- <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-2xl w-full md:w-auto">
+ <div className="lg:col-span-3 space-y-6">
+ <div className="bg-white dark:bg-slate-800 p-4 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+ <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl md:rounded-2xl w-full xl:w-auto overflow-x-auto custom-scrollbar">
  {[
  { id: 'bills', label: t('purchases.outstanding_bills'), icon: Receipt, count: outstandingBills.length },
  { id: 'history', label: t('common.history'), icon: History, count: history.length }
@@ -263,35 +262,35 @@ const SupplierDetails = () => {
  key={tab.id}
  onClick={() => setActiveTab(tab.id as any)}
  className={clsx(
-"flex items-center gap-3 px-6 py-3 rounded-xl text-[10px] font-semibold uppercase tracking-wider",
+ "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap",
  activeTab === tab.id 
- ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white ' 
+ ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
  : 'text-slate-600 hover:text-slate-600 dark:hover:text-slate-200'
-)}
+ )}
  >
  <tab.icon size={14} />
  <span>{tab.label}</span>
  <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[8px]">{tab.count}</span>
  </button>
-))}
+ ))}
  </div>
 
- <div className="flex items-center gap-4 w-full md:w-auto">
- <div className="relative flex-1 md:w-64 group">
- <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white"size={16} />
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4 w-full xl:w-auto">
+ <div className="relative flex-1 group">
+ <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-slate-900 dark:group-focus-within:text-white" size={16} />
  <input
  type="text"
  placeholder={t('common.search')}
  value={searchQuery}
  onChange={(e) => setSearchQuery(e.target.value)}
- className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
+ className="w-full pl-12 pr-4 py-2.5 md:py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-lg md:rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white"
  />
  </div>
- <div className="relative group">
+ <div className="relative group shrink-0">
  <select 
  value={sortBy}
  onChange={(e) => setSortBy(e.target.value)}
- className="appearance-none pl-10 pr-10 py-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
+ className="w-full sm:w-auto appearance-none pl-10 pr-10 py-2.5 md:py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-lg md:rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 dark:text-white cursor-pointer"
  >
  <option value="date_desc">{t('common.date_desc')}</option>
  <option value="date_asc">{t('common.date_asc')}</option>

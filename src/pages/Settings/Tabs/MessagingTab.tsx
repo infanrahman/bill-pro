@@ -17,7 +17,7 @@ const MessagingTab: React.FC = () => {
 
  useEffect(() => {
  const saved = messagingService.getWhatsAppConfig();
- if (saved) setConfig(saved);
+ if (saved) setTimeout(() => setConfig(saved), 0);
  }, []);
 
  const handleSave = () => {

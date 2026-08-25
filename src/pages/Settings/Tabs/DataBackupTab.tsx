@@ -170,32 +170,40 @@ const DataBackupTab: React.FC = () => {
  if (fileInputRef.current) fileInputRef.current.value = '';
  };
 
- const handleConfirmRestore = async () => {
- if (!pendingFile && !pendingRestoreContent) return;
+  const handleConfirmRestore = async () => {
+    if (!isAdmin) { // H28 Fix
+      addToast(t('common.access_denied'), 'error');
+      return;
+    }
+    if (!pendingFile && !pendingRestoreContent) return;
 
- try {
- setLoading(true);
- let text = '';
- if (pendingRestoreContent) {
- text = pendingRestoreContent;
- } else if (pendingFile) {
- text = await pendingFile.text();
- }
- await restoreBackupData(text);
- addToast(t('backup.success_restore'), 'success');
- setTimeout(() => window.location.reload(), 2000);
- } catch (error) {
- console.error('Restore failed:', error);
- addToast(t('backup.failed_restore'), 'error');
- } finally {
- setLoading(false);
- setPendingFile(null);
- setPendingRestoreContent(null);
- }
- };
+    try {
+      setLoading(true);
+      let text = '';
+      if (pendingRestoreContent) {
+        text = pendingRestoreContent;
+      } else if (pendingFile) {
+        text = await pendingFile.text();
+      }
+      await restoreBackupData(text);
+      addToast(t('backup.success_restore'), 'success');
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      console.error('Restore failed:', error);
+      addToast(t('backup.failed_restore'), 'error');
+    } finally {
+      setLoading(false);
+      setPendingFile(null);
+      setPendingRestoreContent(null);
+    }
+  };
 
- const handleFactoryReset = async () => {
- if (resetConfirmation !== 'RESET') return;
+  const handleFactoryReset = async () => {
+    if (!isAdmin) { // H28 Fix
+      addToast(t('common.access_denied'), 'error');
+      return;
+    }
+    if (resetConfirmation !== 'RESET') return;
 
  try {
  setLoading(true);
@@ -358,13 +366,19 @@ const DataBackupTab: React.FC = () => {
  <h3 className="font-bold text-red-700 dark:text-red-400">Danger Zone</h3>
  </div>
  <div className="p-6 bg-white dark:bg-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
- <div>
- <h4 className="font-semibold text-slate-900 dark:text-white mb-1">{t('backup.factory_reset_title')}</h4>
- <p className="text-sm text-slate-700 max-w-xl">
- {t('backup.factory_reset_desc').split('. ')[0]}.
- <span className="font-semibold text-red-600"> {t('backup.factory_reset_desc').split('. ')[1]}</span>
- </p>
- </div>
+  <div>
+  <h4 className="font-semibold text-slate-900 dark:text-white mb-1">{t('backup.factory_reset_title')}</h4>
+  {(() => {
+    const desc = t('backup.factory_reset_desc') || '';
+    const parts = desc.split('. ');
+    return (
+      <p className="text-sm text-slate-700 max-w-xl">
+        {parts[0]}{parts.length > 1 ? '.' : ''}
+        {parts.length > 1 && <span className="font-semibold text-red-600"> {parts[1]}</span>}
+      </p>
+    );
+  })()}
+  </div>
  <button type="button"
  onClick={() => setIsResetModalOpen(true)}
  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold dark: whitespace-nowrap"

@@ -15,12 +15,14 @@ interface AppSettings {
  taxRate?: number; // Global tax percentage
  taxName?: string; // Global tax name (VAT, GST, etc)
  enableShiftManagement?: boolean; // New: Cash drawer audit tracking
- customOrderTypes?: {
- dine_in: { icon: string; label: string };
- parcel: { icon: string; label: string };
- pickup: { icon: string; label: string };
- delivery: { icon: string; label: string };
- };
+ enableSerialTracking?: boolean; // New: Serial/IMEI tracking for electronics
+  customOrderTypes?: {
+    dine_in: { icon: string; label: string };
+    parcel: { icon: string; label: string };
+    pickup: { icon: string; label: string };
+    delivery: { icon: string; label: string };
+  };
+  scannerType?: 'camera' | 'hardware'; // Determines which barcode scanner method to use
 }
 
 const defaultSettings: AppSettings = {
@@ -36,8 +38,10 @@ const defaultSettings: AppSettings = {
  cafeMode: false,
  applyTax: false,
  taxRate: 15,
- taxName: 'VAT',
- enableShiftManagement: false
+  taxName: 'VAT',
+  enableShiftManagement: false,
+  enableSerialTracking: false,
+  scannerType: 'camera'
 };
 
 
@@ -52,22 +56,36 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
  const [settings, setSettings] = useState<AppSettings>(() => {
- const saved = localStorage.getItem('appSettings');
- return saved ? JSON.parse(saved) : defaultSettings;
+  const saved = localStorage.getItem('appSettings');
+  if (!saved) return defaultSettings;
+  try {
+  return { ...defaultSettings, ...JSON.parse(saved) };
+  } catch {
+  console.warn('appSettings localStorage is corrupted – resetting to defaults.');
+  localStorage.removeItem('appSettings');
+  return defaultSettings;
+  }
  });
 
  useEffect(() => {
  localStorage.setItem('appSettings', JSON.stringify(settings));
  }, [settings]);
 
- const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
- setSettings(prev => ({ ...prev, ...newSettings }));
- }, []);
+  const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
+    setSettings(prev => {
+      const merged = { ...prev, ...newSettings };
+      if (newSettings.customOrderTypes && prev.customOrderTypes) {
+        merged.customOrderTypes = { ...prev.customOrderTypes, ...newSettings.customOrderTypes };
+      }
+      return merged;
+    });
+  }, []);
 
- const formatCurrency = useCallback((amount: number) => {
- if (amount === undefined || amount === null) return settings.currency + '0.00';
- return settings.currency + Number(amount).toFixed(settings.decimals);
- }, [settings.currency, settings.decimals]);
+  const formatCurrency = useCallback((amount: any) => {
+    const val = Number(amount);
+    const num = isNaN(val) ? 0 : val;
+    return (settings.currency || '$') + num.toFixed(settings.decimals ?? 2);
+  }, [settings.currency, settings.decimals]);
 
  const formatDate = useCallback((date: string | Date | undefined) => {
  if (!date) return '';

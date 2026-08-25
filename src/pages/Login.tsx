@@ -25,7 +25,8 @@ const Login: React.FC = () => {
                 setError(t('login.invalid_credentials'));
             }
         } catch (err: any) {
-            setError(t('login.error_login') + ":" + (err.message || String(err)));
+            console.error("Login attempt failed:", err);
+            setError(t('login.error_login'));
         } finally {
             setLoading(false);
         }
@@ -92,7 +93,7 @@ const Login: React.FC = () => {
             </div>
 
             {/* Right Side - Full Screen Login Form */}
-            <div className="w-full md:w-7/12 p-8 md:p-24 flex flex-col justify-center bg-white dark:bg-slate-900 h-screen relative">
+            <div className="w-full md:w-7/12 p-6 md:p-24 flex flex-col justify-center bg-white dark:bg-slate-900 h-screen relative">
                 <div className="max-w-lg mx-auto w-full">
                     <div className="mb-12">
                         <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">{t('login.welcome_back')}</h2>

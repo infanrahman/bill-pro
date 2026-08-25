@@ -1,12 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Mail, MessageSquare, ExternalLink } from 'lucide-react';
+import { SoftwareUpdateCard } from '../../../components/UI/SoftwareUpdateCard';
 
 const HelpTab: React.FC = () => {
  const { t } = useTranslation();
 
  return (
  <div className="space-y-6">
+ <SoftwareUpdateCard />
+
  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
  <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
  <MessageSquare className="w-6 h-6 text-slate-900 dark:text-white"/>

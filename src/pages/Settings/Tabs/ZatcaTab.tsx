@@ -8,7 +8,7 @@ import {
  generateCSR, requestComplianceCSID, runComplianceChecks,
  getProductionCSID, type ZatcaConfig,
 } from '../../../services/zatcaApi';
-import { generateComplianceSampleInvoice } from '../../../services/zatcaComplianceSamples';
+import { generateComplianceSampleInvoice, localValidateSample } from '../../../services/zatcaComplianceSamples';
 import { useNotification } from '../../../contexts/NotificationContext';
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
@@ -38,11 +38,13 @@ const persistConfig = async (cfg: ZatcaConfig) => {
 };
 
 const EMPTY_CONFIG: ZatcaConfig = {
- csr: '',
- privateKey: '',
- status: 'NOT_ONBOARDED',
- environment: 'PRODUCTION',
+  csr: '',
+  privateKey: '',
+  status: 'NOT_ONBOARDED',
+  environment: 'PRODUCTION',
 };
+
+const ZATCA_GENESIS_HASH = 'NWZlY2ViNjZmZmM4NmYzOGQ5NTI3ODZjNmQ2OTZjNzljMmRiYzIzOWRkNGU5MWIyNGEyOTVRMzYxYzI4Y2I1MjM=';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  Main Component
@@ -120,16 +122,7 @@ const ZatcaTab: React.FC = () => {
  await persistConfig(newCfg);
  setConfig(newCfg);
 
- // Silently offer private-key backup
- try {
- const blob = new Blob([keys.privateKey], { type: 'application/x-pem-file' });
- const url = URL.createObjectURL(blob);
- const a = document.createElement('a');
- a.href = url;
- a.download = 'zatca_private_key.pem';
- a.click();
- URL.revokeObjectURL(url);
- } catch { /* non-fatal */ }
+ // M8 Fix: Private key is stored securely in config/electron, no unencrypted auto-download
 
  setPhase('READY_FOR_OTP');
  addToast('✅ Ready — enter your OTP to activate ZATCA.', 'success');
@@ -169,25 +162,85 @@ const ZatcaTab: React.FC = () => {
  };
  await persistConfig(cfg1);
 
- // Step B — Sample invoices
- log('📄 Generating compliance sample invoices...');
- const samples = await Promise.all(
- [1, 2, 3].map((i) =>
- generateComplianceSampleInvoice({
- sellerName: biz.name || 'My Business',
- vatNumber: biz.gstin || config.csr,
- privateKeyPem: config.privateKey,
- complianceCsid: compliance.csid,
- invoiceIndex: i,
- })
-)
-);
- log('✅ Sample invoices ready');
+  // Normalize business profile
+  const normalizedProfile = {
+    sellerName: biz.name?.trim(),
+    vatNumber: (biz.vatNo || biz.gstin)?.trim(),
+    crn: biz.crNo?.trim(),
+    street: biz.address?.trim(),
+    buildingNumber: biz.buildingNumber?.trim(),
+    district: biz.district?.trim(),
+    city: biz.city?.trim(),
+    postalCode: biz.pincode?.trim(),
+    countryCode: 'SA'
+  };
 
- // Step C — Compliance checks
- log('🔍 Running ZATCA compliance checks...');
- await runComplianceChecks(compliance.csid, compliance.secret, samples, 'PRODUCTION');
- log('✅ Compliance checks passed');
+  const requiredFields = ['sellerName', 'vatNumber', 'crn', 'street', 'buildingNumber', 'district', 'city', 'postalCode', 'countryCode'];
+  const missingFields = requiredFields.filter(f => !(normalizedProfile as any)[f]);
+  if (missingFields.length > 0) {
+    console.error('[ZATCA BUSINESS PROFILE] Missing:', missingFields);
+    throw new Error(`ZATCA_BUSINESS_PROFILE_INCOMPLETE\nMissing fields: ${missingFields.join(', ')}`);
+  }
+
+  let previousHash = ZATCA_GENESIS_HASH;
+
+  // Step B — Sample invoices + ZATCA compliance: generate → validate → submit → repeat
+  for (let i = 1; i <= 3; i++) {
+    console.log('[ZATCA SAMPLE INPUT]', {
+        sampleIndex: i,
+        sellerName: normalizedProfile.sellerName,
+        vatNumber: normalizedProfile.vatNumber,
+        crn: normalizedProfile.crn,
+    });
+
+    let sample: any = null;
+    try {
+      sample = await generateComplianceSampleInvoice({
+        sellerName: normalizedProfile.sellerName,
+        vatNumber: normalizedProfile.vatNumber,
+        crn: normalizedProfile.crn,
+        street: normalizedProfile.street,
+        buildingNumber: normalizedProfile.buildingNumber,
+        citySubdivision: normalizedProfile.district,
+        city: normalizedProfile.city,
+        postalZone: normalizedProfile.postalCode,
+        countryCode: normalizedProfile.countryCode,
+        privateKeyPem: config.privateKey,
+        complianceCsid: compliance.csid,
+        invoiceIndex: i,
+        previousInvoiceHash: previousHash
+      });
+      log(`📄 Sample ${i} generated`);
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : 'Sample generation failed';
+      log(`❌ Sample ${i} generation failed: ${msg}`, false);
+      throw err;
+    }
+
+    // Local validation before submitting
+    try {
+      localValidateSample(sample, normalizedProfile.crn, normalizedProfile.vatNumber);
+      log(`✅ Sample ${i} local validation passed`);
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : 'Local validation failed';
+      log(`❌ Sample ${i} local validation failed: ${msg}`, false);
+      throw err;
+    }
+
+    // Submit THIS sample to ZATCA immediately — do not generate S2/S3 until this PASSES
+    log(`🔍 Submitting Sample ${i} to ZATCA...`);
+    try {
+      await runComplianceChecks(compliance.csid, compliance.secret, [sample], 'PRODUCTION');
+      log(`✅ Sample ${i} ZATCA check passed`);
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : 'ZATCA compliance check failed';
+      log(`❌ ${msg}`, false);
+      throw err;
+    }
+
+    previousHash = sample.hash;
+  }
+
 
  // Step D — Production CSID
  log('🚀 Requesting production certificate...');

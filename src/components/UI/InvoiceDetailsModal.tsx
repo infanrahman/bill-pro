@@ -34,9 +34,10 @@ const InvoiceDetailsModal: React.FC<InvoiceDetailsModalProps> = ({ invoice, isOp
  const [business, setBusiness] = useState<BusinessDetails | null>(null);
 
  useEffect(() => {
- const saved = localStorage.getItem('businessProfile');
+ // Read from 'businessDetails' (canonical key) with fallback to 'businessProfile'
+ const saved = localStorage.getItem('businessDetails') || localStorage.getItem('businessProfile');
  if (saved) {
- setBusiness(JSON.parse(saved));
+ setTimeout(() => setBusiness(JSON.parse(saved)), 0);
  }
  }, [isOpen]);
 
@@ -53,21 +54,21 @@ const InvoiceDetailsModal: React.FC<InvoiceDetailsModalProps> = ({ invoice, isOp
  title={t('transactions.invoice_details')}
  maxWidth="4xl"
  >
- <div className={`p-8 bg-white dark:bg-slate-900 text-slate-900 dark:text-white ltr`} style={{ fontFamily: 'Segoe UI, sans-serif' }}>
+ <div className={`p-4 md:p-8 bg-white dark:bg-slate-900 text-slate-900 dark:text-white ltr`} style={{ fontFamily: 'Segoe UI, sans-serif' }}>
 
  {/* 1. Header Section */}
- <div className="flex justify-between items-start mb-8 border-b-2 border-slate-100 dark:border-slate-800 pb-6">
+ <div className="flex flex-col md:flex-row justify-between items-start mb-6 md:mb-8 border-b-2 border-slate-100 dark:border-slate-800 pb-4 md:pb-6 gap-4 md:gap-0">
  {/* Logo Area */}
- <div className="w-1/3">
+ <div className="w-full md:w-1/3 text-center md:text-left">
  {business?.logoUrl ? (
- <img src={business.logoUrl} alt="Logo"className="max-h-24 max-w-full object-contain"/>
+ <img src={business.logoUrl} alt="Logo"className="max-h-24 max-w-full object-contain mx-auto md:mx-0"/>
 ) : (
  <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{business?.name || 'Business Name'}</h1>
 )}
  </div>
 
  {/* Company Details (Right/Left based on RTL) */}
- <div className={`w-1/3 text-right text-sm space-y-1`}>
+ <div className={`w-full md:w-1/3 text-center md:text-right text-sm space-y-1`}>
  {business?.logoUrl && <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{business.name}</h2>}
  <p className="text-slate-600 dark:text-slate-300">{business?.address} {business?.pincode ?`- ${business.pincode}`: ''}</p>
  {business?.phone && <p className="text-slate-600 dark:text-slate-300">{t('settings.profile.phone')}: <span dir="ltr">{business.phone}</span></p>}
@@ -84,7 +85,7 @@ const InvoiceDetailsModal: React.FC<InvoiceDetailsModalProps> = ({ invoice, isOp
  </div>
 
  {/* 2. Meta Grid (Invoice Info & Customer Info) */}
- <div className="grid grid-cols-2 gap-6 mb-8">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
  {/* Invoice Info */}
  <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-800">
  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">

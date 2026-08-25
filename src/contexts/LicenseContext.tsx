@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNotification } from './NotificationContext';
 
 interface LicenseState {
@@ -26,7 +26,7 @@ export const LicenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
  loading: true
  });
 
- const checkStatus = async () => {
+ const checkStatus = useCallback(async () => {
  if (!window.electron) {
  // Browser dev mode fallback
  setState({ status: 'ok', remainingDays: 999, machineId: 'DEV-MODE', loading: false });
@@ -42,9 +42,9 @@ export const LicenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
  // Default to expired/error state if check fails massively
  setState(prev => ({ ...prev, status: 'expired', loading: false }));
  }
- };
+ }, [addToast]);
 
- const activate = async (key: string) => {
+ const activate = useCallback(async (key: string) => {
  if (!window.electron) return true;
 
  try {
@@ -59,9 +59,9 @@ export const LicenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
  addToast('License activation failed', 'error');
  return false;
  }
- };
+ }, [addToast, checkStatus]);
 
- const resetLicense = async (): Promise<boolean> => {
+ const resetLicense = useCallback(async (): Promise<boolean> => {
  if (!window.electron) return false;
  try {
  const success = await window.electron.resetLicense();
@@ -75,17 +75,19 @@ export const LicenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
  addToast('License reset failed', 'error');
  return false;
  }
- };
+ }, [addToast, checkStatus]);
 
  useEffect(() => {
  checkStatus();
  // Periodic re-check every 1 hour to ensure validity during long sessions
  const interval = setInterval(checkStatus, 3600000); // 1 hour
  return () => clearInterval(interval);
- }, []);
+ }, [checkStatus]);
+
+ const contextValue = useMemo(() => ({ ...state, activate, checkStatus, resetLicense }), [state, activate, checkStatus, resetLicense]);
 
  return (
- <LicenseContext.Provider value={{ ...state, activate, checkStatus, resetLicense }}>
+ <LicenseContext.Provider value={contextValue}>
  {children}
  </LicenseContext.Provider>
 );

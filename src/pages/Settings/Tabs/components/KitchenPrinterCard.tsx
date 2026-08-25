@@ -41,21 +41,31 @@ const KitchenPrinterCard: React.FC<Props> = ({ config, updateConfig, printers })
  </FormRow>
 
  {config.kitchen.enabled && (
- <div className="pt-4 space-y-4">
+ <div className="divide-y divide-slate-100 dark:divide-slate-700">
  <FormRow 
- label={t('settings.printing.kitchen_device', 'Kitchen Device')} 
- description={t('settings.printing.kitchen_device_desc', 'Select the printer located in the kitchen')}
- icon={Printer}
+ label={t('settings.printing.device_label', 'Printer Device')} 
+ description={t('settings.printing.kitchen_device_desc', 'Select the thermal printer located in the kitchen')}
  >
  <select
  value={config.kitchen.printerName}
  onChange={(e) => updateKitchen({ printerName: e.target.value })}
- className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white min-w-[220px]"
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[220px]"
  >
- <option value="">Select Kitchen Printer</option>
+ <option value="">{t('common.select_printer', 'Select Printer')}</option>
  {printers.map((p, idx) => (
  <option key={idx} value={p.name}>{p.name}</option>
-))}
+ ))}
+ </select>
+ </FormRow>
+
+ <FormRow label={t('settings.printing.paper_size', 'Paper Size')}>
+ <select
+ value={config.kitchen.paperSize}
+ onChange={(e) => updateKitchen({ paperSize: e.target.value as any })}
+ className="w-full sm:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm dark:text-white sm:min-w-[180px]"
+ >
+ <option value="80mm">80mm</option>
+ <option value="58mm">58mm</option>
  </select>
  </FormRow>
 

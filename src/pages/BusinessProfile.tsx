@@ -26,15 +26,6 @@ const BusinessProfile: React.FC = () => {
  const { isAdmin, user, hasPermission } = useAuth();
  const { addToast } = useNotification();
 
- if (!hasPermission('settings_manage')) {
- return (
- <div className="flex flex-col items-center justify-center h-screen text-center p-8">
- <ShieldOff size={48} className="text-slate-300 mb-4"/>
- <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
- <p className="text-slate-700">{t('settings.access_denied_msg') || 'You do not have permission to manage business settings.'}</p>
- </div>
-);
- }
  const [details, setDetails] = useState<BusinessDetails>(() => {
  const saved = localStorage.getItem('businessDetails');
  return saved ? JSON.parse(saved) : {
@@ -61,6 +52,7 @@ const BusinessProfile: React.FC = () => {
  email: (details.email || '').trim(),
  gstin: (details.gstin || '').trim(),
  vatNo: (details.gstin || '').trim(),
+ crNo: (details.crNo || '').trim(),
  };
  localStorage.setItem('businessDetails', JSON.stringify(sanitizedDetails));
  setDetails(sanitizedDetails);
@@ -89,6 +81,16 @@ const BusinessProfile: React.FC = () => {
  // Modal States
  const [userToDelete, setUserToDelete] = useState<string | null>(null);
  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+
+ if (!hasPermission('settings_manage')) {
+ return (
+ <div className="flex flex-col items-center justify-center h-screen text-center p-4 md:p-8">
+ <ShieldOff size={48} className="text-slate-300 mb-4"/>
+ <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300">{t('common.access_denied')}</h2>
+ <p className="text-slate-700">{t('settings.access_denied_msg') || 'You do not have permission to manage business settings.'}</p>
+ </div>
+ );
+ }
 
  const handleDeleteUser = (id: string) => {
  setUserToDelete(id);

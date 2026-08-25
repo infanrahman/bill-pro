@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 
 export interface PrinterConfig {
  selectedPrinter: string;
@@ -34,36 +35,77 @@ export const printContent = async (html: string, config: Partial<PrinterConfig> 
  console.error("Electron print failed:", e);
  return false;
  }
- } else {
- // Web Fallback
- console.log("Printing via Web Fallback");
- const iframe = document.createElement('iframe');
- iframe.style.display = 'none';
- iframe.style.position = 'fixed';
- iframe.style.right = '0';
- iframe.style.bottom = '0';
- document.body.appendChild(iframe);
+  } else if (Capacitor.isNativePlatform()) {
+    console.log("Printing via Native OS Dialog");
+    const root = document.getElementById('root');
+    if (root) root.style.display = 'none';
 
- const doc = iframe.contentWindow?.document;
- if (doc) {
- doc.open();
- doc.write(html);
- doc.close();
+    const printContainer = document.createElement('div');
+    printContainer.id = 'capacitor-print-container';
+    printContainer.style.backgroundColor = 'white';
+    printContainer.style.width = '100%';
+    printContainer.style.height = '100%';
+    printContainer.style.position = 'absolute';
+    printContainer.style.top = '0';
+    printContainer.style.left = '0';
+    printContainer.style.zIndex = '999999';
+    printContainer.innerHTML = html;
+    document.body.appendChild(printContainer);
 
- return new Promise<boolean>((resolve) => {
- iframe.contentWindow?.addEventListener('load', () => {
- setTimeout(() => {
- iframe.contentWindow?.print();
- setTimeout(() => {
- document.body.removeChild(iframe);
- resolve(true);
- }, 1000); // Wait for print dialog to close/process
- }, 500);
- });
- });
- }
- return false;
- }
+    return new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (err) {
+          console.error("Native print execution failed:", err);
+        }
+        setTimeout(() => {
+          try {
+            document.body.removeChild(printContainer);
+            if (root) root.style.display = 'block';
+          } catch (e) {}
+          resolve(true);
+        }, 1000);
+      }, 500);
+    });
+  } else {
+    // Web Fallback
+    console.log("Printing via Web Fallback");
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      return new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (err) {
+            console.error("Web print execution failed:", err);
+          }
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {}
+            resolve(true);
+          }, 1000);
+        }, 500);
+      });
+    }
+    return false;
+  }
 };
 
 export const printThermalRaw = async (data: any, printerName: string) => {

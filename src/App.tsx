@@ -1,4 +1,4 @@
-import React, { useEffect, lazy, Suspense } from 'react';
+import React, { useEffect, lazy, Suspense, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -44,19 +44,23 @@ const AppContent = () => {
 
  // Fix #1: Run auto-backup check every hour (not just once at startup)
  // Fix #10: Show user-facing toast on success or failure
- useEffect(() => {
- const runBackup = async () => {
- const result = await checkAndPerformAutoBackup();
- if (result.status === 'success') {
- addToast('Auto backup completed successfully.', 'success');
- } else if (result.status === 'error') {
- addToast(`Auto backup failed: ${result.message}`, 'error');
- }
- };
- runBackup();
- const interval = setInterval(runBackup, 60 * 60 * 1000); // re-check every hour
- return () => clearInterval(interval);
- }, [addToast]);
+  const addToastRef = useRef(addToast);
+  useEffect(() => { addToastRef.current = addToast; }, [addToast]);
+
+  useEffect(() => {
+  const runBackup = async () => {
+  const result = await checkAndPerformAutoBackup();
+  if (result.status === 'success') {
+  addToastRef.current('Auto backup completed successfully.', 'success');
+  } else if (result.status === 'error') {
+  addToastRef.current(`Auto backup failed: ${result.message}`, 'error');
+  }
+  };
+  runBackup();
+  const interval = setInterval(runBackup, 60 * 60 * 1000); // re-check every hour
+  return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
  useEffect(() => {
  const handleGlobalF8 = async (e: KeyboardEvent) => {

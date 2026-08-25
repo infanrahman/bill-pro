@@ -58,9 +58,11 @@ export const CommandPalette: React.FC = () => {
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-      setQuery('');
-      setSelectedIndex(0);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        setQuery('');
+        setSelectedIndex(0);
+      }, 100);
     }
   }, [isOpen]);
 

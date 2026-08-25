@@ -44,13 +44,14 @@ export const useDayBookData = (range: 'today' | 'custom', customStartStr?: strin
  if (range === 'custom') {
  if (safeCustomStart && safeCustomEnd) {
  start = safeCustomStart;
- end = safeCustomEnd;
+ // Always use end-of-day for the end date so same-day and full-day filters work
+ end = endOfDay(safeCustomEnd);
  } else if (safeCustomStart) {
  start = safeCustomStart;
  end = endOfDay(safeCustomStart);
  } else if (safeCustomEnd) {
  start = startOfDay(safeCustomEnd);
- end = safeCustomEnd;
+ end = endOfDay(safeCustomEnd);
  } else {
  start = startOfDay(new Date());
  end = endOfDay(new Date());
@@ -252,7 +253,15 @@ export const useDayBookData = (range: 'today' | 'custom', customStartStr?: strin
  });
  }
 
- dayBookItems.sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
+  // Ensure all date fields are true Date objects (IndexedDB may return ISO strings)
+  dayBookItems.forEach((item: any) => {
+  if (!(item.date instanceof Date)) item.date = new Date(item.date);
+  });
+  dayBookItems.sort((a: any, b: any) => {
+  const aTime = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime();
+  const bTime = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime();
+  return bTime - aTime;
+  });
 
  const totalIn = dayBookItems.reduce((sum: any, item: any) => sum + item.moneyIn, 0);
  const totalOut = dayBookItems.reduce((sum: any, item: any) => sum + item.moneyOut, 0);

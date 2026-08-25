@@ -3,11 +3,13 @@ import Modal from '../UI/Modal';
 import { db, type Invoice, type InvoiceItem } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
 import { generateInvoicePDF } from '../../services/invoiceGenerator';
-import { Zap } from 'lucide-react';
+import { Zap, ScanBarcode } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTranslation } from 'react-i18next';
 import { useKeyboard } from '../../contexts/KeyboardContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { Capacitor } from '@capacitor/core';
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 interface QuickPaymentModalProps {
  isOpen: boolean;
@@ -65,28 +67,34 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
  if (!isOpen) return;
 
  const handleKeyDown = async (e: KeyboardEvent) => {
- const now = Date.now();
+  // M16 Fix: Ignore when user is typing in form inputs, textareas, or selects
+  const target = e.target as HTMLElement;
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+  return;
+  }
 
- // If time between keys is long, reset buffer (it's manual typing)
- if (now - lastKeyTime.current > 100) {
- barcodeBuffer.current = '';
- }
- lastKeyTime.current = now;
+  const now = Date.now();
 
- if (e.key === 'Enter') {
- if (barcodeBuffer.current.length > 3) {
- // Start Search
- e.preventDefault();
- e.stopPropagation();
- const code = barcodeBuffer.current;
- barcodeBuffer.current = ''; // Reset immediately
- await handleBarcodeScan(code);
- }
- // Else: normal Enter key, let input handlers deal with it
- } else if (e.key.length === 1) {
- barcodeBuffer.current += e.key;
- }
- };
+  // If time between keys is long, reset buffer (it's manual typing)
+  if (now - lastKeyTime.current > 300) {
+  barcodeBuffer.current = '';
+  }
+  lastKeyTime.current = now;
+
+  if (e.key === 'Enter') {
+  if (barcodeBuffer.current.length > 3) {
+  // Start Search
+  e.preventDefault();
+  e.stopPropagation();
+  const code = barcodeBuffer.current.trim();
+  barcodeBuffer.current = ''; // Reset immediately
+  await handleBarcodeScan(code);
+  }
+  // Else: normal Enter key, let input handlers deal with it
+  } else if (e.key.length === 1) {
+  barcodeBuffer.current += e.key;
+  }
+  };
 
  window.addEventListener('keydown', handleKeyDown);
  return () => window.removeEventListener('keydown', handleKeyDown);
@@ -253,65 +261,67 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
 
  // Split logic for reuse
  const processPayment = async (currentItems: QuickPayItem[]) => {
- setIsLoading(true);
+  if (isLoading) return; // H17 Fix: Guard against double execution
+  setIsLoading(true);
 
- try {
- const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || '{}');
- const currentTaxRate = businessDetails.taxRate || 15;
+  try {
+  const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || '{}');
+  const currentTaxRate = businessDetails.taxRate || 15;
 
- const totalItemAmount = currentItems.reduce((sum, item) => sum + item.total, 0);
- let pSubTotal = 0, pTaxAmount = 0, pGrandTotal = 0;
+  const totalItemAmount = currentItems.reduce((sum, item) => sum + item.total, 0);
+  let pSubTotal = 0, pTaxAmount = 0, pGrandTotal = 0;
 
- if (taxOption === 'none') {
- pSubTotal = totalItemAmount;
- pTaxAmount = 0;
- pGrandTotal = totalItemAmount;
- } else if (taxOption === 'exclusive') {
- pSubTotal = totalItemAmount;
- pTaxAmount = totalItemAmount * (currentTaxRate / 100);
- pGrandTotal = pSubTotal + pTaxAmount;
- } else if (taxOption === 'inclusive') {
- pGrandTotal = totalItemAmount;
- const base = pGrandTotal / (1 + (currentTaxRate / 100));
- pSubTotal = Number(base.toFixed(2));
- pTaxAmount = pGrandTotal - pSubTotal;
- }
+  if (taxOption === 'none') {
+  pSubTotal = Math.round(totalItemAmount * 100) / 100;
+  pTaxAmount = 0;
+  pGrandTotal = pSubTotal;
+  } else if (taxOption === 'exclusive') {
+  pSubTotal = Math.round(totalItemAmount * 100) / 100;
+  pTaxAmount = Math.round(totalItemAmount * (currentTaxRate / 100) * 100) / 100; // M17 Fix
+  pGrandTotal = Math.round((pSubTotal + pTaxAmount) * 100) / 100;
+  } else if (taxOption === 'inclusive') {
+  pGrandTotal = Math.round(totalItemAmount * 100) / 100;
+  const base = pGrandTotal / (1 + (currentTaxRate / 100));
+  pSubTotal = Math.round(base * 100) / 100; // M17 Fix
+  pTaxAmount = Math.round((pGrandTotal - pSubTotal) * 100) / 100;
+  }
 
- // 1. Create Invoice Items
- const invoiceItems: InvoiceItem[] = currentItems.map(item => {
- return {
- itemId: item.itemId || '', // '' for manual items
- name: item.name,
- quantity: item.quantity,
- price: item.price,
- total: item.total,
- taxRate: taxOption === 'none' ? 0 : currentTaxRate,
- taxType: taxOption === 'inclusive' ? 'inclusive' : 'exclusive'
- };
- });
+  // 1. Create Invoice Items
+  const invoiceItems: InvoiceItem[] = currentItems.map(item => {
+  return {
+  itemId: item.itemId || '', // '' for manual items
+  name: item.name,
+  quantity: item.quantity,
+  price: Math.round(item.price * 100) / 100,
+  total: Math.round(item.total * 100) / 100,
+  taxRate: taxOption === 'none' ? 0 : currentTaxRate,
+  taxType: taxOption === 'inclusive' ? 'inclusive' : 'exclusive'
+  };
+  });
 
- // 2. Create Invoice Record
- const { createRecordMetadata } = await import('../../services/db');
- 
- const invoice = {
- ...createRecordMetadata(),
- branchId: activeBranchId,
- invoiceNumber:`QP-${Date.now().toString().slice(-6)}`,
- customerName: 'Quick Sale',
- items: invoiceItems,
- subTotal: pSubTotal,
- taxAmount: pTaxAmount,
- discountAmount: 0,
- grandTotal: pGrandTotal,
- paidAmount: pGrandTotal,
- remainingAmount: 0,
- paymentMode: paymentMode as any,
- paymentStatus: 'paid',
- status: 'paid',
- type: 'invoice',
- createdAt: new Date(),
- taxRate: currentTaxRate
- } as Invoice;
+  // 2. Create Invoice Record
+  const { createRecordMetadata } = await import('../../services/db');
+  
+  const invoice = {
+  ...createRecordMetadata(),
+  branchId: activeBranchId,
+  // H16 Fix: Use timestamp + random entropy to prevent collisions
+  invoiceNumber: `QP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+  customerName: 'Quick Sale',
+  items: invoiceItems,
+  subTotal: pSubTotal,
+  taxAmount: pTaxAmount,
+  discountAmount: 0,
+  grandTotal: pGrandTotal,
+  paidAmount: pGrandTotal,
+  remainingAmount: 0,
+  paymentMode: paymentMode as any,
+  paymentStatus: 'paid',
+  status: 'paid',
+  type: 'invoice',
+  createdAt: new Date(),
+  taxRate: currentTaxRate
+  } as Invoice;
 
  const id = await db.invoices.add(invoice);
 
@@ -369,6 +379,7 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('common.item_description')}</label>
+ <div className="flex gap-2">
  <input
  ref={nameInputRef}
  type="text"
@@ -381,8 +392,31 @@ const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({ isOpen, onClose }
  amountInputRef.current?.focus();
  }
  }}
- className="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-yellow-500 outline-none"
+ className="flex-1 px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-yellow-500 outline-none"
  />
+ {Capacitor.isNativePlatform() && settings?.scannerType !== 'hardware' && (
+ <button
+ type="button"
+ onClick={async () => {
+ try {
+ await BarcodeScanner.requestPermissions();
+ const result = await BarcodeScanner.scan();
+ if (result.barcodes.length > 0) {
+ const rawVal = result.barcodes[0].rawValue;
+ if (rawVal) {
+ await handleBarcodeScan(rawVal);
+ }
+ }
+ } catch (err) {
+ addToast('Camera scan failed', 'error');
+ }
+ }}
+ className="bg-slate-800 dark:bg-slate-700 text-white px-3 py-2 rounded-lg"
+ >
+ <ScanBarcode size={20} />
+ </button>
+ )}
+ </div>
  </div>
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('dashboard.amount')}</label>

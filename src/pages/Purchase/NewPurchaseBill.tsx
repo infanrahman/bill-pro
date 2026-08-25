@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { db, type Item, type Purchase, type PurchaseItem, type SyncEntity, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Search, Trash2, Save, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Trash2, Save, ArrowLeft, Printer } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../components/UI/Modal';
+import ItemForm from '../Inventory/ItemForm';
+import BarcodeModal from '../Inventory/BarcodeModal';
 
 const NewPurchaseBill = () => {
     const navigate = useNavigate();
@@ -31,10 +33,17 @@ const NewPurchaseBill = () => {
     const [notes, setNotes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
+    // Barcode / Label Printing State
+    const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+    const [selectedItemsForLabel, setSelectedItemsForLabel] = useState<Item[] | null>(null);
+
     // Inline supplier creation
     const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
     const [newSupplierName, setNewSupplierName] = useState('');
     const [newSupplierPhone, setNewSupplierPhone] = useState('');
+    const [newSupplierEmail, setNewSupplierEmail] = useState('');
+    const [newSupplierTaxNumber, setNewSupplierTaxNumber] = useState('');
+    const [newSupplierLocation, setNewSupplierLocation] = useState('');
 
     // Inline item creation
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
@@ -43,14 +52,20 @@ const NewPurchaseBill = () => {
     const [newItemPrice, setNewItemPrice] = useState('');
     const [newItemStock, setNewItemStock] = useState('');
     const [newItemUnit, setNewItemUnit] = useState('');
+    const [newItemCategoryId, setNewItemCategoryId] = useState('');
+
+    const categories = useLiveQuery(() =>
+        activeBranch?.isMaster ? db.categories.filter((c: any) => !c.deletedAt).toArray() : db.categories.where('branchId').equals(activeBranchId).filter((c: any) => !c.deletedAt).toArray(),
+        [activeBranchId, activeBranch?.isMaster]
+    );
 
     const suppliers = useLiveQuery(() =>
-        activeBranch?.isMaster ? db.suppliers.toArray() : db.suppliers.where('branchId').equals(activeBranchId).toArray(),
+        activeBranch?.isMaster ? db.suppliers.filter((s: any) => !s.deletedAt).toArray() : db.suppliers.where('branchId').equals(activeBranchId).filter((s: any) => !s.deletedAt).toArray(),
         [activeBranchId, activeBranch?.isMaster]
     );
 
     const inventoryItems = useLiveQuery(() =>
-        activeBranch?.isMaster ? db.items.toArray() : db.items.where('branchId').equals(activeBranchId).toArray(),
+        activeBranch?.isMaster ? db.items.filter((i: any) => !i.deletedAt).toArray() : db.items.where('branchId').equals(activeBranchId).filter((i: any) => !i.deletedAt).toArray(),
         [activeBranchId, activeBranch?.isMaster]
     );
 
@@ -58,25 +73,28 @@ const NewPurchaseBill = () => {
         i.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const addToOrder = (item: Item) => {
-        const existing = orderItems.find(i => i.itemId === item.id);
-        if (existing) {
-            setOrderItems(orderItems.map((i: any) =>
-                i.itemId === item.id ? { ...i, quantity: i.quantity + 1 } : i
-            ));
-        } else {
-            const defaultTaxRate = (item.taxRate && item.taxRate > 0) ? item.taxRate : 15;
-            setOrderItems([...orderItems, {
-                itemId: item.id!,
-                name: item.name,
-                quantity: 1,
-                cost: item.purchasePrice,
-                unit: item.unit,
-                taxRate: defaultTaxRate,
-                taxType: item.taxType || 'exclusive'
-            }]);
-        }
-    };
+    const addToOrder = useCallback((item: Item) => {
+        setOrderItems(prev => {
+            const existing = prev.find((i: any) => i.itemId === item.id);
+            if (existing) {
+                return prev.map((i: any) =>
+                    i.itemId === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                );
+            } else {
+                // H18 Fix: Preserve 0% tax rate if specified
+                const defaultTaxRate = item.taxRate !== undefined && item.taxRate !== null ? item.taxRate : 15;
+                return [...prev, {
+                    itemId: item.id!,
+                    name: item.name,
+                    quantity: 1,
+                    cost: item.purchasePrice,
+                    unit: item.unit,
+                    taxRate: defaultTaxRate,
+                    taxType: item.taxType || 'exclusive'
+                }];
+            }
+        });
+    }, []);
 
     const updateOrderItem = (itemId: string, field: string, value: string | number) => {
         setOrderItems(orderItems.map((i: any) =>
@@ -118,6 +136,65 @@ const NewPurchaseBill = () => {
     const advance = parseFloat(paidAmount) || 0;
     const balanceDue = Math.max(0, totalAmount - advance);
 
+    const handlePrintLabels = async () => {
+        if (orderItems.length === 0) {
+            addToast(t('purchases.no_items_added', 'No items added yet'), 'error');
+            return;
+        }
+        try {
+            const fullItems: Item[] = [];
+            for (const pi of orderItems) {
+                const dbItem = await db.items.get(pi.itemId);
+                const qty = Number(pi.quantity) || 1;
+                const cost = Number(pi.cost) || (dbItem ? Number(dbItem.purchasePrice) : 0);
+                const rate = Number(pi.taxRate) || 0;
+                const taxType = pi.taxType || 'exclusive';
+
+                let unitTotalPurchaseCost = cost;
+                if (settings.applyTax && rate > 0) {
+                    if (taxType === 'exclusive') {
+                        unitTotalPurchaseCost = cost * (1 + rate / 100);
+                    } else {
+                        unitTotalPurchaseCost = cost;
+                    }
+                }
+
+                unitTotalPurchaseCost = Math.round(unitTotalPurchaseCost * 100) / 100;
+
+                if (dbItem) {
+                    fullItems.push({
+                        ...dbItem,
+                        salePrice: dbItem.salePrice,
+                        purchasePrice: unitTotalPurchaseCost,
+                        stock: qty,
+                        supplierNameFallback: supplier || (dbItem as any).supplierNameFallback
+                    } as any);
+                } else {
+                    fullItems.push({
+                        id: pi.itemId,
+                        branchId: activeBranchId || '',
+                        updatedAt: new Date(),
+                        name: pi.name,
+                        barcode: '',
+                        salePrice: 0,
+                        purchasePrice: unitTotalPurchaseCost,
+                        taxType: pi.taxType || 'exclusive',
+                        taxRate: pi.taxRate || 0,
+                        stock: qty,
+                        minStock: 5,
+                        unit: pi.unit || 'pc',
+                        supplierNameFallback: supplier
+                    } as any);
+                }
+            }
+            setSelectedItemsForLabel(fullItems);
+            setIsLabelModalOpen(true);
+        } catch (err) {
+            console.error(err);
+            addToast(t('common.error'), 'error');
+        }
+    };
+
     const applyStockEffect = async (items: PurchaseItem[], purchaseType: 'bill' | 'order' | 'return', currentSupplierId?: string) => {
         if (purchaseType === 'order') return;
         for (const orderItem of items) {
@@ -130,7 +207,7 @@ const NewPurchaseBill = () => {
                         ...updateRecordMetadata(),
                         stock: newStock,
                         purchasePrice: orderItem.cost,
-                        ...(currentSupplierId ? { supplierId: currentSupplierId } : {})
+                        ...(currentSupplierId && !item.supplierId ? { supplierId: currentSupplierId } : {})
                     });
                 } else if (purchaseType === 'return') {
                     newStock -= orderItem.quantity;
@@ -149,20 +226,23 @@ const NewPurchaseBill = () => {
         try {
             const processedItems = orderItems.map((item: any) => {
                 const qty = item.quantity, cost = item.cost, rate = item.taxRate || 0, taxType = item.taxType || 'exclusive';
-                let lineTax = 0, lineTotal = 0;
+                let lineBeforeVat = 0, lineTax = 0, lineTotal = 0;
                 if (settings.applyTax) {
                     if (taxType === 'inclusive') {
                         const base = cost / (1 + rate / 100);
+                        lineBeforeVat = Math.round((base * qty) * 100) / 100;
                         lineTax = Math.round(((cost - base) * qty) * 100) / 100;
                         lineTotal = Math.round((cost * qty) * 100) / 100;
                     } else {
+                        lineBeforeVat = Math.round((cost * qty) * 100) / 100;
                         lineTax = Math.round(((cost * (rate / 100)) * qty) * 100) / 100;
-                        lineTotal = Math.round(((cost * qty) + lineTax) * 100) / 100;
+                        lineTotal = Math.round((lineBeforeVat + lineTax) * 100) / 100;
                     }
                 } else {
-                    lineTotal = Math.round((cost * qty) * 100) / 100;
+                    lineBeforeVat = Math.round((cost * qty) * 100) / 100;
+                    lineTotal = lineBeforeVat;
                 }
-                return { ...item, taxAmount: lineTax, total: lineTotal };
+                return { ...item, subtotalBeforeTax: lineBeforeVat, taxAmount: lineTax, total: lineTotal };
             });
 
             const purchaseData: Omit<Purchase, keyof SyncEntity | 'id'> = {
@@ -189,15 +269,16 @@ const NewPurchaseBill = () => {
                 if (supplierId) {
                     const sup = await db.suppliers.get(supplierId);
                     if (sup) {
+                        const curBal = sup.balance || 0; // H20 Fix: safe balance
                         if (type === 'bill') {
-                            await db.suppliers.update(sup.id!, { ...updateRecordMetadata(), balance: sup.balance + totalAmount - advance });
+                            await db.suppliers.update(sup.id!, { ...updateRecordMetadata(), balance: curBal + totalAmount - advance });
                         } else if (type === 'return') {
-                            await db.suppliers.update(sup.id!, { ...updateRecordMetadata(), balance: sup.balance - totalAmount });
+                            await db.suppliers.update(sup.id!, { ...updateRecordMetadata(), balance: curBal - totalAmount });
                         }
                     }
                 }
 
-                addToast(t('purchases.created'), 'success');
+                addToast(t('purchases.created', { type: typeLabel }) || 'Purchase bill added successfully', 'success');
                 addNotification(t('purchases.created', { type: `${type} #${purchaseData.orderNumber}` }), 'success', id);
             });
 
@@ -213,11 +294,20 @@ const NewPurchaseBill = () => {
     const handleAddSupplier = async () => {
         if (!newSupplierName.trim()) { addToast(t('suppliers.name_required'), 'error'); return; }
         try {
-            const id = await db.suppliers.add({ ...createRecordMetadata(), branchId: activeBranchId || '', name: newSupplierName, phone: newSupplierPhone, balance: 0 } as any);
+            const id = await db.suppliers.add({
+                ...createRecordMetadata(),
+                branchId: activeBranchId || '',
+                name: newSupplierName,
+                phone: newSupplierPhone || '',
+                email: newSupplierEmail || '',
+                taxNumber: newSupplierTaxNumber || '',
+                location: newSupplierLocation || '',
+                balance: 0
+            } as any);
             setSupplierId(id as string);
             setSupplier(newSupplierName);
             setIsAddSupplierOpen(false);
-            setNewSupplierName(''); setNewSupplierPhone('');
+            setNewSupplierName(''); setNewSupplierPhone(''); setNewSupplierEmail(''); setNewSupplierTaxNumber(''); setNewSupplierLocation('');
         } catch (e) { addToast(t('common.error'), 'error'); }
     };
 
@@ -227,26 +317,54 @@ const NewPurchaseBill = () => {
             const cost = parseFloat(newItemCost) || 0;
             const price = parseFloat(newItemPrice) || cost;
             const stock = parseFloat(newItemStock) || 0;
-            const id = await db.items.add({ ...createRecordMetadata(), branchId: activeBranchId || '', name: newItemName, salePrice: price, purchasePrice: cost, stock, taxType: 'exclusive', taxRate: 15, unit: newItemUnit || 'pcs', barcode: '' } as any);
-            addToOrder({ id: id as string, name: newItemName, salePrice: price, purchasePrice: cost, stock, unit: newItemUnit || 'pcs', taxType: 'exclusive', taxRate: 15 } as Item);
+            const id = await db.items.add({ ...createRecordMetadata(), branchId: activeBranchId || '', name: newItemName, salePrice: price, purchasePrice: cost, stock, taxType: 'exclusive', taxRate: 15, unit: newItemUnit || 'pcs', barcode: '', categoryId: newItemCategoryId || undefined } as any);
+            addToOrder({ id: id as string, name: newItemName, salePrice: price, purchasePrice: cost, stock, unit: newItemUnit || 'pcs', taxType: 'exclusive', taxRate: 15, categoryId: newItemCategoryId || undefined } as Item);
             setIsAddItemOpen(false);
-            setNewItemName(''); setNewItemCost(''); setNewItemPrice(''); setNewItemStock(''); setNewItemUnit('');
+            setNewItemName(''); setNewItemCost(''); setNewItemPrice(''); setNewItemStock(''); setNewItemUnit(''); setNewItemCategoryId('');
         } catch (e) { addToast(t('common.error'), 'error'); }
     };
 
     const typeLabel = type === 'bill' ? t('purchases.new_bill') : type === 'return' ? t('purchases.new_return') : t('purchases.new_order');
 
+    if (isAddItemOpen) {
+        return (
+            <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+                <ItemForm 
+                    isInline 
+                    onSuccess={(item) => {
+                        addToOrder(item);
+                        setIsAddItemOpen(false);
+                    }} 
+                    onCancel={() => setIsAddItemOpen(false)} 
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
             {/* Page Header */}
-            <div className="flex items-center gap-4 px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
-                <button type="button" onClick={() => navigate('/purchase')} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors">
-                    <ArrowLeft size={20} className="text-slate-700 dark:text-slate-300" />
-                </button>
-                <div>
-                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">{typeLabel}</h1>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Fill in the details to create a new {type}</p>
+            <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => navigate('/purchase')} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors">
+                        <ArrowLeft size={20} className="text-slate-700 dark:text-slate-300" />
+                    </button>
+                    <div>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">{typeLabel}</h1>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Fill in the details to create a new {type}</p>
+                    </div>
                 </div>
+
+                {orderItems.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={handlePrintLabels}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl font-semibold text-xs uppercase tracking-wider transition-colors border border-indigo-200 dark:border-indigo-800"
+                    >
+                        <Printer size={16} />
+                        <span>{t('inventory.print_label') || 'Print Labels'}</span>
+                    </button>
+                )}
             </div>
 
             {/* Body */}
@@ -267,13 +385,13 @@ const NewPurchaseBill = () => {
                     </div>
                     <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                         {filteredInventory?.map((item: any) => (
-                            <button key={item.id} type="button" onClick={() => addToOrder(item)} className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors">
-                                <p className="font-medium text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
-                                <div className="flex justify-between mt-0.5">
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('inventory.stock')}: {item.stock ?? 0}</span>
-                                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(item.purchasePrice)}</span>
-                                </div>
-                            </button>
+                            <PurchaseItemCard 
+                                key={item.id} 
+                                item={item} 
+                                onAdd={addToOrder} 
+                                formatCurrency={formatCurrency} 
+                                t={t} 
+                            />
                         ))}
                     </div>
                 </div>
@@ -322,33 +440,51 @@ const NewPurchaseBill = () => {
                             <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{t('purchases.items_header', { count: orderItems.length })}</h3>
                             <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                                 {orderItems.length === 0 ? (
-                                    <div className="p-10 text-center text-slate-400 text-sm">{t('purchases.no_items')}</div>
+                                    <div className="p-10 text-center text-slate-400 text-sm">{t('purchases.no_items_added', 'No items added yet')}</div>
                                 ) : (
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm min-w-[700px]">
+                                        <table className="w-full text-sm min-w-[850px]">
                                             <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                                                 <tr>
                                                     <th className="text-left p-3 font-semibold text-slate-500 dark:text-slate-400">{t('purchases.item_name')}</th>
                                                     <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">{t('purchases.unit')}</th>
                                                     <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">{t('purchases.qty')}</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('purchases.cost')}</th>
+                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-24">{t('purchases.cost')}</th>
                                                     <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">Tax %</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">Total</th>
+                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('purchases.before_vat_amount')}</th>
+                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('purchases.vat_amount')}</th>
+                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-32">{t('purchases.total_with_vat')}</th>
                                                     <th className="w-10"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                                 {orderItems.map((item: any) => {
-                                                    const qty = item.quantity || 0, cost = item.cost || 0, rate = item.taxRate || 0;
-                                                    const lineTax = (cost * (rate / 100)) * qty;
-                                                    const lineTotal = (cost * qty) + lineTax;
+                                                    const qty = item.quantity || 0, cost = item.cost || 0, rate = item.taxRate || 0, taxType = item.taxType || 'exclusive';
+                                                    let lineBeforeVat = 0, lineTax = 0, lineTotal = 0;
+                                                    if (settings.applyTax) {
+                                                        if (taxType === 'inclusive') {
+                                                            const base = cost / (1 + rate / 100);
+                                                            lineBeforeVat = base * qty;
+                                                            lineTax = (cost - base) * qty;
+                                                            lineTotal = cost * qty;
+                                                        } else {
+                                                            lineBeforeVat = cost * qty;
+                                                            lineTax = (cost * (rate / 100)) * qty;
+                                                            lineTotal = lineBeforeVat + lineTax;
+                                                        }
+                                                    } else {
+                                                        lineBeforeVat = cost * qty;
+                                                        lineTotal = lineBeforeVat;
+                                                    }
                                                     return (
                                                         <tr key={item.itemId} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                             <td className="p-3 font-medium dark:text-white">{item.name}</td>
                                                             <td className="p-3"><input type="text" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.unit || ''} onChange={e => updateOrderItem(item.itemId, 'unit', e.target.value)} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.quantity} min={1} onChange={e => updateOrderItem(item.itemId, 'quantity', parseFloat(e.target.value) || 1)} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-right dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.cost} onChange={e => updateOrderItem(item.itemId, 'cost', parseFloat(e.target.value) || 0)} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.taxRate || 0} onChange={e => updateOrderItem(item.itemId, 'taxRate', parseFloat(e.target.value) || 0)} /></td>
+                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.quantity} min={1} onChange={e => updateOrderItem(item.itemId, 'quantity', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
+                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-right dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.cost} onChange={e => updateOrderItem(item.itemId, 'cost', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
+                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.taxRate ?? 0} onChange={e => updateOrderItem(item.itemId, 'taxRate', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
+                                                            <td className="p-3 text-right text-slate-600 dark:text-slate-300 font-medium">{formatCurrency(lineBeforeVat)}</td>
+                                                            <td className="p-3 text-right text-slate-600 dark:text-slate-300 font-medium">{formatCurrency(lineTax)}</td>
                                                             <td className="p-3 text-right font-semibold dark:text-white">{formatCurrency(lineTotal)}</td>
                                                             <td className="p-3"><button onClick={() => removeOrderItem(item.itemId)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 rounded-lg transition-colors"><Trash2 size={15} /></button></td>
                                                         </tr>
@@ -400,6 +536,12 @@ const NewPurchaseBill = () => {
                             {type === 'bill' && advance > 0 && <span>{t('purchases.balance_due')}: <strong className="text-red-500 dark:text-red-400">{formatCurrency(balanceDue)}</strong></span>}
                         </div>
                         <div className="flex gap-3">
+                            {orderItems.length > 0 && (
+                                <button type="button" onClick={handlePrintLabels} className="px-5 py-2.5 text-sm font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-2 transition-colors">
+                                    <Printer size={16} />
+                                    {t('inventory.print_label') || 'Print Labels'}
+                                </button>
+                            )}
                             <button type="button" onClick={() => navigate('/purchase')} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-xl transition-colors">{t('common.cancel')}</button>
                             <button type="button" onClick={handleSave} disabled={isSaving} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 text-sm font-semibold disabled:opacity-60 transition-colors">
                                 <Save size={16} />
@@ -415,6 +557,9 @@ const NewPurchaseBill = () => {
                 <div className="p-6 space-y-4">
                     <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('suppliers.name')} *</label><input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} /></div>
                     <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('suppliers.phone')}</label><input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newSupplierPhone} onChange={e => setNewSupplierPhone(e.target.value)} /></div>
+                    <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('suppliers.tax_vat') || 'Tax / VAT Number'}</label><input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newSupplierTaxNumber} onChange={e => setNewSupplierTaxNumber(e.target.value)} /></div>
+                    <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('suppliers.email') || 'Email'}</label><input type="email" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newSupplierEmail} onChange={e => setNewSupplierEmail(e.target.value)} /></div>
+                    <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('suppliers.location') || 'Location'}</label><textarea className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" rows={2} value={newSupplierLocation} onChange={e => setNewSupplierLocation(e.target.value)} /></div>
                     <div className="flex justify-end gap-3 pt-2">
                         <button onClick={() => setIsAddSupplierOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-xl">{t('common.cancel')}</button>
                         <button onClick={handleAddSupplier} className="px-5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium">{t('common.save')}</button>
@@ -422,26 +567,32 @@ const NewPurchaseBill = () => {
                 </div>
             </Modal>
 
-            {/* Add Item Modal */}
-            <Modal isOpen={isAddItemOpen} onClose={() => setIsAddItemOpen(false)} title={t('inventory.add_item')} maxWidth="md">
-                <div className="p-6 space-y-4">
-                    <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.item_name')} *</label><input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemName} onChange={e => setNewItemName(e.target.value)} /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('purchases.cost')}</label><input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemCost} onChange={e => setNewItemCost(e.target.value)} placeholder="0.00" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.selling_price')}</label><input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)} placeholder="0.00" /></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.initial_stock')}</label><input type="number" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemStock} onChange={e => setNewItemStock(e.target.value)} placeholder="0" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('purchases.unit')}</label><input type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} placeholder="pcs" /></div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsAddItemOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-xl">{t('common.cancel')}</button>
-                        <button onClick={handleAddItem} className="px-5 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium">{t('common.save')}</button>
-                    </div>
-                </div>
-            </Modal>
+            {/* Add Item Modal Replaced by Inline ItemForm Page */}
+
+            {/* Barcode Modal */}
+            <BarcodeModal
+                isOpen={isLabelModalOpen}
+                onClose={() => setIsLabelModalOpen(false)}
+                items={selectedItemsForLabel}
+            />
         </div>
     );
 };
-
 export default NewPurchaseBill;
+
+interface PurchaseItemCardProps {
+    item: any;
+    onAdd: (item: any) => void;
+    formatCurrency: (amount: number) => string;
+    t: any;
+}
+
+const PurchaseItemCard = memo(({ item, onAdd, formatCurrency, t }: PurchaseItemCardProps) => (
+    <button type="button" onClick={() => onAdd(item)} className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors">
+        <p className="font-medium text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
+        <div className="flex justify-between mt-0.5">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('inventory.stock')}: {item.stock ?? 0}</span>
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(item.purchasePrice)}</span>
+        </div>
+    </button>
+));

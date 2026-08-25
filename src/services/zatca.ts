@@ -12,16 +12,13 @@ import QRCode from 'qrcode';
 
 const getTLV = (tag: number, value: string): Uint8Array => {
  const encoder = new TextEncoder();
- const valueBytes = encoder.encode(value);
- const length = valueBytes.length;
+ const valueBytes = encoder.encode(value || '');
+ const length = valueBytes.length > 255 ? 255 : valueBytes.length;
 
- // Create array: [tag, length, ...valueBytes]
- // Note: This simple implementation assumes length < 255.
- // ZATCA specs usually have short fields for these tags.
  const tlv = new Uint8Array(2 + length);
  tlv[0] = tag;
  tlv[1] = length;
- tlv.set(valueBytes, 2);
+ tlv.set(valueBytes.slice(0, length), 2);
 
  return tlv;
 };
@@ -70,5 +67,5 @@ export const generateZatcaQR = async (
  * Returns formatted date for ZATCA (e.g. 2023-01-01T12:00:00Z)
  */
 export const formatZatcaDate = (date: Date) => {
- return date.toISOString();
+ return date.toISOString().replace(/\.\d{3}/, '');
 }

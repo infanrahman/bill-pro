@@ -1,169 +1,174 @@
 import React, { useState } from 'react';
-import { useSettings } from '../../contexts/SettingsContext';
-import { Wallet, Printer } from 'lucide-react';
 import Modal from '../../components/UI/Modal';
+import { db, createRecordMetadata, updateRecordMetadata, type Customer } from '../../services/db';
 import { useNotification } from '../../contexts/NotificationContext';
-import { db, createRecordMetadata, updateRecordMetadata } from '../../services/db';
-import type { Customer } from '../../services/db';
-import { useTranslation } from 'react-i18next';
 import { printPaymentReceipt } from '../../services/invoiceGenerator';
+import { useSettings } from '../../contexts/SettingsContext';
+import { useTranslation } from 'react-i18next';
+import { Wallet } from 'lucide-react';
 
 interface CustomerPaymentModalProps {
- customer: Customer;
- onClose: () => void;
- onPaymentComplete: () => void;
+  customer: Customer;
+  onClose: () => void;
+  onPaymentComplete: () => void;
 }
 
-const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({ customer, onClose, onPaymentComplete }) => {
- const { t } = useTranslation();
- const { formatCurrency, settings } = useSettings();
- const [amount, setAmount] = useState('');
- const [note, setNote] = useState('');
- const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | 'upi'>('cash');
- const [printReceipt, setPrintReceipt] = useState(true);
- const { addToast } = useNotification();
+const CustomerPaymentModal: React.FC<CustomerPaymentModalProps> = ({
+  customer,
+  onClose,
+  onPaymentComplete
+}) => {
+  const { t } = useTranslation();
+  const { settings, formatCurrency } = useSettings();
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | 'upi'>('cash');
+  const [printReceipt, setPrintReceipt] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { addToast } = useNotification();
 
- const handlePayment = async () => {
- const payAmount = parseFloat(amount);
- if (!payAmount || payAmount <= 0) {
- addToast(t('customers.invalid_amount'), 'error');
- return;
- }
+  const handlePayment = async () => {
+    const payAmount = parseFloat(amount);
+    if (!payAmount || payAmount <= 0) {
+      addToast(t('customers.invalid_amount'), 'error');
+      return;
+    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
- try {
- // 1. Record Payment
- const paymentId = await db.customerPayments.add({
- ...createRecordMetadata(),
- customerId: customer.id!,
- amount: payAmount,
- date: new Date(),
- paymentMode,
- note
- });
+    try {
+      let paymentId: string = '';
+      let newBalance: number = 0;
 
- // 2. Update Customer Balance
- const newBalance = (customer.balance || 0) - payAmount;
+      await db.transaction('rw', [db.customerPayments, db.customers], async () => {
+        const freshCustomer = await db.customers.get(customer.id!);
+        const currentBalance = (freshCustomer?.balance ?? customer.balance) || 0;
+        newBalance = currentBalance - payAmount;
 
- await db.customers.update(customer.id!, {
- ...updateRecordMetadata(),
- balance: newBalance
- });
+        paymentId = await db.customerPayments.add({
+          ...createRecordMetadata(),
+          customerId: customer.id!,
+          amount: payAmount,
+          date: new Date(),
+          paymentMode,
+          note
+        }) as string;
 
+        await db.customers.update(customer.id!, {
+          ...updateRecordMetadata(),
+          balance: newBalance
+        });
+      });
 
- // 3. Print Receipt if requested
- if (printReceipt) {
- const businessDetails = JSON.parse(localStorage.getItem('businessDetails') || '{}');
- await printPaymentReceipt(
- {
- amount: payAmount,
- date: new Date(),
- mode: paymentMode,
- note,
- id: paymentId as string
- },
- {
- name: customer.name,
- phone: customer.phone,
- balance: newBalance
- },
- businessDetails
-).catch(e => {
- console.error('Payment receipt print failed:', e);
- addToast('Failed to print payment receipt', 'error');
- });
- }
+      if (printReceipt) {
+        let businessDetails: any = null;
+        try { businessDetails = JSON.parse(localStorage.getItem('businessDetails') || 'null'); } catch {}
+        await printPaymentReceipt(
+          { amount: payAmount, date: new Date(), mode: paymentMode, note, id: paymentId },
+          { name: customer.name, phone: customer.phone, balance: newBalance },
+          businessDetails
+        ).catch(e => {
+          console.error('Payment receipt print failed:', e);
+          addToast('Failed to print payment receipt', 'error');
+        });
+      }
 
- addToast(t('customers.payment_success'), 'success');
- onPaymentComplete();
- onClose();
- } catch (error) {
- console.error(error);
- addToast(t('customers.payment_error'), 'error');
- }
- };
+      addToast(t('customers.payment_success'), 'success');
+      onPaymentComplete();
+      onClose();
+    } catch (error) {
+      console.error(error);
+      addToast(t('customers.payment_error'), 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
- return (
- <Modal isOpen={true} onClose={onClose} title={t('customers.receive_payment')} maxWidth="md">
- <div className="p-6 space-y-4">
- <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-300 dark:border-slate-600 flex justify-between items-center">
- <span className="text-slate-900 dark:text-white font-medium">{t('customers.current_balance')}</span>
- <span className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(customer.balance || 0)}</span>
- </div>
+  return (
+    <Modal isOpen={true} onClose={onClose} title={t('customers.receive_payment')} maxWidth="md">
+      <div className="p-6 space-y-4">
+        <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-300 dark:border-slate-600 flex justify-between items-center">
+          <span className="text-slate-900 dark:text-white font-medium">{t('customers.current_balance')}</span>
+          <span className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(customer.balance || 0)}</span>
+        </div>
 
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.amount_received')}</label>
- <div className="relative">
- <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-lg">{settings.currency}</div>
- <input
- type="number"
- value={amount}
- onChange={(e) => setAmount(e.target.value)}
- className="w-full pl-10 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
- placeholder={t('common.placeholder_amount')}
- autoFocus
- />
- </div>
- </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.amount_received')}</label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 font-bold text-lg">{settings.currency}</div>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full pl-10 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+              placeholder={t('common.placeholder_amount')}
+              autoFocus
+            />
+          </div>
+        </div>
 
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.payment_mode')}</label>
- <div className="grid grid-cols-3 gap-2">
- {['cash', 'card', 'upi'].map((mode: any) => (
- <button type="button"
- key={mode}
- onClick={() => setPaymentMode(mode as any)}
- className={`p-2 rounded-lg border text-sm font-medium capitalize ${paymentMode === mode
- ? 'bg-slate-900 dark:bg-white text-white border-slate-900 dark:border-white'
- : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
- }`}
- >
- {t(`payment.${mode}`)}
- </button>
-))}
- </div>
- </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.payment_mode')}</label>
+          <div className="grid grid-cols-3 gap-2">
+            {['cash', 'card', 'upi'].map((mode: any) => (
+              <button type="button"
+                key={mode}
+                onClick={() => setPaymentMode(mode as any)}
+                className={`p-2 rounded-lg border text-sm font-medium capitalize ${paymentMode === mode
+                  ? 'bg-slate-900 dark:bg-white text-white border-slate-900 dark:border-white'
+                  : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                  }`}
+              >
+                {t(`payment.${mode}`)}
+              </button>
+            ))}
+          </div>
+        </div>
 
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.note_optional')}</label>
- <input
- type="text"
- value={note}
- onChange={(e) => setNote(e.target.value)}
- className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
- placeholder={t('customers.placeholder_note')}
- />
- </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('customers.note_optional')}</label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+            placeholder={t('customers.placeholder_note')}
+          />
+        </div>
 
- {/* Print Checkbox */}
- <div className="flex items-center gap-2 pt-2">
- <input
- type="checkbox"
- id="printReceipt"
- checked={printReceipt}
- onChange={(e) => setPrintReceipt(e.target.checked)}
- className="w-5 h-5 rounded border-slate-300 text-slate-900 dark:text-white focus:ring-slate-900/20 dark:focus:ring-white/20"
- />
- <label htmlFor="printReceipt"className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2 cursor-pointer select-none">
- <Printer size={16} />
- {t('common.print_receipt') ||"Print Receipt"}
- </label>
- </div>
- </div>
+        {/* Print Checkbox */}
+        <div className="flex items-center gap-2 pt-2">
+          <input
+            type="checkbox"
+            id="printReceipt"
+            checked={printReceipt}
+            onChange={(e) => setPrintReceipt(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <label htmlFor="printReceipt" className="text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+            {t('customers.print_payment_receipt')}
+          </label>
+        </div>
 
- <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex gap-3">
- <button type="button"onClick={onClose} className="flex-1 py-3 rounded-xl font-medium text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800">
- {t('common.cancel')}
- </button>
- <button type="button"
- onClick={handlePayment}
- className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"
- >
- <Wallet size={18} />
- {t('customers.confirm_payment')}
- </button>
- </div>
- </Modal>
-);
+        <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+          <button type="button"
+            onClick={onClose}
+            className="flex-1 py-3 border border-slate-200 dark:border-slate-600 rounded-xl font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
+            {t('common.cancel')}
+          </button>
+          <button type="button"
+            onClick={handlePayment}
+            disabled={isSubmitting}
+            className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+          >
+            <Wallet size={18} />
+            {isSubmitting ? t('common.saving') : t('customers.confirm_payment')}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 };
 
 export default CustomerPaymentModal;

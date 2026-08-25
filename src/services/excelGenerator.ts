@@ -34,15 +34,55 @@ export const generateExcel = (data: Invoice | Purchase, type: 'invoice' | 'purch
  ];
 
  // --- ITEM DATA ---
- const headers = ['#', 'Item', 'Quantity', 'Price/Cost', 'Total'];
+ const isPurchase = type === 'purchase';
+ const headers = isPurchase
+  ? ['#', 'Item', 'Quantity', 'Unit Cost', 'Tax %', 'Before VAT Amount', 'VAT Amount', 'Total Amount with VAT']
+  : ['#', 'Item', 'Quantity', 'Price/Cost', 'Total'];
 
- const items = data.items.map((item: any, index: number) => [
- index + 1,
- item.name,
- item.quantity,
- item.price || item.cost, // Price for invoice, Cost for purchase
- (item.quantity * (item.price || item.cost))
- ]);
+ const items = data.items.map((item: any, index: number) => {
+  if (isPurchase) {
+   const qty = item.quantity;
+   const cost = item.cost;
+   const taxRate = item.taxRate ?? 0;
+   const taxType = item.taxType || 'exclusive';
+
+   let beforeVat = item.subtotalBeforeTax ?? 0;
+   let lineTax = item.taxAmount ?? 0;
+   let totalWithVat = item.total ?? 0;
+
+   if (!beforeVat || (taxRate > 0 && lineTax === 0) || !totalWithVat) {
+    if (taxType === 'inclusive') {
+     const basePrice = cost / (1 + taxRate / 100);
+     beforeVat = basePrice * qty;
+     lineTax = (cost - basePrice) * qty;
+     totalWithVat = cost * qty;
+    } else {
+     beforeVat = cost * qty;
+     lineTax = (cost * (taxRate / 100)) * qty;
+     totalWithVat = beforeVat + lineTax;
+    }
+   }
+
+   return [
+    index + 1,
+    item.name,
+    qty,
+    cost,
+    `${taxRate}%`,
+    Math.round(beforeVat * 100) / 100,
+    Math.round(lineTax * 100) / 100,
+    Math.round(totalWithVat * 100) / 100
+   ];
+  }
+
+  return [
+   index + 1,
+   item.name,
+   item.quantity,
+   item.price || item.cost,
+   (item.quantity * (item.price || item.cost))
+  ];
+ });
 
  // --- TOTALS ---
  const totalAmount = isInvoice ? (data as Invoice).grandTotal : (data as Purchase).totalAmount;

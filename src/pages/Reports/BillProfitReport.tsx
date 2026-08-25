@@ -47,7 +47,7 @@ const BillProfitReport: React.FC = () => {
  { header: 'Net Sales', accessor: (row) => formatCurrency(row.netSales), align: 'right', width: '15%' },
  { header: 'Cost', accessor: (row) => formatCurrency(row.costAmount), align: 'right', width: '15%' },
  { header: 'Profit', accessor: (row) => formatCurrency(row.profit), align: 'right', width: '10%' },
- { header: 'Margin', accessor: (row) => row.marginPercent.toFixed(1) + '%', align: 'right', width: '10%' }
+ { header: 'Margin', accessor: (row) => (Number(row.marginPercent) || 0).toFixed(1) + '%', align: 'right', width: '10%' }
  ],
  data: data,
  totals: [
@@ -69,52 +69,55 @@ const BillProfitReport: React.FC = () => {
  return (
  <div className="space-y-6 fade-in">
  {/* Header Controls */}
- <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+ <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
  <div className="flex items-center gap-2">
- <FileText className="text-slate-900 dark:text-white"size={24} />
+ <FileText className="text-slate-900 dark:text-white" size={24} />
  <h2 className="text-lg font-bold text-slate-800 dark:text-white">{t('reports.bill_wise_profit')}</h2>
  </div>
 
- <div className="flex flex-col md:flex-row gap-3">
- <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex">
+ <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
+ <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex overflow-x-auto custom-scrollbar w-full md:w-auto">
  {ranges.map((r: any) => (
  <button type="button"
  key={r.id}
  onClick={() => handleRangeChange(r.id)}
- className={`px-3 py-1.5 rounded-md text-sm font-medium ${range === r.id && !startDate
- ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white '
+ className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap shrink-0 ${range === r.id && !startDate
+ ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
  : 'text-slate-700 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-300'
  }`}
  >
  {r.label}
  </button>
-))}
+ ))}
  </div>
 
- <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg px-2">
- <Calendar size={16} className="text-slate-600"/>
+ <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-2 rounded-lg w-full md:w-auto">
+ <Calendar size={16} className="text-slate-600 shrink-0 hidden sm:block"/>
+ <div className="flex items-center gap-2 flex-1 min-w-0">
  <input
  type="datetime-local"
  value={startDate}
  onChange={(e) => { setStartDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-sm w-full md:w-36 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
- <span className="text-slate-600">-</span>
+ <span className="text-slate-600 shrink-0">-</span>
  <input
  type="datetime-local"
  value={endDate}
  onChange={(e) => { setEndDate(e.target.value); setRange('custom'); }}
- className="bg-transparent border-0 p-0 text-sm w-40 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
+ className="bg-transparent border-0 p-0 text-sm w-full md:w-36 focus:ring-0 text-slate-700 dark:text-slate-300 dark:[color-scheme:dark]"
  />
  </div>
+ </div>
 
- <div className="flex gap-2">
+ <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
  <button type="button"
  onClick={handlePrint}
- className="p-2 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-transparent hover:border-slate-300 dark:hover:border-slate-600"
+ className="flex items-center justify-center gap-2 p-3 w-full md:w-auto md:p-2 bg-indigo-600 md:bg-transparent text-white md:text-slate-900 dark:text-white md:hover:bg-slate-100 dark:md:hover:bg-slate-800 rounded-lg border border-transparent md:hover:border-slate-300 dark:md:hover:border-slate-600"
  title="Print"
  >
  <Printer size={20} />
+ <span className="md:hidden font-medium">Print Report</span>
  </button>
  </div>
  </div>
@@ -203,8 +206,8 @@ const BillProfitReport: React.FC = () => {
  <td className={`px-4 py-3 text-right font-bold ${row.profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
  {formatCurrency(row.profit)}
  </td>
- <td className={`px-4 py-3 text-right font-medium ${row.marginPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
- {row.marginPercent.toFixed(1)}%
+ <td className={`px-4 py-3 text-right font-medium ${(row.marginPercent || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+ {(Number(row.marginPercent) || 0).toFixed(1)}%
  </td>
  </tr>
 ))

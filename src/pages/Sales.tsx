@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Dexie from 'dexie';
 import { db, createRecordMetadata } from '../services/db';
 import type { Invoice, InvoiceItem, Item } from '../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -8,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { useNotification } from '../contexts/NotificationContext';
 import { useSettings } from '../contexts/SettingsContext';
 import Modal from '../components/UI/Modal';
+import ItemForm from './Inventory/ItemForm';
 import SalesHistory from './Transactions/SalesHistory';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -36,11 +38,16 @@ const Sales = () => {
     }, []);
 
     // Stats — use indexed 'type' field for fast counts (no full table scans)
+    const ordersCount = useLiveQuery(() => db.invoices.where('type').equals('order').filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId).count(), [activeBranchId]) || 0;
+    const invoicesCount = useLiveQuery(() => db.invoices.where('type').equals('invoice').filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId).count(), [activeBranchId]) || 0;
+    const returnsCount = useLiveQuery(() => db.invoices.where('type').equals('return').filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId).count(), [activeBranchId]) || 0;
+    const paymentsCount = useLiveQuery(() => db.customerPayments.filter((p: any) => !p.deletedAt && p.branchId === activeBranchId).count(), [activeBranchId]) || 0;
+
     const stats = {
-        orders: useLiveQuery(() => db.invoices.where('type').equals('order').count()) || 0,
-        invoices: useLiveQuery(() => db.invoices.where('type').equals('invoice').count()) || 0,
-        returns: useLiveQuery(() => db.invoices.where('type').equals('return').count()) || 0,
-        payments: useLiveQuery(() => db.customerPayments.count()) || 0,
+        orders: ordersCount,
+        invoices: invoicesCount,
+        returns: returnsCount,
+        payments: paymentsCount,
     };
 
     // Modal & Form State
@@ -62,6 +69,12 @@ const Sales = () => {
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'bank_transfer'>('cash');
     const [paymentReference, setPaymentReference] = useState('');
 
+    // Payment Filter State
+    const [paymentFilterMode, setPaymentFilterMode] = useState<string>('all');
+    const [paymentDateType, setPaymentDateType] = useState<'all' | 'single' | 'range'>('all');
+    const [paymentStartDate, setPaymentStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [paymentEndDate, setPaymentEndDate] = useState(new Date().toISOString().split('T')[0]);
+
     // Inline Item Creation State
     const [isAddItemOpen, setIsAddItemOpen] = useState(false);
     const [newItemName, setNewItemName] = useState('');
@@ -73,14 +86,18 @@ const Sales = () => {
     const customers = useLiveQuery(() => db.customers.where('branchId').equals(activeBranchId).filter((c: any) => !c.deletedAt).toArray(), [activeBranchId]);
     const inventory = useLiveQuery(() => db.items.where('branchId').equals(activeBranchId).filter((i: any) => !i.deletedAt).toArray(), [activeBranchId]);
 
-    // Derived Lists — use indexed 'type' field, branch-scoped, with deletedAt filter
+    // Derived Lists — use compound [branchId+createdAt] index for efficient ordered retrieval
     const currentList = useLiveQuery(async () => {
-        return db.invoices
-            .where('type')
-            .equals(activeTab)
-            .filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId)
+        const results = await db.invoices
+            .where('[branchId+createdAt]')
+            .between(
+                [activeBranchId, Dexie.minKey],
+                [activeBranchId, Dexie.maxKey]
+            )
+            .filter((inv: any) => !inv.deletedAt && inv.type === activeTab)
             .reverse()
-            .sortBy('createdAt');
+            .toArray();
+        return results;
     }, [activeTab, activeBranchId]);
 
     // Grid Nav
@@ -89,9 +106,40 @@ const Sales = () => {
         cols: 6
     });
 
-    const paymentList = useLiveQuery(() => db.customerPayments.orderBy('date').reverse().toArray(), []);
+    const paymentList = useLiveQuery(() => db.customerPayments.orderBy('date').filter((p: any) => !p.deletedAt && p.branchId === activeBranchId).reverse().toArray(), [activeBranchId]);
 
     // Filtered Lists
+    const filteredPayments = useMemo(() => {
+        if (!paymentList) return [];
+        return paymentList.filter(p => {
+            let match = true;
+            if (paymentFilterMode !== 'all' && p.paymentMode !== paymentFilterMode) match = false;
+            
+            if (paymentDateType === 'single') {
+                const dateToMatch = new Date(paymentStartDate).toDateString();
+                const pDate = new Date(p.date).toDateString();
+                if (dateToMatch !== pDate) match = false;
+            } else if (paymentDateType === 'range') {
+                const start = new Date(paymentStartDate);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(paymentEndDate);
+                end.setHours(23, 59, 59, 999);
+                const pDate = new Date(p.date);
+                if (pDate < start || pDate > end) match = false;
+            }
+            return match;
+        });
+    }, [paymentList, paymentFilterMode, paymentDateType, paymentStartDate, paymentEndDate]);
+
+    const paymentTotals = useMemo(() => {
+        const totals = { total: 0, byMethod: {} as Record<string, number> };
+        filteredPayments.forEach(p => {
+            totals.total += p.amount;
+            totals.byMethod[p.paymentMode] = (totals.byMethod[p.paymentMode] || 0) + p.amount;
+        });
+        return totals;
+    }, [filteredPayments]);
+
     const filteredInventory = inventory?.filter((i: any) =>
         (i.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (i.barcode || '').includes(searchTerm)
@@ -104,8 +152,10 @@ const Sales = () => {
     // Derived & Pagination
     // Reset pagination when filter changes
     useEffect(() => {
-        setVisibleItemsCount(50);
-        if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+        setTimeout(() => {
+            setVisibleItemsCount(50);
+            if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+        }, 0);
     }, [searchTerm]);
 
     const visibleItems = filteredInventory?.slice(0, visibleItemsCount);
@@ -125,6 +175,34 @@ const Sales = () => {
 
             // Unified Print Function (Handles Thermal & A4)
             generateInvoicePDF(invoice, businessDetails).catch(console.error);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const printPaymentReport = async () => {
+        try {
+            const { generatePaymentReportPDF } = await import('../services/invoiceGenerator');
+            const saved = localStorage.getItem('businessDetails');
+            const businessDetails = saved ? JSON.parse(saved) : { name: 'My Shop', address: '', phone: '' };
+            generatePaymentReportPDF(filteredPayments, businessDetails, {
+                mode: paymentFilterMode,
+                dateType: paymentDateType,
+                start: paymentStartDate,
+                end: paymentEndDate,
+                totals: paymentTotals
+            }).catch(console.error);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const printPaymentReceipt = async (payment: any, customerName: string) => {
+        try {
+            const { generatePaymentReceiptPDF } = await import('../services/invoiceGenerator');
+            const saved = localStorage.getItem('businessDetails');
+            const businessDetails = saved ? JSON.parse(saved) : { name: 'My Shop', address: '', phone: '' };
+            generatePaymentReceiptPDF(payment, businessDetails, customerName).catch(console.error);
         } catch (error) {
             console.error(error);
         }
@@ -167,11 +245,31 @@ const Sales = () => {
         setItems(items.filter((i: any) => i.itemId !== itemId));
     };
 
-    const totalAmount = items.reduce((sum: any, i: any) => sum + i.total, 0);
+    const totalAmount = items.reduce((sum, item) => sum + item.total, 0);
+
+    if (isAddItemOpen) {
+        return (
+            <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+                <ItemForm 
+                    isInline 
+                    onSuccess={(item) => {
+                        addToOrder(item);
+                        setIsAddItemOpen(false);
+                    }} 
+                    onCancel={() => setIsAddItemOpen(false)} 
+                />
+            </div>
+        );
+    }
 
     const handleSave = async () => {
         if (!customerName || items.length === 0) {
             addToast(t('sales.required_error'), 'error');
+            return;
+        }
+
+        // Guard: inline modal only creates orders or returns, not invoices
+        if (activeTab !== 'order' && activeTab !== 'return') {
             return;
         }
 
@@ -207,40 +305,41 @@ const Sales = () => {
         const totalTax = finalItems.reduce((sum, i) => sum + (i.taxAmount || 0), 0);
         const totalGrand = finalItems.reduce((sum, i) => sum + i.total, 0);
 
-        // Generate proper sequential invoice number (same logic as POS)
-        const lastInvoice = await db.invoices.orderBy('createdAt').last();
-        let nextNumber = 1;
-        if (lastInvoice && lastInvoice.invoiceNumber) {
-            const lastNumStr = lastInvoice.invoiceNumber.replace(/\D/g, '');
-            const lastNum = parseInt(lastNumStr, 10);
-            if (!isNaN(lastNum)) nextNumber = lastNum + 1;
-        }
-        const prefix = activeTab === 'order' ? 'SO-' : 'RET-';
-        const seqInvoiceNumber = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
-
-        const invoiceData: Invoice = {
-            ...createRecordMetadata(),
-            branchId: activeBranchId || '',
-            invoiceNumber: seqInvoiceNumber,
-            customerName,
-            customerId,
-            items: finalItems,
-            subTotal: totalAmount, 
-            taxAmount: totalTax,
-            discountAmount: 0,
-            grandTotal: totalGrand,
-            paidAmount: 0,
-            remainingAmount: totalGrand,
-            paymentMode: 'split', // Default
-            paymentStatus: activeTab === 'order' ? 'pending' : 'paid',
-            createdAt: new Date(orderDate),
-            type: activeTab as 'order' | 'return',
-            status: activeTab === 'order' ? 'pending' : 'paid',
-            notes
-        };
-
         try {
             await db.transaction('rw', [db.invoices, db.items, db.customers], async () => {
+                // Generate sequential invoice number inside transaction to prevent race conditions
+                const lastInvoice = await db.invoices.orderBy('createdAt').last();
+                let nextNumber = 1;
+                if (lastInvoice && lastInvoice.invoiceNumber) {
+                    const lastNumStr = lastInvoice.invoiceNumber.replace(/\D/g, '');
+                    const lastNum = parseInt(lastNumStr, 10);
+                    if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+                }
+                const prefix = activeTab === 'order' ? 'SO-' : 'RET-';
+                const seqInvoiceNumber = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+
+                const invoiceData: Invoice = {
+                    ...createRecordMetadata(),
+                    branchId: activeBranchId || '',
+                    invoiceNumber: seqInvoiceNumber,
+                    customerName,
+                    customerId,
+                    items: finalItems,
+                    subTotal: totalAmount, 
+                    taxAmount: totalTax,
+                    discountAmount: 0,
+                    grandTotal: totalGrand,
+                    // H14 Fix: Returns mark full amount paid; orders mark 0 paid
+                    paidAmount: activeTab === 'return' ? totalGrand : 0,
+                    remainingAmount: activeTab === 'return' ? 0 : totalGrand,
+                    paymentMode: 'split', // Default
+                    paymentStatus: activeTab === 'order' ? 'pending' : 'paid',
+                    createdAt: new Date(orderDate),
+                    type: activeTab as 'order' | 'return',
+                    status: activeTab === 'order' ? 'pending' : 'paid',
+                    notes
+                };
+
                 await db.invoices.add(invoiceData);
 
                 if (activeTab === 'return') {
@@ -249,21 +348,18 @@ const Sales = () => {
                         const dbItem = await db.items.get(item.itemId);
                         if (dbItem) {
                             await db.items.update(item.itemId, {
-                                stock: dbItem.stock + item.quantity
+                                stock: (dbItem.stock || 0) + item.quantity
                             });
                         }
                     }
 
                     // 2. Decrease Customer Balance (Credit Note)
-                    // If customer exists, we reduce their 'balance' (Debt)
+                    // H15 Fix: Handle undefined/null balance safely to prevent NaN
                     if (customerId) {
                         const customer = await db.customers.get(customerId);
                         if (customer) {
-                            // Logic: Balance = What they owe us.
-                            // Return means we owe them, or they owe us less.
-                            // So Balance = Balance - ReturnAmount
                             await db.customers.update(customerId, {
-                                balance: customer.balance - totalGrand
+                                balance: (customer.balance || 0) - totalGrand
                             });
                         }
                     }
@@ -285,10 +381,8 @@ const Sales = () => {
 
     return (
         <div className="space-y-6">
-
-
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold dark:text-white flex items-center gap-2">
                         <ShoppingCart className="text-blue-600" />
@@ -296,17 +390,16 @@ const Sales = () => {
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400 text-sm">{t('sales.description')}</p>
                 </div>
-                <div className="flex gap-2">
-
+                <div className="flex flex-col sm:flex-row gap-2">
                     <button
                         onClick={() => navigate('/sales/new?type=order')}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 w-full sm:w-auto"
                     >
                         <Plus size={20} /> {t('sales.new_order')}
                     </button>
                     <button
                         onClick={() => navigate('/sales/new?type=return')}
-                        className="px-4 py-2 bg-amber-600 text-white rounded-lg flex items-center gap-2 hover:bg-amber-700"
+                        className="px-4 py-2 bg-amber-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-amber-700 w-full sm:w-auto"
                     >
                         <RotateCcw size={20} /> {t('sales.create_return')}
                     </button>
@@ -314,7 +407,7 @@ const Sales = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto pb-1">
+            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto pb-1 custom-scrollbar">
                 <button
                     onClick={() => setActiveTab('order')}
                     className={`px-4 py-2 rounded-t-lg font-medium flex items-center gap-2 whitespace-nowrap ${activeTab === 'order'
@@ -538,14 +631,89 @@ const Sales = () => {
 
                 {activeTab === 'payment' && (
                     <div className="overflow-x-auto">
-                        <div className="p-4 flex justify-end">
-                            <button
-                                onClick={() => setIsPaymentModalOpen(true)}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2 hover:bg-green-700"
-                            >
-                                <Plus size={20} /> {t('sales.record_payment')}
-                            </button>
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-4 items-end justify-between">
+                            <div className="flex flex-wrap gap-4 items-end">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('sales.payment_method')}</label>
+                                    <select
+                                        className="p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
+                                        value={paymentFilterMode}
+                                        onChange={e => setPaymentFilterMode(e.target.value)}
+                                    >
+                                        <option value="all">{t('common.all') || 'All Types'}</option>
+                                        <option value="cash">{t('payment.cash') || "Cash"}</option>
+                                        <option value="card">{t('payment.card') || "Card"}</option>
+                                        <option value="upi">{t('payment.upi') || "UPI"}</option>
+                                        <option value="bank_transfer">{t('payment.bank_transfer') || "Bank Transfer"}</option>
+                                        <option value="split">{t('payment.split') || "Split"}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('common.date') || 'Date Filter'}</label>
+                                    <select
+                                        className="p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
+                                        value={paymentDateType}
+                                        onChange={e => setPaymentDateType(e.target.value as any)}
+                                    >
+                                        <option value="all">{t('common.all_time') || 'All Time'}</option>
+                                        <option value="single">Single Date</option>
+                                        <option value="range">Date Range</option>
+                                    </select>
+                                </div>
+                                {paymentDateType !== 'all' && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">{paymentDateType === 'range' ? 'Start Date' : 'Date'}</label>
+                                        <input
+                                            type="date"
+                                            className="p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
+                                            value={paymentStartDate}
+                                            onChange={e => setPaymentStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+                                {paymentDateType === 'range' && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">End Date</label>
+                                        <input
+                                            type="date"
+                                            className="p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
+                                            value={paymentEndDate}
+                                            onChange={e => setPaymentEndDate(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={printPaymentReport}
+                                    className="px-4 py-2 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-600 font-medium transition-colors"
+                                    title="Print Filtered Report"
+                                >
+                                    <Printer size={18} /> Print Report
+                                </button>
+                                <button
+                                    onClick={() => setIsPaymentModalOpen(true)}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2 hover:bg-green-700 font-medium transition-colors"
+                                >
+                                    <Plus size={18} /> {t('sales.record_payment')}
+                                </button>
+                            </div>
                         </div>
+
+                        {/* Summary Bar */}
+                        <div className="px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex gap-6 overflow-x-auto">
+                            <div className="flex flex-col">
+                                <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Total Amount</span>
+                                <span className="text-lg font-bold text-slate-800 dark:text-white">{formatCurrency(paymentTotals.total)}</span>
+                            </div>
+                            {Object.entries(paymentTotals.byMethod).map(([method, amount]) => (
+                                <div key={method} className="flex flex-col border-l border-slate-200 dark:border-slate-700 pl-6">
+                                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{method}</span>
+                                    <span className="text-lg font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(amount as number)}</span>
+                                </div>
+                            ))}
+                        </div>
+
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                                 <tr>
@@ -554,10 +722,11 @@ const Sales = () => {
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.amount')}</th>
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.method')}</th>
                                     <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">{t('sales.reference')}</th>
+                                    <th className="p-4 font-semibold text-slate-600 dark:text-slate-300 text-right">{t('common.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {!paymentList ? (
+                                {!filteredPayments ? (
                                     Array.from({ length: 5 }).map((_: any, i: any) => (
                                         <tr key={i} className="animate-pulse">
                                             <td className="p-4"><Skeleton width={80} height={20} /></td>
@@ -567,9 +736,9 @@ const Sales = () => {
                                             <td className="p-4"><Skeleton width={100} height={20} /></td>
                                         </tr>
                                     ))
-                                ) : paymentList.length === 0 ? (
+                                ) : filteredPayments.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5}>
+                                        <td colSpan={6}>
                                             <EmptyState
                                                 title={t('sales.no_payments')}
                                                 description={t('sales.no_payments_desc') || "No payments recorded yet."}
@@ -580,15 +749,27 @@ const Sales = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    paymentList.map((payment: any) => {
+                                    filteredPayments.map((payment: any) => {
                                         const customer = customers?.find(c => c.id === payment.customerId);
+                                        const custName = customer?.name || 'Unknown';
                                         return (
                                             <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                 <td className="p-4 text-slate-600 dark:text-slate-400">{formatDate(payment.date)}</td>
-                                                <td className="p-4 font-medium dark:text-white">{customer?.name || 'Unknown'}</td>
+                                                <td className="p-4 font-medium dark:text-white">{custName}</td>
                                                 <td className="p-4 font-medium text-green-600">+{formatCurrency(payment.amount)}</td>
-                                                <td className="p-4 text-slate-600 dark:text-slate-400 capitalize">{payment.paymentMode}</td>
+                                                <td className="p-4 text-slate-600 dark:text-slate-400 capitalize">
+                                                    <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-xs font-semibold">{payment.paymentMode}</span>
+                                                </td>
                                                 <td className="p-4 text-slate-500 text-sm">{payment.reference || '-'}</td>
+                                                <td className="p-4 text-right">
+                                                    <button
+                                                        onClick={() => printPaymentReceipt(payment, custName)}
+                                                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors tooltip"
+                                                        title="Print Receipt"
+                                                    >
+                                                        <Printer size={18} />
+                                                    </button>
+                                                </td>
                                             </tr>
                                         );
                                     })
@@ -849,7 +1030,7 @@ const Sales = () => {
                                         </div>
                                     ))}
                                     {items.length === 0 && (
-                                        <div className="p-8 text-center text-slate-400 text-sm">
+                                        <div className="p-4 md:p-8 text-center text-slate-400 text-sm">
                                             {t('sales.no_items_selected_msg')}
                                         </div>
                                     )}
@@ -895,126 +1076,7 @@ const Sales = () => {
                     </div>
                 </div>
             </Modal>
-            {/* Quick Add Item Modal */}
-            <Modal
-                isOpen={isAddItemOpen}
-                onClose={() => setIsAddItemOpen(false)}
-                title={t('sales.add_item_title')}
-                maxWidth="md"
-            >
-                <div className="p-4 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.item_name')}</label>
-                        <input
-                            type="text"
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
-                            value={newItemName}
-                            onChange={e => setNewItemName(e.target.value)}
-                            placeholder={t('sales.item_name_placeholder')}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.purchase_cost')}</label>
-                            <input
-                                type="number"
-                                className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
-                                value={newItemCost}
-                                onChange={e => setNewItemCost(e.target.value)}
-                                placeholder={t('common.placeholder_amount')}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.selling_price')}</label>
-                            <input
-                                type="number"
-                                className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
-                                value={newItemPrice}
-                                onChange={e => setNewItemPrice(e.target.value)}
-                                placeholder={t('common.placeholder_amount')}
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('sales.initial_stock')}</label>
-                        <input
-                            type="number"
-                            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
-                            value={newItemStock}
-                            onChange={e => setNewItemStock(e.target.value)}
-                            placeholder={t('common.placeholder_qty')}
-                        />
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-4">
-                        <button
-                            onClick={() => setIsAddItemOpen(false)}
-                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg"
-                        >
-                            {t('common.cancel')}
-                        </button>
-                        <button
-                            onClick={async () => {
-                                if (!newItemName.trim() || !newItemPrice) {
-                                    addToast(t('sales.name_price_required'), 'error');
-                                    return;
-                                }
-                                try {
-                                    const price = parseFloat(newItemPrice);
-                                    const cost = parseFloat(newItemCost) || 0;
-                                    const stock = parseInt(newItemStock) || 0;
-
-                                    const meta = createRecordMetadata();
-                                    const id = await db.items.add({
-                                        ...meta,
-                                        branchId: activeBranchId || '',
-                                        name: newItemName,
-                                        purchasePrice: cost,
-                                        salePrice: price,
-                                        stock: stock,
-                                        minStock: 5,
-                                        taxType: 'exclusive',
-                                        taxRate: 0,
-                                        barcode: ''
-                                    });
-
-                                    // Add to current order list directly
-                                    addToOrder({
-                                        ...meta,
-                                        branchId: activeBranchId || '',
-                                        id: id as string,
-                                        name: newItemName,
-                                        purchasePrice: cost,
-                                        stock: stock,
-                                        salePrice: price,
-                                        minStock: 5,
-                                        taxType: 'exclusive',
-                                        taxRate: 0,
-                                        barcode: ''
-                                    });
-
-                                    setIsAddItemOpen(false);
-                                    // Reset Form
-                                    setNewItemName('');
-                                    setNewItemCost('');
-                                    setNewItemPrice('');
-                                    setNewItemStock('');
-
-                                    setNewItemStock('');
-
-                                    addToast(t('sales.item_created'), 'success');
-                                } catch (error) {
-                                    console.error(error);
-                                    addToast(t('sales.item_add_failed'), 'error');
-                                }
-                            }}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                            {t('sales.create_add')}
-                        </button>
-                    </div>
-                </div>
-            </Modal>
+            {/* Quick Add Item Modal Replaced by Inline ItemForm Page */}
         </div>
     );
 };

@@ -2,6 +2,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import type { VatReturnData } from '../pages/Reports/useVatReturnData';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface BusinessDetails {
  shopName?: string;
@@ -138,11 +141,31 @@ export const exportVatToPDF = (
  doc.setFontSize(14);
  doc.text("Net VAT Payable for Period:", 20, currentY + 13);
 
- doc.setFontSize(18);
- doc.setFont('helvetica', 'bold');
- doc.text(formatCurrency(netVat), pageWidth - 20, currentY + 13, { align: 'right' });
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(formatCurrency(netVat), pageWidth - 20, currentY + 13, { align: 'right' });
 
- doc.save(`VAT_Return_${periodLabel.replace(/\s+/g, '_')}.pdf`);
+  const filename = `VAT_Return_${periodLabel.replace(/\s+/g, '_')}.pdf`;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      Filesystem.writeFile({
+        path: filename,
+        data: pdfBase64,
+        directory: Directory.Cache,
+      }).then(result => {
+        Share.share({
+          title: filename,
+          url: result.uri,
+        });
+      });
+    } catch (error) {
+      console.error('Error saving or sharing PDF on mobile:', error);
+    }
+  } else {
+    doc.save(filename);
+  }
 };
 
 export const exportVatToExcel = (
@@ -179,9 +202,29 @@ export const exportVatToExcel = (
 
  const ws = XLSX.utils.aoa_to_sheet(wsData);
 
- // Basic Column Widths
- ws['!cols'] = [{ wch: 40 }, { wch: 15 }, { wch: 15 }];
+  // Basic Column Widths
+  ws['!cols'] = [{ wch: 40 }, { wch: 15 }, { wch: 15 }];
 
- XLSX.utils.book_append_sheet(wb, ws,"VAT Return");
- XLSX.writeFile(wb,`VAT_Return_${periodLabel.replace(/\s+/g, '_')}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, "VAT Return");
+  const filename = `VAT_Return_${periodLabel.replace(/\s+/g, '_')}.xlsx`;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      Filesystem.writeFile({
+        path: filename,
+        data: b64,
+        directory: Directory.Cache,
+      }).then(result => {
+        Share.share({
+          title: filename,
+          url: result.uri,
+        });
+      });
+    } catch (error) {
+      console.error('Error saving or sharing XLSX on mobile:', error);
+    }
+  } else {
+    XLSX.writeFile(wb, filename);
+  }
 };

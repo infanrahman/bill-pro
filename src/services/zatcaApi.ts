@@ -150,18 +150,48 @@ export const runComplianceChecks = async (
  }),
  });
 
- if (!response.ok) {
- const err = await response.text();
- const cleanMessage = parseZatcaError(err);
- throw new Error(`Compliance check failed (${response.status}): ${cleanMessage}`);
- }
+   let data;
+   try {
+     data = await response.json();
+   } catch (e) {
+     const err = await response.text();
+     const cleanMessage = parseZatcaError(err);
+     throw new Error(`Compliance check failed (${response.status}): ${cleanMessage}`);
+   }
+  
+  console.log(`\n======================================================`);
+  console.log(`ZATCA COMPLIANCE DIAGNOSTIC - Sample: ${inv.uuid}`);
+  console.log(`HTTP Status: ${response.status}`);
+  console.log(`validationResults.status: ${data?.validationResults?.status}`);
+  console.log(`validationResults.infoMessages:`, data?.validationResults?.infoMessages);
+  console.log(`validationResults.warningMessages:`, data?.validationResults?.warningMessages);
+  console.log(`validationResults.errorMessages:`, data?.validationResults?.errorMessages);
+  console.log(`reportingStatus: ${data?.reportingStatus}`);
+  console.log(`clearanceStatus: ${data?.clearanceStatus}`);
+  console.log(`qrSellerStatus: ${data?.validationResults?.qrSellerStatus}`);
+  console.log(`qrBuyerStatus: ${data?.validationResults?.qrBuyerStatus}`);
+  console.log(`COMPLETE RAW RESPONSE:`, JSON.stringify(data, null, 2));
+  console.log(`======================================================\n`);
 
- const data = await response.json();
- const errors = data?.validationResults?.errorMessages ?? [];
- if (errors.length > 0) {
- throw new Error(`ZATCA validation errors: ${JSON.stringify(errors)}`);
- }
- }
+    const result = data?.validationResults;
+    const validationStatus = result?.status;
+    const errors = result?.errorMessages ?? [];
+    const warnings = result?.warningMessages ?? [];
+    const infos = result?.infoMessages ?? [];
+    const reportingStatus = data?.reportingStatus;
+    const clearanceStatus = data?.clearanceStatus;
+    
+    // ZATCA is the authority: require clean PASS with no errors or warnings
+    // and valid reporting/clearance status (which we will log for now as they vary by invoice type)
+    const passed =
+        validationStatus === "PASS" &&
+        errors.length === 0 &&
+        warnings.length === 0;
+
+    if (!passed) {
+      throw new Error(`ZATCA API Validation Failed.\nHTTP Status: ${response.status}\nValidation Status: ${validationStatus}\nReporting Status: ${reportingStatus}\nClearance Status: ${clearanceStatus}\nErrors: ${JSON.stringify(errors, null, 2)}\nWarnings: ${JSON.stringify(warnings, null, 2)}`);
+    }
+  }
 
  return true;
 };

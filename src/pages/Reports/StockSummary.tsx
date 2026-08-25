@@ -29,7 +29,7 @@ const StockSummary: React.FC<Props> = ({ data, loading, totals }) => {
  
  
  
- className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-white/50 dark:border-slate-700/30 flex items-center gap-8 group"
+ className="bg-white dark:bg-slate-800 p-4 md:p-8 rounded-xl md:rounded-2xl border border-white/50 dark:border-slate-700/30 flex items-center gap-4 md:gap-8 group"
  >
  <div className={clsx(
 "p-5 rounded-xl text-white group-",
@@ -48,7 +48,7 @@ const StockSummary: React.FC<Props> = ({ data, loading, totals }) => {
 
  {/* Table Container */}
  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
- <div className="p-8 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+ <div className="p-4 md:p-8 border-b border-slate-100 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 dark:bg-slate-900 gap-4 sm:gap-0">
  <div className="flex items-center gap-4">
  <div className="p-3 bg-slate-900 dark:bg-white text-white rounded-2xl">
  <Sparkles size={20} />

@@ -22,6 +22,9 @@ interface BusinessDetails {
  vatNo?: string;
  crNo?: string;
  pincode?: string;
+ buildingNumber?: string;
+ district?: string;
+ city?: string;
  terms?: string;
  primaryTitle?: string;
  secondaryTitle?: string;
@@ -41,25 +44,32 @@ const BusinessProfileTab: React.FC = () => {
  const [details, setDetails] = useState<BusinessDetails>({
  name: '', address: '', phone: '', email: '', gstin: '',
  country: 'Saudi Arabia', taxName: 'VAT', taxRate: 15,
- crNo: '', vatNo: '', primaryTitle: '', secondaryTitle: ''
+ crNo: '', vatNo: '', primaryTitle: '', secondaryTitle: '',
+ buildingNumber: '', district: '', city: ''
  });
 
  useEffect(() => {
  if (branch) {
+ const gstin = branch.gstin || branch.vatNo || '';
  setDetails({
  name: branch.name || '',
  address: branch.location || '',
+ buildingNumber: branch.buildingNumber || '',
+ district: branch.district || '',
+ city: branch.city || '',
  phone: branch.phone || '',
  email: branch.email || '',
- gstin: branch.gstin || branch.vatNo || '',
+ gstin,
  logoUrl: branch.logoUrl || '',
  country: branch.country || 'Saudi Arabia',
  taxName: branch.taxName || 'VAT',
- taxRate: branch.taxRate || 0,
+ // Use nullish coalescing so taxRate=0 is preserved (not treated as falsy)
+ taxRate: branch.taxRate ?? 15,
  pincode: branch.pincode ? branch.pincode.toString() : '',
  terms: branch.terms || '',
  crNo: branch.crNo || '',
- vatNo: branch.vatNo || branch.gstin || '',
+ // vatNo always mirrors gstin for consistency
+ vatNo: gstin,
  primaryTitle: branch.primaryTitle || '',
  secondaryTitle: branch.secondaryTitle || ''
  });
@@ -93,6 +103,9 @@ const BusinessProfileTab: React.FC = () => {
 
  try {
  if (activeBranchId) {
+ const gstin = (details.gstin || '').trim();
+ const taxRate = details.taxRate != null ? Number(details.taxRate) : 15;
+
  const updatePayload: any = {
  id: activeBranchId,
  branchId: activeBranchId,
@@ -100,24 +113,56 @@ const BusinessProfileTab: React.FC = () => {
  status: 'active',
  name: (details.name || '').trim(),
  location: (details.address || '').trim(),
+ buildingNumber: (details.buildingNumber || '').trim(),
+ district: (details.district || '').trim(),
+ city: (details.city || '').trim(),
  phone: (details.phone || '').trim(),
  email: (details.email || '').trim(),
- gstin: (details.gstin || '').trim(),
+ gstin,
  logoUrl: details.logoUrl || null,
  country: details.country || 'Saudi Arabia',
  taxName: details.taxName || 'VAT',
- taxRate: details.taxRate ? Number(details.taxRate) : 0,
+ taxRate,
  pincode: details.pincode || '',
  terms: details.terms || '',
  crNo: (details.crNo || '').trim(),
- vatNo: (details.gstin || '').trim(),
+ // vatNo always mirrors gstin — single source of truth
+ vatNo: gstin,
  primaryTitle: (details.primaryTitle || '').trim(),
  secondaryTitle: (details.secondaryTitle || '').trim(),
  updatedAt: new Date()
  };
 
  await db.branches.put(updatePayload);
- localStorage.setItem('businessDetails', JSON.stringify(details));
+
+ // Build a fully-normalized payload for localStorage so all consumers
+ // (invoices, reports, POS, etc.) always get consistent, complete data.
+ const localStoragePayload = {
+ name: updatePayload.name,
+ address: updatePayload.location,
+ buildingNumber: updatePayload.buildingNumber,
+ district: updatePayload.district,
+ city: updatePayload.city,
+ phone: updatePayload.phone,
+ email: updatePayload.email,
+ gstin,
+ vatNo: gstin,
+ crNo: updatePayload.crNo,
+ logoUrl: updatePayload.logoUrl || '',
+ country: updatePayload.country,
+ taxName: updatePayload.taxName,
+ taxRate,
+ pincode: updatePayload.pincode,
+ terms: updatePayload.terms,
+ primaryTitle: updatePayload.primaryTitle,
+ secondaryTitle: updatePayload.secondaryTitle,
+ };
+
+ // Write to both keys so every consumer finds data regardless of which key it reads
+ const serialized = JSON.stringify(localStoragePayload);
+ localStorage.setItem('businessDetails', serialized);
+ localStorage.setItem('businessProfile', serialized);
+
  addToast(t('settings.profile.saved_success'), 'success');
  }
  } catch (error) {
@@ -247,16 +292,31 @@ const BusinessProfileTab: React.FC = () => {
  <div className="space-y-10">
  <SettingsCard title={t('settings.profile.legal_section', 'Legal & Compliance')} icon={FileText}>
  <div className="space-y-8">
- <FormRow label={t('settings.profile.address')} inline={false}>
- <textarea
- name="address"
- value={details.address}
- onChange={handleChange}
- rows={3}
- className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white min-h-[120px]"
- placeholder="Full business address"
- />
- </FormRow>
+  <FormRow label={t('settings.profile.address', 'Street Name')} inline={false}>
+  <textarea
+  name="address"
+  value={details.address}
+  onChange={handleChange}
+  rows={2}
+  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-xs font-semibold tracking-wider focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 outline-none dark:text-white"
+  placeholder="Street Name"
+  />
+  </FormRow>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
+  <div>
+  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Building No</label>
+  <input type="text" name="buildingNumber" value={details.buildingNumber || ''} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider outline-none dark:text-white" placeholder="e.g. 1234"/>
+  </div>
+  <div>
+  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">District</label>
+  <input type="text" name="district" value={details.district || ''} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider outline-none dark:text-white" placeholder="e.g. Al Olaya"/>
+  </div>
+  <div>
+  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">City</label>
+  <input type="text" name="city" value={details.city || ''} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-semibold tracking-wider outline-none dark:text-white" placeholder="e.g. Riyadh"/>
+  </div>
+  </div>
 
  <div className="grid grid-cols-2 gap-6">
  <FormRow label={t('settings.profile.pincode')} inline={false}>
