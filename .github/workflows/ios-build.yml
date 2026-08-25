@@ -23,7 +23,13 @@ jobs:
         run: npm run build:base
 
       - name: Sync Capacitor (iOS)
-        run: npx cap sync ios
+        run: npx cap sync ios --verbose > sync_log.txt 2>&1 || true
+
+      - name: Upload Sync Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sync-Log
+          path: sync_log.txt
 
       - name: Build unsigned IPA
         run: |
