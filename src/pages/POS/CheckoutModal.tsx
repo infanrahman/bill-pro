@@ -455,14 +455,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row overflow-hidden animate-in fade-in duration-200">
-      <div className="flex flex-col md:flex-row w-full h-full relative">
+    <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden animate-in fade-in duration-200">
+      <div className="flex flex-col md:flex-row w-full min-h-full relative">
         {/* Background Decorations */}
         <div className="absolute top-0 left-0 w-full h-full bg-slate-50 dark:bg-slate-900 -z-10"/>
 
  {/* LEFT SIDE: Payment Methods (60%) */}
- <div className="w-full md:w-[60%] flex flex-col p-6 md:p-10 overflow-y-auto border-r border-slate-200/50 dark:border-slate-700/50 relative z-10">
- <div className="flex justify-between items-center mb-10">
+ <div className="w-full md:w-[60%] flex flex-col p-4 md:p-10 md:overflow-y-auto border-b md:border-b-0 md:border-r border-slate-200/50 dark:border-slate-700/50 relative z-10 shrink-0 md:shrink">
+ <div className="flex justify-between items-center mb-6 md:mb-10">
  <div className="space-y-1">
  <h3 className="text-3xl font-semibold text-slate-900 dark:text-white tracking-tight uppercase">{t('pos.select_payment_mode')}</h3>
  <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-[0.4em]">{t('pos.complete_transaction_to_print')}</p>
@@ -610,7 +610,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, subTotal
  </div>
 
  {/* RIGHT SIDE: Receipt Summary (40%) */}
- <div className="w-full md:w-[40%] bg-slate-50 dark:bg-slate-950 border-t md:border-t-0 border-l-0 md:border-l border-slate-200 dark:border-slate-800 flex flex-col relative z-10 min-h-0">
+ <div className="w-full md:w-[40%] bg-slate-50 dark:bg-slate-950 flex flex-col relative z-10 min-h-0 shrink-0 md:shrink">
  {/* Summary Header Gradient */}
  <div className="absolute top-0 left-0 right-0 h-2 via-indigo-600"/>
  

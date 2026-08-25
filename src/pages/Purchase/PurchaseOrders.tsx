@@ -691,7 +691,7 @@ const PurchaseOrders = () => {
     const TabButton = ({ id, label, icon: Icon }: { id: 'bill' | 'order' | 'return', label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-6 py-3 font-medium transition-all relative ${activeTab === id
+            className={`flex items-center gap-2 px-6 py-3 font-medium transition-all relative whitespace-nowrap shrink-0 ${activeTab === id
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
@@ -736,7 +736,7 @@ const PurchaseOrders = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-t-xl px-2 overflow-x-auto custom-scrollbar">
+            <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-t-xl px-2 overflow-x-auto custom-scrollbar scroll-smooth">
                 <TabButton id="bill" label={t('purchases.bill')} icon={FileText} />
                 <TabButton id="order" label={t('purchases.order')} icon={ShoppingCart} />
                 <TabButton id="return" label={t('purchases.return')} icon={RotateCcw} />
@@ -747,7 +747,7 @@ const PurchaseOrders = () => {
                 {hasPermission('purchases_add') ? (
                     <button
                         onClick={() => navigate(`/purchase/new?type=${activeTab}`)}
-                        className={`flex items-center justify-center w-full sm:w-auto gap-2 text-white px-4 py-2 rounded-lg transition-colors shadow-sm ${activeTab === 'return' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
+                        className={`flex items-center justify-center w-full sm:w-auto shrink-0 gap-2 text-white px-4 py-2 rounded-lg transition-colors shadow-sm ${activeTab === 'return' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
                             }`}
                     >
                         <Plus size={20} />
@@ -755,23 +755,23 @@ const PurchaseOrders = () => {
                     </button>
                 ) : <div />}
 
-                <div className="flex gap-3 w-full sm:w-auto overflow-x-auto custom-scrollbar pb-1">
-                    <div className="flex flex-col flex-1 sm:flex-none">
+                <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full sm:w-auto">
+                    <div className="flex flex-col flex-1 min-w-[140px]">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('purchases.from')}</label>
                         <input
                             type="datetime-local"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm"
+                            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm w-full"
                         />
                     </div>
-                    <div className="flex flex-col flex-1 sm:flex-none">
+                    <div className="flex flex-col flex-1 min-w-[140px]">
                         <label className="text-[10px] uppercase font-bold text-slate-400 pl-1">{t('purchases.to')}</label>
                         <input
                             type="datetime-local"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm"
+                            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm w-full"
                         />
                     </div>
                 </div>
@@ -817,7 +817,7 @@ const PurchaseOrders = () => {
                                         )}
                                     </td>
                                     <td {...getGridCellProps(rowIndex, 6)} className="p-4 text-right outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-r-md">
-                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+                                        <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus-within:opacity-100">
                                             {/* Action: View Details */}
                                             <button
                                                 onClick={() => setViewOrder(po)}

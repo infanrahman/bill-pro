@@ -214,9 +214,9 @@ const Dashboard: React.FC = () => {
  <span className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-white">{greeting()}</span>
  <div className="h-[2px] w-8 bg-slate-900 dark:bg-white"/>
  </div>
- <h1 className="text-4xl md:text-5xl font-semibold dark:text-white tracking-tight flex items-center gap-4">
+ <h1 className="text-4xl md:text-5xl font-semibold dark:text-white tracking-tight flex flex-wrap items-center gap-4">
  {user?.name || 'Admin'}
- <span className="text-lg bg-slate-900 dark:bg-white text-white px-4 py-1.5 rounded-full font-semibold uppercase tracking-wider">v3.0</span>
+ <span className="text-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-full font-semibold uppercase tracking-wider">v3.0</span>
  </h1>
  <p className="text-slate-700 dark:text-slate-300 mt-2 font-medium">{t('dashboard.description')}</p>
  </div>

@@ -150,8 +150,8 @@ const PurchaseDetailsModal: React.FC<PurchaseDetailsModalProps> = ({ purchase, i
           </div>
 
           {/* 3. Items Table */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden mb-8">
-            <table className="w-full text-sm">
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto mb-8">
+            <table className="w-full text-sm min-w-[500px]">
               <thead className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:border-slate-300">
                 <tr>
                   <th className={`p-3 font-bold ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.item')}</th>

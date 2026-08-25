@@ -178,7 +178,7 @@ const CategoryTab: React.FC<CategoryTabProps> = ({ onSelectCategory }) => {
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center border border-white/20" style={{ backgroundColor: category.color || '#3B82F6', color: 'white' }}>
                   <Hash size={24} />
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100">
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleOpenForm(category); }}

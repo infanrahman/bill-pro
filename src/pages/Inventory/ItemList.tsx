@@ -668,7 +668,7 @@ const ItemList: React.FC = () => {
  </span>
  </td>
  <td className="p-6 text-right">
- <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100">
+ <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100">
  <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
  <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-3 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-xl border border-slate-100 dark:border-slate-700" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
  <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-3 bg-white dark:bg-slate-800 text-rose-500 rounded-xl border border-slate-100 dark:border-slate-700" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
@@ -702,7 +702,7 @@ const ItemList: React.FC = () => {
  </div>
  <input
  type="checkbox"
- className="absolute -top-2 -left-2 w-6 h-6 rounded-lg border-slate-300 text-slate-900 dark:text-white opacity-0 group-hover:opacity-100"
+ className="absolute -top-2 -left-2 w-6 h-6 rounded-lg border-slate-300 text-slate-900 dark:text-white opacity-100 md:opacity-0 md:group-hover:opacity-100"
  checked={selectedIds.includes(item.id!)}
  onChange={() => toggleSelect(item.id!)}
  />

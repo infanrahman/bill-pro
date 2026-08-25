@@ -18,7 +18,7 @@ const CompactItemCard: React.FC<CompactItemCardProps> = ({ item, onClick, showAr
       onClick={() => onClick(item)} 
       className="bg-white dark:bg-slate-800 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-left flex flex-col justify-between h-44 sm:h-48 w-full group relative overflow-hidden transition-all duration-200 hover:border-slate-900 dark:hover:border-white hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] shrink-0"
     >
-      <div className="absolute top-3 right-3 p-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl opacity-0 group-hover:opacity-100 group-hover:scale-100 scale-75 transition-all duration-200 z-20 shadow-md">
+      <div className="absolute top-3 right-3 p-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl opacity-100 md:opacity-0 md:group-hover:opacity-100 group-hover:scale-100 scale-75 transition-all duration-200 z-20 shadow-md">
         <Plus size={15} strokeWidth={2.5} />
       </div>
 

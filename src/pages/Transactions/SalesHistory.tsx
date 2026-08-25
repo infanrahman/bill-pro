@@ -516,7 +516,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  </td>
 )}
  <td className="p-6">
- <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transform translate-x-4 group-">
+ <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transform translate-x-4 group-">
  <button type="button"
  onClick={() => setViewInvoice(inv)}
  className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"

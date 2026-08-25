@@ -15,7 +15,7 @@ const LoadingScreen: React.FC = () => {
  {/* Logo Section - Text 'Billing Pro' */}
  <div className="mb-12 p-1.5 rounded-full to-purple-500/30 ring-1 ring-white/10">
  <div className="bg-slate-900 w-32 h-32 rounded-full flex flex-col items-center justify-center relative overflow-hidden group border border-white/5">
- <div className="absolute inset-0 to-purple-600/20 opacity-0 group-hover:opacity-100"></div>
+ <div className="absolute inset-0 to-purple-600/20 opacity-100 md:opacity-0 md:group-hover:opacity-100"></div>
  <div className="relative z-10 text-center transform group-">
  <div className="text-2xl font-semibold text-transparent bg-clip-text to-cyan-300 leading-none tracking-tight">
  Billing

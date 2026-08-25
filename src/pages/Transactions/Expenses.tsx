@@ -194,7 +194,7 @@ const Expenses: React.FC = () => {
  <td className="p-4 text-slate-700 text-sm">{formatDate(exp.date)}</td>
  <td className="p-4 font-bold text-slate-800 dark:text-white text-sm">{formatCurrency(exp.amount)}</td>
  <td className="p-4">
- <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+ <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100">
  {hasPermission('expenses_edit') && (
  <button type="button"
  onClick={() => openEditModal(exp)}

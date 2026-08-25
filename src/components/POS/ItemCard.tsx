@@ -57,7 +57,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, onClick, showArabicName }) =>
         )}
 
         {/* Quick Add Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <div className="bg-slate-900/90 dark:bg-white/90 text-white dark:text-slate-900 p-2.5 rounded-2xl scale-90 group-hover:scale-100 transition-transform shadow-lg">
             <ShoppingCart size={18} />
           </div>

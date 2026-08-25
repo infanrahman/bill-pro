@@ -44,7 +44,7 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, icon: Icon, trend, 
  return (
  <div className={`relative overflow-hidden ${theme.bg} p-6 rounded-2xl border ${theme.border} hover: group`}>
  {/* Subtle Top Shine */}
- <div className="absolute top-0 left-0 right-0 h-px from-transparent via-white/50 to-transparent dark:via-white/5 opacity-0 group-hover:opacity-100"/>
+ <div className="absolute top-0 left-0 right-0 h-px from-transparent via-white/50 to-transparent dark:via-white/5 opacity-100 md:opacity-0 md:group-hover:opacity-100"/>
 
  <div className="flex justify-between items-start relative z-10">
  <div className="flex flex-col gap-1">
