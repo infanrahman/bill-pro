@@ -53,19 +53,40 @@ export const printContent = async (html: string, config: Partial<PrinterConfig> 
     document.body.appendChild(printContainer);
 
     return new Promise<boolean>((resolve) => {
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        try {
+          document.body.removeChild(printContainer);
+          if (root) root.style.display = 'block';
+        } catch (e) {}
+        resolve(true);
+      };
+
+      // Listen for print completion or cancellation
+      window.addEventListener('afterprint', cleanup, { once: true });
+
       setTimeout(() => {
         try {
           window.print();
         } catch (err) {
           console.error("Native print execution failed:", err);
         }
+
+        // When the print dialog closes, the app regains focus
+        const onFocus = () => {
+          setTimeout(cleanup, 1000); // Small delay to let UI settle
+          window.removeEventListener('focus', onFocus);
+        };
+        window.addEventListener('focus', onFocus);
+
+        // Ultimate safety timeout (2 minutes)
         setTimeout(() => {
-          try {
-            document.body.removeChild(printContainer);
-            if (root) root.style.display = 'block';
-          } catch (e) {}
-          resolve(true);
-        }, 1000);
+          window.removeEventListener('focus', onFocus);
+          cleanup();
+        }, 120000);
+
       }, 500);
     });
   } else {
