@@ -73,9 +73,11 @@ export class SyncServer {
     this.app.use(express.static(distPath));
     
     // Fallback for React Router (Single Page Application)
-    this.app.get('*', (req, res) => {
-        if (!req.url.startsWith('/api')) {
+    this.app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.url.startsWith('/api')) {
             res.sendFile(path.join(distPath, 'index.html'));
+        } else {
+            next();
         }
     });
   }
