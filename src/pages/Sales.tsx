@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Dexie from 'dexie';
 import { db, createRecordMetadata } from '../services/db';
 import type { Invoice, InvoiceItem, Item } from '../services/db';
@@ -20,14 +20,50 @@ import Skeleton from '../components/UI/Skeleton';
 import EmptyState from '../components/UI/EmptyState';
 import { Receipt, CreditCard } from 'lucide-react';
 import clsx from 'clsx';
+import QuickPaymentModal from '../components/Sales/QuickPaymentModal';
 
 const Sales = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const location = useLocation();
     const { addToast } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
     const { activeBranchId } = useAuth();
-    const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment' | 'expense'>('invoice');
+    
+    // Parse URL params for default state
+    const searchParams = new URLSearchParams(location.search);
+    const initialTab = (searchParams.get('tab') as any) || 'invoice';
+    const actionParam = searchParams.get('action');
+
+    const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment' | 'expense'>(initialTab);
+
+    // Sync state if URL changes (like clicking bottom nav)
+    useEffect(() => {
+        const tab = searchParams.get('tab') as any;
+        if (tab && tab !== activeTab) {
+            setActiveTab(tab);
+        }
+
+        const action = searchParams.get('action');
+        if (action) {
+            if (action === 'new') {
+                if (tab === 'payment') {
+                    setIsPaymentModalOpen(true);
+                } else if (tab === 'expense') {
+                    // Handled inside Expenses.tsx if needed, but for now we'll just switch tabs
+                    // Actually, Expenses component has its own Add Modal, we can't easily trigger it from here unless we pass a prop or use global state.
+                    // For now, we just switch to the expense tab.
+                } else {
+                    setIsModalOpen(true); // For Order/Return
+                }
+            } else if (action === 'quick_pay') {
+                setIsQuickPayModalOpen(true);
+            }
+            
+            // Clean up the URL so refreshing doesn't re-trigger it
+            navigate(location.pathname + (tab ? `?tab=${tab}` : ''), { replace: true });
+        }
+    }, [location.search]);
 
     // Check if ZATCA is enabled
     const isZatcaEnabled = useMemo(() => {
@@ -85,6 +121,8 @@ const Sales = () => {
     const [newItemCost, setNewItemCost] = useState('');
     const [newItemPrice, setNewItemPrice] = useState('');
     const [newItemStock, setNewItemStock] = useState('');
+
+    const [isQuickPayModalOpen, setIsQuickPayModalOpen] = useState(false);
 
     // Fetch Lists — branch-scoped with soft-delete filter
     const customers = useLiveQuery(() => db.customers.where('branchId').equals(activeBranchId).filter((c: any) => !c.deletedAt).toArray(), [activeBranchId]);
@@ -895,7 +933,6 @@ const Sales = () => {
                     <Expenses embedded={true} />
                 </div>
             )}
-        </div>
 
             {/* Create/Edit Modal (Order/Return) */}
             <Modal
@@ -1080,7 +1117,7 @@ const Sales = () => {
                     </div>
                 </div>
             </Modal>
-            {/* Quick Add Item Modal Replaced by Inline ItemForm Page */}
+            <QuickPaymentModal isOpen={isQuickPayModalOpen} onClose={() => setIsQuickPayModalOpen(false)} />
         </div>
     );
 };
