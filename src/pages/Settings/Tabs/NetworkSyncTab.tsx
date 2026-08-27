@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Wifi, Save, Server, QrCode, HardDriveDownload, Search, Lock } from 'lucide-react';
 import { SyncEngine } from '../../../services/syncEngine';
-import { ZeroConf } from 'capacitor-zeroconf';
+import { ZeroConf } from '@mhaberler/capacitor-zeroconf-nsd';
 
 export default function NetworkSyncTab() {
   const { t } = useTranslation();
