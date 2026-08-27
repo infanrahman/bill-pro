@@ -33,10 +33,10 @@ const Login: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col md:flex-row min-h-screen w-full font-sans bg-white dark:bg-slate-950 overflow-hidden">
+        <div className="flex flex-col md:flex-row min-h-screen w-full font-sans bg-white dark:bg-slate-950 overflow-y-auto overflow-x-hidden md:overflow-hidden">
             
             {/* Left Side - Full Screen Details & Branding */}
-            <div className="w-full md:w-5/12 bg-slate-900 dark:bg-black p-12 md:p-20 text-white flex flex-col justify-center relative overflow-hidden h-screen">
+            <div className="hidden md:flex w-full md:w-5/12 bg-slate-900 dark:bg-black p-12 md:p-20 text-white flex-col justify-center relative overflow-hidden h-screen">
                 <div className="absolute top-0 left-0 w-full h-full opacity-5" style={{ backgroundImage: 'url("/pattern-bg.png")', backgroundSize: '30px' }}></div>
                 <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-slate-800/50 rounded-full blur-3xl mix-blend-screen pointer-events-none"></div>
                 
@@ -93,7 +93,7 @@ const Login: React.FC = () => {
             </div>
 
             {/* Right Side - Full Screen Login Form */}
-            <div className="w-full md:w-7/12 p-6 md:p-24 flex flex-col justify-center bg-white dark:bg-slate-900 h-screen relative">
+            <div className="w-full md:w-7/12 p-6 md:p-24 flex flex-col justify-center bg-white dark:bg-slate-900 min-h-screen md:h-screen relative">
                 <div className="max-w-lg mx-auto w-full">
                     <div className="mb-12">
                         <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white mb-4 tracking-tight">{t('login.welcome_back')}</h2>
