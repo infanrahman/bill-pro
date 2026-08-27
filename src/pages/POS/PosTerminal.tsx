@@ -889,10 +889,10 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  {!editingInvoice && (
    <div className="flex gap-2 mb-3">
      <button type="button" onClick={handleHoldBill} disabled={cart.length === 0} className="flex-1 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-[10px] uppercase tracking-wider rounded-lg border border-indigo-200 dark:border-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
-       <PauseCircle size={14} /> {t('pos.hold_bill', 'Hold Bill')}
+       <PauseCircle size={14} /> {t('pos.table_order', 'Table Order / Hold')}
      </button>
      <button type="button" onClick={() => setIsHeldBillsOpen(true)} className="flex-1 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-semibold text-[10px] uppercase tracking-wider rounded-lg border border-emerald-200 dark:border-emerald-800 flex justify-center items-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
-       <PlayCircle size={14} /> {t('pos.held_bills', 'Held Bills')} {heldBills.length > 0 && `(${heldBills.length})`}
+       <PlayCircle size={14} /> {t('pos.active_tables', 'Active Tables')} {heldBills.length > 0 && `(${heldBills.length})`}
      </button>
    </div>
  )}
@@ -1225,10 +1225,10 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
    </div>
  </Modal>
 
- <Modal isOpen={isHoldPromptOpen} onClose={() => setIsHoldPromptOpen(false)} title={t('pos.hold_bill', 'Hold Bill')}>
+ <Modal isOpen={isHoldPromptOpen} onClose={() => setIsHoldPromptOpen(false)} title={t('pos.table_order', 'Table Order / Hold')}>
    <div className="p-4">
      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-       {t('pos.hold_bill_name', 'Enter a reference name for this held bill (e.g., Table 4, John):')}
+       {t('pos.hold_bill_name', 'Enter Table Number or Name (e.g. Table 4):')}
      </label>
      <input 
        autoFocus
