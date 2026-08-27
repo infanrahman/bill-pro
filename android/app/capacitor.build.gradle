@@ -12,7 +12,7 @@ dependencies {
     implementation project(':capacitor-mlkit-barcode-scanning')
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-share')
-    implementation project(':capacitor-zeroconf')
+    implementation project(':mhaberler-capacitor-zeroconf-nsd')
 
 }
 

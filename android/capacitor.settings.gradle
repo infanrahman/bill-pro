@@ -11,5 +11,5 @@ project(':capacitor-filesystem').projectDir = new File('../node_modules/@capacit
 include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/share/android')
 
-include ':capacitor-zeroconf'
-project(':capacitor-zeroconf').projectDir = new File('../node_modules/capacitor-zeroconf/android')
+include ':mhaberler-capacitor-zeroconf-nsd'
+project(':mhaberler-capacitor-zeroconf-nsd').projectDir = new File('../node_modules/@mhaberler/capacitor-zeroconf-nsd/android')
