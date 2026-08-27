@@ -630,22 +630,22 @@ const Sales = () => {
                                         value={paymentFilterMode}
                                         onChange={e => setPaymentFilterMode(e.target.value)}
                                     >
-                                        <option value="all">{t('common.all') || 'All Types'}</option>
-                                        <option value="cash">{t('payment.cash') || "Cash"}</option>
-                                        <option value="card">{t('payment.card') || "Card"}</option>
-                                        <option value="upi">{t('payment.upi') || "UPI"}</option>
-                                        <option value="bank_transfer">{t('payment.bank_transfer') || "Bank Transfer"}</option>
-                                        <option value="split">{t('payment.split') || "Split"}</option>
+                                        <option value="all">{t('common.all', { defaultValue: 'All Types' })}</option>
+                                        <option value="cash">{t('payment.cash', { defaultValue: 'Cash' })}</option>
+                                        <option value="card">{t('payment.card', { defaultValue: 'Card' })}</option>
+                                        <option value="upi">{t('payment.upi', { defaultValue: 'UPI' })}</option>
+                                        <option value="bank_transfer">{t('payment.bank_transfer', { defaultValue: 'Bank Transfer' })}</option>
+                                        <option value="split">{t('payment.split', { defaultValue: 'Split' })}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('common.date') || 'Date Filter'}</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('common.date', { defaultValue: 'Date Filter' })}</label>
                                     <select
                                         className="p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white"
                                         value={paymentDateType}
                                         onChange={e => setPaymentDateType(e.target.value as any)}
                                     >
-                                        <option value="all">{t('common.all_time') || 'All Time'}</option>
+                                        <option value="all">{t('common.all_time', { defaultValue: 'All Time' })}</option>
                                         <option value="single">Single Date</option>
                                         <option value="range">Date Range</option>
                                     </select>
@@ -732,7 +732,7 @@ const Sales = () => {
                                         <td colSpan={6}>
                                             <EmptyState
                                                 title={t('sales.no_payments')}
-                                                description={t('sales.no_payments_desc') || "No payments recorded yet."}
+                                                description={t('sales.no_payments_desc', { defaultValue: "No payments recorded yet." })}
                                                 icon={CreditCard}
                                                 actionLabel={t('sales.record_payment')}
                                                 onAction={() => setIsPaymentModalOpen(true)}
