@@ -28,6 +28,7 @@ const Spreadsheet = lazy(() => import('./pages/Spreadsheet/Spreadsheet'));
 
 import { useLicense } from './contexts/LicenseContext';
 import { ActivationModal } from './components/Settings/LicenseComponents'; // Import modal
+import { SyncEngine } from './services/syncEngine';
 import { checkAndPerformAutoBackup } from './services/backupService';
 import ZatcaSyncService from './components/Background/ZatcaSyncService';
 import { AutoUpdateBanner } from './components/UI/AutoUpdateBanner';
@@ -48,6 +49,13 @@ const AppContent = () => {
   useEffect(() => { addToastRef.current = addToast; }, [addToast]);
 
   useEffect(() => {
+    // Initialize Local Network Sync Services
+    if (window.electron) {
+      SyncEngine.initMasterListeners();
+    } else {
+      SyncEngine.startClientSync(5000);
+    }
+
   const runBackup = async () => {
   const result = await checkAndPerformAutoBackup();
   if (result.status === 'success') {

@@ -4,6 +4,7 @@ import { generateZatcaQR, formatZatcaDate } from './zatca';
 import type { Invoice, Purchase } from './db';
 import { printContent } from './printerService';
 import JsBarcode from 'jsbarcode';
+import { Capacitor } from '@capacitor/core';
 
 export interface BusinessDetails {
  name: string;
@@ -826,19 +827,86 @@ export const downloadInvoicePDF = async (invoice: Invoice, businessRaw: Business
  name: 'Business', address: '', phone: '', email: ''
  };
 
- // Always use Standard HTML for PDF Downloads (Cleaner)
  const html = await getInvoiceHTML(invoice, business);
 
  if (!html) return false;
 
  if (window.electron && window.electron.downloadPDF) {
  return await window.electron.downloadPDF(html,`Invoice - ${invoice.invoiceNumber}.pdf`, silent);
- } else {
- // Fallback: Just Print
- alert("Download as PDF via the Print Dialog.");
- await generateInvoicePDF(invoice, business);
- return true;
+ } 
+ 
+ if (Capacitor.isNativePlatform()) {
+    try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+        const { jsPDF } = await import('jspdf');
+        const html2canvas = (await import('html2canvas')).default;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.style.width = '794px';
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.top = '-99999px';
+        tempDiv.innerHTML = html;
+        document.body.appendChild(tempDiv);
+        
+        // Wait for images to load
+        await new Promise(r => setTimeout(r, 500));
+
+        const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
+        document.body.removeChild(tempDiv);
+        
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        const fileName = `Invoice-${invoice.invoiceNumber.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
+        
+        const result = await Filesystem.writeFile({
+            path: fileName,
+            data: pdfBase64,
+            directory: Directory.Documents,
+        });
+        
+        await Share.share({
+            title: fileName,
+            url: result.uri,
+            dialogTitle: 'Save or Share PDF'
+        });
+        return true;
+    } catch (e) {
+        console.error("PDF Generation error", e);
+        alert("Failed to generate PDF. Falling back to print.");
+        await generateInvoicePDF(invoice, business);
+        return false;
+    }
  }
+
+ // Web Fallback
+ const iframe = document.createElement('iframe');
+ iframe.style.position = 'fixed';
+ iframe.style.right = '0';
+ iframe.style.bottom = '0';
+ iframe.style.width = '0';
+ iframe.style.height = '0';
+ iframe.style.border = '0';
+ document.body.appendChild(iframe);
+
+ const doc = iframe.contentWindow?.document;
+ if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+    setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+ }
+ return true;
 };
 
 

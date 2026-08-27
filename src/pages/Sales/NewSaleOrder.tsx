@@ -386,47 +386,43 @@ const NewSaleOrder = () => {
                                 {items.length === 0 ? (
                                     <div className="p-10 text-center text-slate-400 text-sm">{t('sales.no_items_selected_msg')}</div>
                                 ) : (
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                                            <tr>
-                                                <th className="text-left p-3 font-semibold text-slate-500 dark:text-slate-400">{t('sales.item')}</th>
-                                                <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-24">{t('sales.qty')}</th>
-                                                <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('sales.price')}</th>
-                                                <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('sales.total')}</th>
-                                                <th className="w-10"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                            {items.map((item: any) => (
-                                                <tr key={item.itemId} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                    <td className="p-3 font-medium dark:text-white">{item.name}</td>
-                                                    <td className="p-3">
+                                    <div className="flex flex-col gap-2 p-2">
+                                        {items.map((item: any) => (
+                                            <div key={item.itemId} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                                <div className="flex justify-between items-start">
+                                                    <span className="font-bold text-sm dark:text-white">{item.name}</span>
+                                                    <button onClick={() => removeItem(item.itemId)} className="text-red-500 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between items-center gap-2 mt-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] uppercase text-slate-500 font-bold">{t('sales.qty')}</span>
                                                         <input
                                                             type="number"
-                                                            className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            className="w-16 p-1 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                             value={item.quantity}
                                                             min={1}
                                                             onChange={e => updateItem(item.itemId, 'quantity', parseFloat(e.target.value) || 1)}
                                                         />
-                                                    </td>
-                                                    <td className="p-3">
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] uppercase text-slate-500 font-bold">{t('sales.price')}</span>
                                                         <input
                                                             type="number"
-                                                            className="w-full p-1 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-right dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            className="w-20 p-1 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg text-right dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                             value={item.price}
                                                             onChange={e => updateItem(item.itemId, 'price', parseFloat(e.target.value) || 0)}
                                                         />
-                                                    </td>
-                                                    <td className="p-3 text-right font-semibold dark:text-white">{formatCurrency(item.total)}</td>
-                                                    <td className="p-3">
-                                                        <button onClick={() => removeItem(item.itemId)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 rounded-lg transition-colors">
-                                                            <Trash2 size={15} />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[10px] uppercase text-slate-500 font-bold">{t('sales.total')}</span>
+                                                        <span className="font-bold text-sm dark:text-white">{formatCurrency(item.total)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                         </div>

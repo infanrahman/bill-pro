@@ -318,7 +318,7 @@ const BusinessProfileTab: React.FC = () => {
   </div>
   </div>
 
- <div className="grid grid-cols-2 gap-6">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <FormRow label={t('settings.profile.pincode')} inline={false}>
  <input
  type="text"
@@ -343,7 +343,7 @@ const BusinessProfileTab: React.FC = () => {
  </FormRow>
  </div>
 
- <div className="grid grid-cols-2 gap-6 pt-6 border-t border-slate-100/50 dark:border-slate-700/50">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100/50 dark:border-slate-700/50">
  <FormRow label={t('settings.profile.tax_reg_no')} inline={false}>
  <input
  type="text"

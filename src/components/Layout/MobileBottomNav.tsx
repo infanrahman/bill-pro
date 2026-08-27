@@ -64,6 +64,17 @@ const MobileBottomNav: React.FC = () => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
+    const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+
+    const handleAction = (action: string) => {
+        setIsQuickActionsOpen(false);
+        if (action === 'pos') navigate('/pos');
+        if (action === 'order') navigate('/sales?tab=order&action=new');
+        if (action === 'payment_in') navigate('/sales?tab=payment&action=new');
+        if (action === 'expense') navigate('/sales?tab=expense&action=new');
+        if (action === 'customer') navigate('/customers?action=new');
+        if (action === 'quick_pay') navigate('/sales?action=quick_pay');
+    };
 
     const navItems = [
         { id: 'home', to: '/', icon: LayoutGrid, label: t('sidebar.dashboard', { defaultValue: 'Home' }) },

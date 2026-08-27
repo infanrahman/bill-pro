@@ -1,7 +1,5 @@
-
-
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { db, type Item, type Purchase, type PurchaseItem, type SyncEntity, createRecordMetadata, updateRecordMetadata } from '../../services/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Search, Trash2, Save, FileText, ShoppingCart, RotateCcw, Edit, CheckCircle, Printer, Download, ShieldOff, CreditCard, Eye, ArrowLeft } from 'lucide-react';
@@ -16,16 +14,22 @@ import ShareModal from '../../components/UI/ShareModal';
 import ItemForm from '../Inventory/ItemForm';
 import { Send, Wand2, QrCode } from 'lucide-react';
 import { useGridNavigation } from '../../hooks/useGridNavigation';
+import clsx from 'clsx';
+import PurchaseDashboard from './PurchaseDashboard';
 import BarcodeModal from '../Inventory/BarcodeModal';
 
 import PurchaseDetailsModal from '../../components/UI/PurchaseDetailsModal';
 
 const PurchaseOrders = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { addToast, addNotification } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
     const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
     const { t, i18n } = useTranslation();
+    const searchParams = new URLSearchParams(location.search);
+    const initialTab = (searchParams.get('tab') as 'dashboard' | 'bill' | 'order' | 'return') || 'dashboard';
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [shareModalOpen, setShareModalOpen] = useState(false);
     const [selectedOrderForShare, setSelectedOrderForShare] = useState<Purchase | null>(null);
@@ -35,7 +39,7 @@ const PurchaseOrders = () => {
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
     const [selectedItemsForLabel, setSelectedItemsForLabel] = useState<Item[] | null>(null);
 
-    const [activeTab, setActiveTab] = useState<'bill' | 'order' | 'return'>('bill');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'bill' | 'order' | 'return'>(initialTab);
 
     // Form State
     // Form State
@@ -479,7 +483,7 @@ const PurchaseOrders = () => {
             paymentType: paymentType as 'cash' | 'card' | 'upi' | 'credit',
             paidAmount: advance,
             notes: notes,
-            type: activeTab,
+            type: activeTab as 'order' | 'return' | 'bill',
             status: activeTab === 'order' ? 'pending' : 'completed',
             relatedOrderId: relatedOrderId || undefined,
             supplierId: editSupplierId
@@ -511,7 +515,7 @@ const PurchaseOrders = () => {
                     }
 
                     await db.purchases.update(editingId, { ...purchaseData, ...updateRecordMetadata() } as any);
-                    await applyStockEffect(orderItems, activeTab, editSupplierId); // Apply new stock
+                    await applyStockEffect(orderItems, activeTab as 'order' | 'return' | 'bill', editSupplierId); // Apply new stock
 
                     // Apply New Supplier Balance Effect
                     if (editSupplierId) {
@@ -532,7 +536,7 @@ const PurchaseOrders = () => {
                 } else {
                     // CREATE MODE
                     const id = await db.purchases.add({ ...purchaseData, ...createRecordMetadata() } as Purchase);
-                    await applyStockEffect(orderItems, activeTab, editSupplierId);
+                    await applyStockEffect(orderItems, activeTab as 'order' | 'return' | 'bill', editSupplierId);
 
                     // Update Supplier Balance
                     if (editSupplierId) {
@@ -729,17 +733,57 @@ const PurchaseOrders = () => {
         );
     }
 
-    return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold dark:text-white">{t('purchases.title')}</h1>
-            </div>
+    const stats = {
+        bills: purchases?.filter((p: any) => p.type === 'bill').length || 0,
+        orders: purchases?.filter((p: any) => p.type === 'order').length || 0,
+        returns: purchases?.filter((p: any) => p.type === 'return').length || 0,
+    };
+    const totalUnpaid = purchases?.filter((p: any) => p.type === 'bill').reduce((sum: number, p: any) => sum + (p.totalAmount - (p.paidAmount || 0)), 0) || 0;
+    const recentBills = purchases?.filter((p: any) => p.type === 'bill').slice(0, 5) || [];
 
-            {/* Tabs */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-t-xl px-2 overflow-x-auto custom-scrollbar scroll-smooth">
-                <TabButton id="bill" label={t('purchases.bill')} icon={FileText} />
-                <TabButton id="order" label={t('purchases.order')} icon={ShoppingCart} />
-                <TabButton id="return" label={t('purchases.return')} icon={RotateCcw} />
+    return (
+        <>
+        {activeTab === 'dashboard' ? (
+            <PurchaseDashboard stats={stats} recentBills={recentBills} totalUnpaid={totalUnpaid} />
+        ) : (
+        <div className="space-y-6">
+            <div className="flex flex-col gap-4 relative z-10 pt-4">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setActiveTab('dashboard')} className="p-2 -ml-2 text-slate-700 dark:text-slate-300">
+                            <ArrowLeft size={24} />
+                        </button>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            {activeTab === 'order' && <ShoppingCart className="text-blue-600" size={20} />}
+                            {activeTab === 'bill' && <FileText className="text-blue-600" size={20} />}
+                            {activeTab === 'return' && <RotateCcw className="text-amber-600" size={20} />}
+                            {activeTab === 'order' && 'Purchase Orders'}
+                            {activeTab === 'bill' && 'Purchase Bills'}
+                            {activeTab === 'return' && 'Purchase Returns'}
+                        </h1>
+                    </div>
+                </div>
+
+                {/* Pill Tabs for Lists */}
+                <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    <button className="px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 font-bold text-xs whitespace-nowrap">All ({
+                        activeTab === 'order' ? stats.orders :
+                        activeTab === 'bill' ? stats.bills :
+                        stats.returns
+                    })</button>
+                    {activeTab === 'order' && (
+                        <>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Pending</button>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Completed</button>
+                        </>
+                    )}
+                    {activeTab === 'bill' && (
+                        <>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Settled</button>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Unpaid</button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Actions Bar */}
@@ -797,14 +841,14 @@ const PurchaseOrders = () => {
                             const balance = po.totalAmount - paid;
                             return (
                                 <tr key={po.id || po.orderNumber} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group">
-                                    <td {...getGridCellProps(rowIndex, 0)} className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-md">{formatDate(po.date)}</td>
-                                    <td {...getGridCellProps(rowIndex, 1)} className="p-4 font-mono text-xs text-slate-500 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.orderNumber}</td>
-                                    <td {...getGridCellProps(rowIndex, 2)} className="p-4 font-medium dark:text-white text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.supplierName}</td>
-                                    <td {...getGridCellProps(rowIndex, 3)} className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{t('purchases.item_count', { count: po.items.length })}</td>
-                                    <td {...getGridCellProps(rowIndex, 4)} className={`p-4 font-bold text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 ${activeTab === 'return' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-white'}`}>
+                                    <td {...getGridCellProps(rowIndex, 0)} data-label="Date" className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 rounded-l-md">{formatDate(po.date)}</td>
+                                    <td {...getGridCellProps(rowIndex, 1)} data-label="ID" className="p-4 font-mono text-xs text-slate-500 dark:text-slate-400 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.orderNumber}</td>
+                                    <td {...getGridCellProps(rowIndex, 2)} data-label="Supplier" className="p-4 font-medium dark:text-white text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{po.supplierName}</td>
+                                    <td {...getGridCellProps(rowIndex, 3)} data-label="Items" className="p-4 dark:text-slate-300 text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">{t('purchases.item_count', { count: po.items.length })}</td>
+                                    <td {...getGridCellProps(rowIndex, 4)} data-label="Amount" className={`p-4 font-bold text-sm outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500 ${activeTab === 'return' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-white'}`}>
                                         {formatCurrency(po.totalAmount)}
                                     </td>
-                                    <td {...getGridCellProps(rowIndex, 5)} className="p-4 outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
+                                    <td {...getGridCellProps(rowIndex, 5)} data-label="Status & Actions" className="p-4 flex-col gap-2 items-end outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 focus:ring-inset focus:ring-2 focus:ring-blue-500">
                                         {activeTab === 'order' ? (
                                             <span className={`px-2 py-1.5 border rounded-md text-xs font-semibold uppercase ${po.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
                                                 }`}>
@@ -1490,6 +1534,8 @@ const PurchaseOrders = () => {
 
 
         </div>
+        )}
+        </>
     );
 };
 

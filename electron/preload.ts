@@ -71,6 +71,26 @@ contextBridge.exposeInMainWorld('electron', {
         runDiagnostic: () => ipcRenderer.invoke('zatca:run-diagnostic'),
     },
 
+    // Sync Server
+    sync: {
+        getPin: () => ipcRenderer.invoke('sync:get-pin'),
+        onPullRequest: (callback: (data: any) => void) => {
+            const subscription = (_event: IpcRendererEvent, data: any) => callback(data);
+            ipcRenderer.on('sync:pull:request', subscription);
+            return () => ipcRenderer.off('sync:pull:request', subscription);
+        },
+        sendPullResponse: (reqId: string, data?: any, error?: string) => 
+            ipcRenderer.send('sync:pull:response', { reqId, data, error }),
+            
+        onPushRequest: (callback: (data: any) => void) => {
+            const subscription = (_event: IpcRendererEvent, data: any) => callback(data);
+            ipcRenderer.on('sync:push:request', subscription);
+            return () => ipcRenderer.off('sync:push:request', subscription);
+        },
+        sendPushResponse: (reqId: string, data?: any, error?: string) => 
+            ipcRenderer.send('sync:push:response', { reqId, data, error })
+    },
+
     // Auto Updater
     updater: {
         getVersion: () => ipcRenderer.invoke('app:getVersion'),

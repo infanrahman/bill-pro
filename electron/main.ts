@@ -8,6 +8,7 @@ import { ThermalPrinterService } from './services/thermalPrinterService';
 import { ScaleDirectService } from './services/scaleDirectService';
 import { ZatcaService } from './services/zatcaService';
 import { AuthService } from './services/authService';
+import { SyncServer } from './services/syncServer';
 
 // Main Process Stability
 process.on('uncaughtException', (error) => {
@@ -23,6 +24,7 @@ const googleDriveService = new GoogleDriveService();
 const thermalPrinterService = new ThermalPrinterService();
 const zatcaService = new ZatcaService();
 const authService = new AuthService();
+const syncServer = new SyncServer();
 
 // IPC Handlers
 ipcMain.handle('license:get-status', async () => {
@@ -1168,9 +1170,13 @@ function createWindow() {
     show: false, // Don't show until ready
   });
   mainWindowRef = win;
+  
+  // Start the local network sync server
+  syncServer.start(4500, win);
 
   win.on('closed', () => {
     mainWindowRef = null;
+    syncServer.stop();
   });
   console.log('BrowserWindow created');
 

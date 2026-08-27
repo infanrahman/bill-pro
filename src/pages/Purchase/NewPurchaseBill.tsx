@@ -442,56 +442,62 @@ const NewPurchaseBill = () => {
                                 {orderItems.length === 0 ? (
                                     <div className="p-10 text-center text-slate-400 text-sm">{t('purchases.no_items_added', 'No items added yet')}</div>
                                 ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm min-w-[850px]">
-                                            <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-                                                <tr>
-                                                    <th className="text-left p-3 font-semibold text-slate-500 dark:text-slate-400">{t('purchases.item_name')}</th>
-                                                    <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">{t('purchases.unit')}</th>
-                                                    <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">{t('purchases.qty')}</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-24">{t('purchases.cost')}</th>
-                                                    <th className="text-center p-3 font-semibold text-slate-500 dark:text-slate-400 w-20">Tax %</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('purchases.before_vat_amount')}</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-28">{t('purchases.vat_amount')}</th>
-                                                    <th className="text-right p-3 font-semibold text-slate-500 dark:text-slate-400 w-32">{t('purchases.total_with_vat')}</th>
-                                                    <th className="w-10"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                                {orderItems.map((item: any) => {
-                                                    const qty = item.quantity || 0, cost = item.cost || 0, rate = item.taxRate || 0, taxType = item.taxType || 'exclusive';
-                                                    let lineBeforeVat = 0, lineTax = 0, lineTotal = 0;
-                                                    if (settings.applyTax) {
-                                                        if (taxType === 'inclusive') {
-                                                            const base = cost / (1 + rate / 100);
-                                                            lineBeforeVat = base * qty;
-                                                            lineTax = (cost - base) * qty;
-                                                            lineTotal = cost * qty;
-                                                        } else {
-                                                            lineBeforeVat = cost * qty;
-                                                            lineTax = (cost * (rate / 100)) * qty;
-                                                            lineTotal = lineBeforeVat + lineTax;
-                                                        }
-                                                    } else {
-                                                        lineBeforeVat = cost * qty;
-                                                        lineTotal = lineBeforeVat;
-                                                    }
-                                                    return (
-                                                        <tr key={item.itemId} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                            <td className="p-3 font-medium dark:text-white">{item.name}</td>
-                                                            <td className="p-3"><input type="text" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.unit || ''} onChange={e => updateOrderItem(item.itemId, 'unit', e.target.value)} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.quantity} min={1} onChange={e => updateOrderItem(item.itemId, 'quantity', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-right dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.cost} onChange={e => updateOrderItem(item.itemId, 'cost', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
-                                                            <td className="p-3"><input type="number" className="w-full p-1.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.taxRate ?? 0} onChange={e => updateOrderItem(item.itemId, 'taxRate', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} /></td>
-                                                            <td className="p-3 text-right text-slate-600 dark:text-slate-300 font-medium">{formatCurrency(lineBeforeVat)}</td>
-                                                            <td className="p-3 text-right text-slate-600 dark:text-slate-300 font-medium">{formatCurrency(lineTax)}</td>
-                                                            <td className="p-3 text-right font-semibold dark:text-white">{formatCurrency(lineTotal)}</td>
-                                                            <td className="p-3"><button onClick={() => removeOrderItem(item.itemId)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 rounded-lg transition-colors"><Trash2 size={15} /></button></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                    <div className="flex flex-col gap-3 p-1">
+                                        {orderItems.map((item: any) => {
+                                            const qty = item.quantity || 0, cost = item.cost || 0, rate = item.taxRate || 0, taxType = item.taxType || 'exclusive';
+                                            let lineBeforeVat = 0, lineTax = 0, lineTotal = 0;
+                                            if (settings.applyTax) {
+                                                if (taxType === 'inclusive') {
+                                                    const base = cost / (1 + rate / 100);
+                                                    lineBeforeVat = base * qty;
+                                                    lineTax = (cost - base) * qty;
+                                                    lineTotal = cost * qty;
+                                                } else {
+                                                    lineBeforeVat = cost * qty;
+                                                    lineTax = (cost * (rate / 100)) * qty;
+                                                    lineTotal = lineBeforeVat + lineTax;
+                                                }
+                                            } else {
+                                                lineBeforeVat = cost * qty;
+                                                lineTotal = lineBeforeVat;
+                                            }
+                                            return (
+                                                <div key={item.itemId} className="flex flex-col gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="font-bold text-sm dark:text-white">{item.name}</span>
+                                                        <button onClick={() => removeOrderItem(item.itemId)} className="text-red-500 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"><Trash2 size={16} /></button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                        <div>
+                                                            <span className="block text-[10px] uppercase text-slate-500 font-bold mb-1">{t('purchases.qty')}</span>
+                                                            <input type="number" className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.quantity} min={1} onChange={e => updateOrderItem(item.itemId, 'quantity', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} />
+                                                        </div>
+                                                        <div>
+                                                            <span className="block text-[10px] uppercase text-slate-500 font-bold mb-1">{t('purchases.unit')}</span>
+                                                            <input type="text" className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.unit || ''} onChange={e => updateOrderItem(item.itemId, 'unit', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <span className="block text-[10px] uppercase text-slate-500 font-bold mb-1">{t('purchases.cost')}</span>
+                                                            <input type="number" className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.cost} onChange={e => updateOrderItem(item.itemId, 'cost', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} />
+                                                        </div>
+                                                        <div>
+                                                            <span className="block text-[10px] uppercase text-slate-500 font-bold mb-1">Tax %</span>
+                                                            <input type="number" className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-center dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" value={item.taxRate ?? 0} onChange={e => updateOrderItem(item.itemId, 'taxRate', e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] uppercase text-slate-500 font-bold">Tax: {formatCurrency(lineTax)}</span>
+                                                            <span className="text-[10px] uppercase text-slate-500 font-bold">Base: {formatCurrency(lineBeforeVat)}</span>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[10px] uppercase text-slate-500 font-bold">{t('purchases.total_with_vat')}</span>
+                                                            <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{formatCurrency(lineTotal)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

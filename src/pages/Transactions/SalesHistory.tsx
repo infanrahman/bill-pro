@@ -456,7 +456,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  </div>
  </div> <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
  <div className="overflow-x-auto custom-scrollbar">
- <table className="w-full text-left whitespace-nowrap min-w-[700px]">
+ <table className="w-full text-left whitespace-nowrap min-w-[700px] responsive-table">
  <thead className="border-b border-slate-50 dark:border-slate-700/50">
  <tr>
  <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.invoice_no') || 'Invoice #'}</th>
@@ -471,15 +471,15 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
  {filteredInvoices?.map((inv: any) => (
  <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
- <td className="p-5">
+ <td className="p-5" data-label="ID">
  <span className="font-mono text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
  {inv.invoiceNumber}
  </span>
  </td>
- <td className="p-5 font-bold text-slate-900 dark:text-slate-300 text-xs">{formatDate(inv.createdAt)}</td>
- <td className="p-5 font-bold text-slate-900 dark:text-white uppercase text-xs tracking-tight">{inv.customerName}</td>
- <td className="p-5 font-bold text-slate-900 dark:text-white text-sm tracking-tight">{formatCurrency(inv.grandTotal)}</td>
- <td className="p-5">
+ <td className="p-5 font-bold text-slate-900 dark:text-slate-300 text-xs" data-label="Date">{formatDate(inv.createdAt)}</td>
+ <td className="p-5 font-bold text-slate-900 dark:text-white uppercase text-xs tracking-tight" data-label="Customer">{inv.customerName}</td>
+ <td className="p-5 font-bold text-slate-900 dark:text-white text-sm tracking-tight" data-label="Amount">{formatCurrency(inv.grandTotal)}</td>
+ <td className="p-5" data-label="Status">
  <span className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider border
  ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
  (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
@@ -492,7 +492,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  </span>
  </td>
  {isZatcaEnabled && (
- <td className="p-5">
+ <td className="p-5" data-label="ZATCA">
  {inv.zatcaStatus === 'REPORTED' ? (
  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
  <ShieldCheck size={12} strokeWidth={2.5} /> Reported
@@ -511,7 +511,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  )}
  </td>
  )}
- <td className="p-5">
+ <td className="p-5" data-label="Actions">
  <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
  <button type="button"
  onClick={() => setViewInvoice(inv)}

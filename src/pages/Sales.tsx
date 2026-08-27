@@ -21,6 +21,7 @@ import EmptyState from '../components/UI/EmptyState';
 import { Receipt, CreditCard } from 'lucide-react';
 import clsx from 'clsx';
 import QuickPaymentModal from '../components/Sales/QuickPaymentModal';
+import SalesDashboard from './Sales/SalesDashboard';
 
 const Sales = () => {
     const { t } = useTranslation();
@@ -32,10 +33,10 @@ const Sales = () => {
     
     // Parse URL params for default state
     const searchParams = new URLSearchParams(location.search);
-    const initialTab = (searchParams.get('tab') as any) || 'invoice';
+    const initialTab = (searchParams.get('tab') as any) || 'dashboard';
     const actionParam = searchParams.get('action');
 
-    const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment' | 'expense'>(initialTab);
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'order' | 'invoice' | 'return' | 'payment'>(initialTab);
 
     // Sync state if URL changes (like clicking bottom nav)
     useEffect(() => {
@@ -143,6 +144,15 @@ const Sales = () => {
     }, [activeTab, activeBranchId]);
 
     // Grid Nav
+    const recentOrders = useLiveQuery(async () => {
+        return await db.invoices
+            .where('[branchId+createdAt]')
+            .between([activeBranchId, Dexie.minKey], [activeBranchId, Dexie.maxKey])
+            .filter((inv: any) => !inv.deletedAt && inv.type === 'order')
+            .reverse()
+            .limit(5)
+            .toArray();
+    }, [activeBranchId]);
     const { getGridCellProps } = useGridNavigation({
         rows: currentList?.length || 0,
         cols: 6
@@ -422,55 +432,61 @@ const Sales = () => {
 
 
     return (
+        <>
+        {activeTab === 'dashboard' ? (
+            <SalesDashboard stats={stats} recentOrders={recentOrders || []} totalPaymentsIn={paymentTotals.total} />
+        ) : (
         <div className="space-y-6 bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 pt-2 md:pt-0 max-w-[1600px] mx-auto font-inter pb-24">
-            {/* Header */}
-            <div className="flex flex-col gap-6 relative z-10">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                        <ShoppingCart className="text-blue-600" />
-                        {t('sales.title') || 'Sales Management'}
-                    </h1>
-                    <p className="text-xs text-slate-500 font-medium mt-1">{t('sales.description') || 'Manage orders, invoices, returns, and payments'}</p>
+            
+            {/* Dynamic List Header (Screen 2, 3, etc.) */}
+            <div className="flex flex-col gap-4 relative z-10 pt-4">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setActiveTab('dashboard')} className="p-2 -ml-2 text-slate-700 dark:text-slate-300">
+                            <ArrowLeft size={24} />
+                        </button>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            {activeTab === 'order' && <ShoppingCart className="text-blue-600" size={20} />}
+                            {activeTab === 'invoice' && <FileText className="text-blue-600" size={20} />}
+                            {activeTab === 'return' && <RotateCcw className="text-amber-600" size={20} />}
+                            {activeTab === 'payment' && <DollarSign className="text-emerald-600" size={20} />}
+                            {activeTab === 'order' && 'Sales Orders'}
+                            {activeTab === 'invoice' && 'Invoices'}
+                            {activeTab === 'return' && 'Returns'}
+                            {activeTab === 'payment' && 'Payments In'}
+                        </h1>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 text-slate-600">
+                            <Search size={18} />
+                        </button>
+                        <button className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 text-slate-600">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                        </button>
+                    </div>
                 </div>
-                
-                <div className="flex items-center gap-3 w-full">
-                    <button
-                        onClick={() => navigate('/sales/new?type=order')}
-                        className="flex-1 px-4 py-3.5 bg-blue-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-transform active:scale-95 shadow-sm"
-                    >
-                        <Plus size={18} /> {t('sales.new_order') || 'New Sales Order'}
-                    </button>
-                    <button
-                        onClick={() => navigate('/sales/new?type=return')}
-                        className="flex-1 px-4 py-3.5 bg-amber-600 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-amber-700 transition-transform active:scale-95 shadow-sm"
-                    >
-                        <RotateCcw size={18} /> {t('sales.create_return') || 'Create Return'}
-                    </button>
-                </div>
-            </div>
 
-            {/* Tabs */}
-            <div className="flex justify-between border-b border-slate-200/60 dark:border-slate-800 overflow-x-auto custom-scrollbar px-2 -mx-4 md:mx-0">
-                {[
-                    { id: 'order', label: t('sales.orders') || 'Sales Orders', count: stats.orders, icon: ShoppingCart },
-                    { id: 'invoice', label: t('sales.invoices') || 'Invoices', count: stats.invoices, icon: FileText },
-                    { id: 'return', label: t('sales.returns') || 'Returns', count: stats.returns, icon: RotateCcw },
-                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
-                        className={clsx(
-                            "flex flex-col items-center justify-center gap-1.5 px-2 py-3 min-w-[70px] transition-colors border-b-2",
-                            activeTab === tab.id 
-                                ? "text-blue-600 border-blue-600 dark:text-blue-500 dark:border-blue-500" 
-                                : "text-slate-400 border-transparent hover:text-slate-600"
-                        )}
-                    >
-                        <tab.icon size={20} className={activeTab === tab.id ? "text-blue-600" : "text-slate-400"} />
-                        <span className="text-[10px] font-semibold whitespace-nowrap">{tab.label} ({tab.count})</span>
-                    </button>
-                ))}
+                {/* Pill Tabs for Lists */}
+                <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    <button className="px-4 py-1.5 rounded-full bg-blue-100 text-blue-700 font-bold text-xs whitespace-nowrap">All ({
+                        activeTab === 'order' ? stats.orders :
+                        activeTab === 'invoice' ? stats.invoices :
+                        activeTab === 'return' ? stats.returns :
+                        stats.payments
+                    })</button>
+                    {activeTab === 'order' && (
+                        <>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Pending</button>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Completed</button>
+                        </>
+                    )}
+                    {activeTab === 'invoice' && (
+                        <>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Paid</button>
+                            <button className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-medium text-xs whitespace-nowrap">Unpaid</button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Content Area */}
@@ -486,7 +502,7 @@ const Sales = () => {
 
                 {(activeTab === 'order' || activeTab === 'return') && (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                        <table className="w-full text-left whitespace-nowrap min-w-[600px] responsive-table">
                             <thead>
                                 <tr className="border-b border-slate-50 dark:border-slate-700/50">
                                     <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.date')} #</th>
@@ -528,16 +544,14 @@ const Sales = () => {
                                 ) : (
                                     currentList.map((invoice: any, rowIndex: any) => (
                                         <tr key={invoice.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition-colors">
-                                            <td
-                                                {...getGridCellProps(rowIndex, 0)}
-                                                className="p-5 text-xs text-slate-500 dark:text-slate-400 outline-none"
+                                            <td {...getGridCellProps(rowIndex, 0)} data-label="Date" className="p-5 text-xs text-slate-500 dark:text-slate-400 outline-none"
                                             >
                                                 {formatDate(invoice.createdAt)}
                                             </td>
-                                            <td {...getGridCellProps(rowIndex, 1)} className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{invoice.invoiceNumber || '-'}</td>
-                                            <td {...getGridCellProps(rowIndex, 2)} className="p-5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none">{invoice.customerName || 'Unknown'}</td>
-                                            <td {...getGridCellProps(rowIndex, 3)} className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{formatCurrency(invoice.grandTotal)}</td>
-                                            <td {...getGridCellProps(rowIndex, 4)} className="p-5 outline-none">
+                                            <td {...getGridCellProps(rowIndex, 1)} data-label="ID" className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{invoice.invoiceNumber || '-'}</td>
+                                            <td {...getGridCellProps(rowIndex, 2)} data-label="Customer" className="p-5 text-xs font-medium text-slate-600 dark:text-slate-300 outline-none">{invoice.customerName || 'Unknown'}</td>
+                                            <td {...getGridCellProps(rowIndex, 3)} data-label="Amount" className="p-5 text-xs font-bold text-slate-900 dark:text-white outline-none tracking-tight">{formatCurrency(invoice.grandTotal)}</td>
+                                            <td {...getGridCellProps(rowIndex, 4)} data-label="Status" className="p-5 outline-none">
                                                 <span className={clsx(
                                                     "px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider",
                                                     invoice.status === 'paid' || invoice.status === 'completed' 
@@ -569,7 +583,7 @@ const Sales = () => {
                                                     )}
                                                 </td>
                                             )}
-                                            <td {...getGridCellProps(rowIndex, 5)} className="p-5 text-right flex flex-col items-end gap-3 outline-none">
+                                            <td {...getGridCellProps(rowIndex, 5)} data-label="Actions" className="p-5 text-right flex flex-col items-end gap-3 outline-none">
                                                 {activeTab === 'order' && invoice.status === 'pending' && (
                                                     <button
                                                         onClick={async () => {
@@ -745,7 +759,7 @@ const Sales = () => {
                             ))}
                         </div>
 
-                        <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+                        <table className="w-full text-left whitespace-nowrap min-w-[600px] responsive-table">
                             <thead>
                                 <tr className="border-b border-slate-50 dark:border-slate-700/50">
                                     <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('sales.date')} #</th>
@@ -786,7 +800,7 @@ const Sales = () => {
                                         const custName = customer?.name || 'Unknown';
                                         return (
                                             <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition-colors">
-                                                <td className="p-5 text-xs text-slate-500 dark:text-slate-400">{formatDate(payment.date)}</td>
+                                                <td className="p-5 text-xs text-slate-500 dark:text-slate-400" data-label="Date">{formatDate(payment.date)}</td>
                                                 <td className="p-5 text-xs font-bold text-slate-900 dark:text-white tracking-tight">{custName}</td>
                                                 <td className="p-5 text-sm font-bold text-emerald-600 tracking-tight">+{formatCurrency(payment.amount)}</td>
                                                 <td className="p-5 capitalize">
@@ -1112,6 +1126,8 @@ const Sales = () => {
             </Modal>
             <QuickPaymentModal isOpen={isQuickPayModalOpen} onClose={() => setIsQuickPayModalOpen(false)} />
         </div>
+        )}
+        </>
     );
 };
 

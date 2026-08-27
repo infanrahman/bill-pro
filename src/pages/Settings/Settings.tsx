@@ -10,6 +10,7 @@ import ActivityLogTab from './Tabs/ActivityLogTab';
 import UserManagementTab from './Tabs/UserManagementTab';
 import MessagingTab from './Tabs/MessagingTab';
 import HelpTab from './Tabs/HelpTab';
+import NetworkSyncTab from './Tabs/NetworkSyncTab';
 import { 
  Scale as ScaleIcon, Building2, Cpu, Lock, LayoutGrid, MessageSquare,
  User, Printer, Users, ShieldCheck, Shield, Settings as SettingsIcon, Keyboard, Bell, Database, HelpCircle,
@@ -62,6 +63,7 @@ const Settings: React.FC = () => {
  tabs: [
  { id: 'general', label: t('settings.tabs.general'), icon: SettingsIcon, permission: 'settings_general' },
  { id: 'shortcuts', label: t('settings.tabs.shortcuts'), icon: Keyboard, permission: null },
+ { id: 'network', label: 'Local Sync & Network', icon: Database, permission: 'settings_general' },
  { id: 'reminders', label: t('settings.tabs.reminders'), icon: Bell, permission: 'settings_general' },
  { id: 'backup', label: t('settings.tabs.data_backup'), icon: Database, permission: 'settings_backup' },
  { id: 'help', label: t('settings.tabs.help'), icon: HelpCircle, permission: null },
@@ -89,6 +91,7 @@ const Settings: React.FC = () => {
  const renderTab = () => {
  switch (activeTab) {
  case 'general': return <GeneralTab />;
+ case 'network': return <NetworkSyncTab />;
  case 'license': return <LicenseTab />;
  case 'shortcuts': return <React.Suspense fallback={<div className="p-8 text-slate-600">Loading...</div>}><KeyboardShortcutsTab /></React.Suspense>;
  case 'profile': return <BusinessProfileTab />;

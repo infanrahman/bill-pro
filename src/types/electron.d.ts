@@ -42,6 +42,15 @@ export interface ElectronAPI {
  getConfig: () => Promise<any>;
  };
 
+ // Sync Server
+ sync: {
+ getPin: () => Promise<string>;
+ onPullRequest: (callback: (data: any) => void) => () => void;
+ sendPullResponse: (reqId: string, data?: any, error?: string) => void;
+ onPushRequest: (callback: (data: any) => void) => () => void;
+ sendPushResponse: (reqId: string, data?: any, error?: string) => void;
+ };
+
  // ZATCA
  zatca: {
  getConfig: () => Promise<any>;
