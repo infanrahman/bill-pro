@@ -378,112 +378,116 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
         console.error(e);
         addToast(t('common.error'), 'error');
     }
-  };  return (
+  };
+
+  return (
  <div className="space-y-6">
- <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-slate-100 dark:border-slate-700/50">
- <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-3 mb-6">
- <div className="p-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl">
- <History size={20} strokeWidth={2.5} />
+ <h1 className="text-2xl font-semibold dark:text-white uppercase tracking-tight flex items-center gap-4">
+ <div className="p-3 bg-slate-900 dark:bg-white text-white rounded-2xl">
+ <History size={24} strokeWidth={2.5} />
  </div>
- {t('transactions.title') || 'SALES HISTORY'}
- </h2>
+ {t('transactions.title')}
+ </h1>
+
+ <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row flex-wrap gap-4 md:gap-6 items-stretch md:items-center relative overflow-hidden group">
  
- <div className="flex flex-col gap-6">
- <div className="relative w-full group">
- <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-900 dark:group-focus-within:text-white" size={18} />
+ <div className="relative flex-1 w-full md:w-auto min-w-[200px] z-10">
+ <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={20} />
  <input
  type="text"
- placeholder={t('transactions.search_placeholder') || 'Search by customer or invoice #...'}
+ placeholder={t('transactions.search_placeholder')}
  value={search}
  onChange={(e) => setSearch(e.target.value)}
- className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-2xl font-semibold text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white shadow-sm"
+ className="w-full pl-12 pr-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-sm"
  />
  </div>
 
- <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4 w-full">
- <div className="flex flex-col flex-1 gap-1">
- <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider pl-1">{t('transactions.from') || 'From'}</label>
+ <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 z-10 w-full md:w-auto">
+ <div className="flex flex-col flex-1">
+ <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.from')}</label>
  <input
- type="date"
+ type="datetime-local"
  value={startDate}
  onChange={(e) => setStartDate(e.target.value)}
- className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-2xl font-semibold text-xs outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white shadow-sm"
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
  />
  </div>
- <div className="flex flex-col flex-1 gap-1">
- <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider pl-1">{t('transactions.to') || 'To'}</label>
+ <div className="flex flex-col flex-1">
+ <label className="text-[10px] uppercase font-semibold text-slate-600 pl-1 tracking-wider">{t('transactions.to')}</label>
  <input
- type="date"
+ type="datetime-local"
  value={endDate}
  onChange={(e) => setEndDate(e.target.value)}
- className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-2xl font-semibold text-xs outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white shadow-sm"
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
  />
  </div>
- <div className="flex flex-col flex-1 gap-1">
- <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider pl-1">{t('transactions.payment') || 'Payment'}</label>
+ <div className="flex flex-col flex-1">
+ <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.payment') || 'Payment'}</label>
  <select
  value={paymentMode}
  onChange={(e) => setPaymentMode(e.target.value)}
- className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-2xl font-semibold text-xs outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white shadow-sm appearance-none cursor-pointer"
+ className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
  >
  <option value="all">{t('common.all') || 'All'}</option>
  <option value="cash">{t('common.cash') || 'Cash'}</option>
  <option value="card">{t('common.card') || 'Card'}</option>
  <option value="credit">{t('common.credit') || 'Credit'}</option>
  <option value="upi">{t('common.upi') || 'UPI'}</option>
+ <option value="split">{t('common.split') || 'Split'}</option>
  </select>
  </div>
  </div>
 
- <div className="flex flex-col sm:flex-row gap-3 pt-2">
+ <div className="flex gap-2 ml-auto z-10">
   <button type="button"
   onClick={handlePrintDayReport}
-  className="flex-1 flex justify-center items-center gap-2 px-6 py-3.5 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 transition-colors shadow-sm"
+  className="flex items-center gap-3 px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
   >
-  <Printer size={16} strokeWidth={2.5} />
+  <Printer size={18} strokeWidth={2.5} />
   <span>{t('transactions.print_report') || 'Print Report'}</span>
   </button>
   {settings.enableExcelExport && (
   <button type="button"
   onClick={handleExportExcel}
-  className="flex-1 flex justify-center items-center gap-2 px-6 py-3.5 bg-emerald-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-colors shadow-sm"
+  className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
   >
-  <FileSpreadsheet size={16} strokeWidth={2.5} />
-  <span>{t('common.export_excel') || 'Export to Excel'}</span>
+  <FileSpreadsheet size={18} strokeWidth={2.5} />
+  <span>{t('common.export_excel')}</span>
   </button>
-  )}
+ )}
  </div>
  </div>
- </div> <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
+
+ <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
  <div className="overflow-x-auto custom-scrollbar">
- <table className="w-full text-left whitespace-nowrap min-w-[700px] responsive-table">
- <thead className="border-b border-slate-50 dark:border-slate-700/50">
+ <table className="w-full text-left whitespace-nowrap min-w-[900px] responsive-table">
+ <thead className="bg-slate-900/[0.02] dark:bg-white/[0.02] border-b border-slate-200/50 dark:border-slate-700/50">
  <tr>
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.invoice_no') || 'Invoice #'}</th>
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.date')} #</th>
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.customer')}</th>
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.amount')}</th>
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{t('transactions.payment')}</th>
- {isZatcaEnabled && <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider">ZATCA</th>}
- <th className="p-5 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">{t('transactions.actions')}</th>
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.invoice_no')}</th>
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.date')}</th>
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.customer')}</th>
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.amount')}</th>
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.payment')}</th>
+ {isZatcaEnabled && <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">ZATCA</th>}
+ <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide text-right">{t('transactions.actions')}</th>
  </tr>
  </thead>
- <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+ <tbody className="divide-y divide-slate-200/30 dark:divide-slate-700/30">
  {filteredInvoices?.map((inv: any) => (
- <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
- <td className="p-5" data-label="ID">
- <span className="font-mono text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
+ <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 relative">
+ <td data-label="Invoice No" className="p-6">
+<span className="font-mono text-[10px] font-semibold text-slate-900 dark:text-white bg-slate-900/10 dark:bg-white/10 px-3 py-1.5 rounded-full border border-slate-900/10 dark:border-white/10">
  {inv.invoiceNumber}
  </span>
  </td>
- <td className="p-5 font-bold text-slate-900 dark:text-slate-300 text-xs" data-label="Date">{formatDate(inv.createdAt)}</td>
- <td className="p-5 font-bold text-slate-900 dark:text-white uppercase text-xs tracking-tight" data-label="Customer">{inv.customerName}</td>
- <td className="p-5 font-bold text-slate-900 dark:text-white text-sm tracking-tight" data-label="Amount">{formatCurrency(inv.grandTotal)}</td>
- <td className="p-5" data-label="Status">
- <span className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider border
+ <td data-label="Date" className="p-6 font-bold text-slate-600 dark:text-slate-300 text-xs">{formatDate(inv.createdAt)}</td>
+ <td data-label="Customer" className="p-6 font-semibold text-slate-800 dark:text-white uppercase text-xs tracking-tight">{inv.customerName}</td>
+ <td data-label="Amount" className="p-6 font-semibold text-slate-900 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</td>
+ <td className="p-4">
+ <span className={`px-2 py-1.5 rounded-md text-xs font-semibold uppercase border
  ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
  (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
- inv.paymentMode ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 ' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+ inv.paymentMode ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 ' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
  {inv.type === 'return' 
  ? t('common.return') 
  : (settings.cafeMode && inv.paymentStatus !== 'paid') 
@@ -492,30 +496,30 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  </span>
  </td>
  {isZatcaEnabled && (
- <td className="p-5" data-label="ZATCA">
- {inv.zatcaStatus === 'REPORTED' ? (
- <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800">
- <ShieldCheck size={12} strokeWidth={2.5} /> Reported
+ <td data-label="ZATCA" className="p-4">
+{inv.zatcaStatus === 'REPORTED' ? (
+ <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+ <ShieldCheck size={12} /> Reported
  </span>
- ) : inv.zatcaStatus === 'ERROR' ? (
+) : inv.zatcaStatus === 'ERROR' ? (
  <span 
- className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800 cursor-help"
+ className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
  title={inv.zatcaError || 'Validation Error'}
  >
- <ShieldAlert size={12} strokeWidth={2.5} /> Error
+ <ShieldAlert size={12} /> Error
  </span>
- ) : (
- <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
- <Clock size={12} strokeWidth={2.5} /> Pending
+) : (
+ <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600">
+ <Clock size={12} /> Pending
  </span>
- )}
+)}
  </td>
- )}
- <td className="p-5" data-label="Actions">
- <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+)}
+ <td data-label="Actions" className="p-6 flex-col md:flex-row md:items-center items-end gap-2">
+ <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transform translate-x-4 group-">
  <button type="button"
  onClick={() => setViewInvoice(inv)}
- className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title={t('transactions.view_details')}
  >
  <Eye size={18} />
@@ -523,7 +527,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  {inv.paymentStatus !== 'paid' && inv.type !== 'return' && (
  <button type="button"
  onClick={() => navigate('/pos', { state: { editInvoice: inv, hidePayLater: true } })}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-emerald-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title="Proceed to Payment"
  >
  <CreditCard size={18} />
@@ -532,7 +536,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  {hasPermission('sales_edit') && inv.type !== 'return' && (
  <button type="button"
  onClick={() => onReturn && onReturn(inv)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-amber-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title="Return"
  >
  <RotateCcw size={18} />
@@ -542,7 +546,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  <button type="button"
  onClick={() => handleRetryZatca(inv)}
  disabled={isRetryingZatca === inv.id}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-50"
  title="Retry ZATCA Submission"
  >
  <RefreshCw size={18} className={isRetryingZatca === inv.id ?"":""} />
@@ -550,7 +554,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
 )}
  <button type="button"
  onClick={() => printInvoice(inv)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title={t('transactions.print_invoice')}
  >
  <Printer size={18} />
@@ -566,7 +570,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  });
  });
  }}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-green-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title={t('transactions.download_pdf')}
  >
  <Download size={18} />
@@ -577,7 +581,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  setSelectedInvoiceForShare(inv);
  setShareModalOpen(true);
  }}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title="Share"
  >
  <Send size={18} />
@@ -589,7 +593,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"/>
  <button type="button"
  onClick={(e) => handleDeleteClick(inv.id!, e)}
- className="p-2 text-rose-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+ className="p-2.5 text-slate-600 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
  title={t('transactions.delete_invoice')}
  >
  <Trash2 size={18} />
