@@ -68,5 +68,30 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>The app requires camera access to scan barcodes for quick checkout and inventory management.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The app requires microphone access for camera operations.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>The app requires Bluetooth access to connect to thermal receipt printers.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>The app requires Bluetooth access to connect to thermal receipt printers.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>The app requires access to your photo library to save invoices and receipts.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>The app requires access to save downloaded PDF invoices to your library.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>The app requires location access for discovering nearby Bluetooth or network printers.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>The app needs to access your local network to discover and connect to Wi-Fi receipt printers.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+		<string>_ipp._tcp</string>
+		<string>_printer._tcp</string>
+		<string>_pdl-datastream._tcp</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>
