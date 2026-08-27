@@ -64,82 +64,44 @@ const MobileBottomNav: React.FC = () => {
     const { t } = useTranslation();
     const location = useLocation();
     const navigate = useNavigate();
-    const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
-    
-    // Check active tab via URL search params
-    const searchParams = new URLSearchParams(location.search);
-    const activeTab = searchParams.get('tab') || 'order'; // Default to order if no tab
-    const isSalesPage = location.pathname.startsWith('/sales');
 
-    const handleAction = (action: string) => {
-        setIsQuickActionsOpen(false);
-        if (action === 'pos') navigate('/pos');
-        if (action === 'order') navigate('/sales?tab=order&action=new');
-        if (action === 'payment_in') navigate('/sales?tab=payment&action=new');
-        if (action === 'expense') navigate('/sales?tab=expense&action=new');
-        if (action === 'customer') navigate('/customers?action=new');
-        if (action === 'quick_pay') navigate('/sales?action=quick_pay');
-    };
-
-    const navItemsLeft = [
-        { id: 'order', icon: ShoppingCart, label: t('sales.orders', { defaultValue: 'Orders' }) },
-        { id: 'invoice', icon: FileText, label: t('sales.invoices', { defaultValue: 'Invoices' }) },
+    const navItems = [
+        { id: 'home', to: '/', icon: LayoutGrid, label: t('sidebar.dashboard', { defaultValue: 'Home' }) },
+        { id: 'sales', to: '/sales', icon: ShoppingCart, label: t('sidebar.sales', { defaultValue: 'Sales' }) },
+        { id: 'purchases', to: '/purchase', icon: Package, label: t('sidebar.purchases', { defaultValue: 'Purchases' }) },
+        { id: 'inventory', icon: Package, to: '/inventory', label: t('sidebar.inventory', { defaultValue: 'Inventory' }) },
+        { id: 'more', to: '/settings', icon: LayoutGrid, label: t('common.more', { defaultValue: 'More' }) },
     ];
-    
-    const navItemsRight = [
-        { id: 'return', icon: RotateCcw, label: t('sales.returns', { defaultValue: 'Returns' }) },
-        { id: 'expense', icon: Wallet, label: t('expenses.title', { defaultValue: 'Expenses' }) },
-    ];
-
-    const renderNavItem = (item: any) => {
-        const isActive = isSalesPage && activeTab === item.id;
-        return (
-            <button
-                key={item.id}
-                onClick={() => navigate(`/sales?tab=${item.id}`)}
-                className={clsx(
-                    'flex flex-col items-center justify-center flex-1 py-2 mt-1 transition-colors relative',
-                    isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
-                )}
-            >
-                <div className={clsx('p-1.5 rounded-xl mb-0.5 transition-colors', isActive ? 'bg-indigo-50 dark:bg-indigo-900/30' : '')}>
-                    <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-                </div>
-                <span className="text-[10px] font-semibold tracking-wide">{item.label}</span>
-            </button>
-        );
-    };
 
     return (
         <>
-            <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center px-1 pb-[env(safe-area-inset-bottom)] z-[60] shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.05)] h-[68px]">
-                {navItemsLeft.map(renderNavItem)}
-                
-                {/* Center FAB */}
-                <div className="flex-1 flex justify-center -mt-6">
-                    <button
-                        onClick={() => setIsQuickActionsOpen(true)}
-                        className="w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/30 active:scale-95 transition-transform"
-                    >
-                        <Plus size={32} strokeWidth={2.5} />
-                    </button>
-                </div>
-                
-                {navItemsRight.map(renderNavItem)}
-
-                {/* More / Settings Menu */}
+            {/* Global FAB floating above bottom nav */}
+            <div className="xl:hidden fixed bottom-[84px] left-1/2 -translate-x-1/2 z-[55]">
                 <button
-                    onClick={() => navigate('/settings')}
-                    className={clsx(
-                        'flex flex-col items-center justify-center flex-1 py-2 mt-1 transition-colors relative',
-                        location.pathname.startsWith('/settings') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
-                    )}
+                    onClick={() => setIsQuickActionsOpen(true)}
+                    className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-[0_8px_20px_-6px_rgba(37,99,235,0.6)] active:scale-95 transition-transform"
                 >
-                    <div className={clsx('p-1.5 rounded-xl mb-0.5 transition-colors', location.pathname.startsWith('/settings') ? 'bg-indigo-50 dark:bg-indigo-900/30' : '')}>
-                        <LayoutGrid size={22} strokeWidth={location.pathname.startsWith('/settings') ? 2.5 : 2} />
-                    </div>
-                    <span className="text-[10px] font-semibold tracking-wide">{t('common.more', { defaultValue: 'More' })}</span>
+                    <Plus size={28} strokeWidth={2.5} />
                 </button>
+            </div>
+
+            <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center px-2 pb-[env(safe-area-inset-bottom)] z-[60] h-[68px] shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.02)]">
+                {navItems.map(item => {
+                    const isActive = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to));
+                    return (
+                        <button
+                            key={item.id}
+                            onClick={() => navigate(item.to)}
+                            className={clsx(
+                                'flex flex-col items-center justify-center flex-1 py-2 mt-1 transition-colors relative',
+                                isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                            )}
+                        >
+                            <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} className={clsx("mb-1", isActive ? "" : "")} />
+                            <span className="text-[10px] font-semibold tracking-wide">{item.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
             <QuickActionSheet 

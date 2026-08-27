@@ -455,8 +455,7 @@ const Sales = () => {
                     { id: 'order', label: t('sales.orders') || 'Sales Orders', count: stats.orders, icon: ShoppingCart },
                     { id: 'invoice', label: t('sales.invoices') || 'Invoices', count: stats.invoices, icon: FileText },
                     { id: 'return', label: t('sales.returns') || 'Returns', count: stats.returns, icon: RotateCcw },
-                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign },
-                    { id: 'expense', label: t('sales.expenses', { defaultValue: 'Expenses' }), count: stats.expenses, icon: Receipt }
+                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -927,12 +926,6 @@ const Sales = () => {
                     </div>
                 </div>
             </Modal>
-
-            {activeTab === 'expense' && (
-                <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 min-h-[400px]">
-                    <Expenses embedded={true} />
-                </div>
-            )}
 
             {/* Create/Edit Modal (Order/Return) */}
             <Modal
