@@ -11,6 +11,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import Modal from '../components/UI/Modal';
 import ItemForm from './Inventory/ItemForm';
 import SalesHistory from './Transactions/SalesHistory';
+import Expenses from './Transactions/Expenses';
 import { useAuth } from '../contexts/AuthContext';
 
 import { useGridNavigation } from '../hooks/useGridNavigation';
@@ -26,7 +27,7 @@ const Sales = () => {
     const { addToast } = useNotification();
     const { formatCurrency, formatDate, settings } = useSettings();
     const { activeBranchId } = useAuth();
-    const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment'>('invoice');
+    const [activeTab, setActiveTab] = useState<'order' | 'invoice' | 'return' | 'payment' | 'expense'>('invoice');
 
     // Check if ZATCA is enabled
     const isZatcaEnabled = useMemo(() => {
@@ -43,12 +44,14 @@ const Sales = () => {
     const invoicesCount = useLiveQuery(() => db.invoices.where('type').equals('invoice').filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId).count(), [activeBranchId]) || 0;
     const returnsCount = useLiveQuery(() => db.invoices.where('type').equals('return').filter((inv: any) => !inv.deletedAt && inv.branchId === activeBranchId).count(), [activeBranchId]) || 0;
     const paymentsCount = useLiveQuery(() => db.customerPayments.filter((p: any) => !p.deletedAt && p.branchId === activeBranchId).count(), [activeBranchId]) || 0;
+    const expensesCount = useLiveQuery(() => db.expenses.filter((e: any) => !e.deletedAt && e.branchId === activeBranchId).count(), [activeBranchId]) || 0;
 
     const stats = {
         orders: ordersCount,
         invoices: invoicesCount,
         returns: returnsCount,
         payments: paymentsCount,
+        expenses: expensesCount,
     };
 
     // Modal & Form State
@@ -414,7 +417,8 @@ const Sales = () => {
                     { id: 'order', label: t('sales.orders') || 'Sales Orders', count: stats.orders, icon: ShoppingCart },
                     { id: 'invoice', label: t('sales.invoices') || 'Invoices', count: stats.invoices, icon: FileText },
                     { id: 'return', label: t('sales.returns') || 'Returns', count: stats.returns, icon: RotateCcw },
-                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign }
+                    { id: 'payment', label: t('sales.payments_in') || 'Payments In', count: stats.payments, icon: DollarSign },
+                    { id: 'expense', label: t('sales.expenses', { defaultValue: 'Expenses' }), count: stats.expenses, icon: Receipt }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -885,6 +889,13 @@ const Sales = () => {
                     </div>
                 </div>
             </Modal>
+
+            {activeTab === 'expense' && (
+                <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 min-h-[400px]">
+                    <Expenses embedded={true} />
+                </div>
+            )}
+        </div>
 
             {/* Create/Edit Modal (Order/Return) */}
             <Modal

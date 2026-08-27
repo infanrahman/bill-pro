@@ -11,7 +11,11 @@ import ConfirmationModal from '../../components/UI/ConfirmationModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShieldOff } from 'lucide-react';
 
-const Expenses: React.FC = () => {
+interface ExpensesProps {
+  embedded?: boolean;
+}
+
+const Expenses: React.FC<ExpensesProps> = ({ embedded = false }) => {
  const { t } = useTranslation();
  const { formatCurrency, formatDate } = useSettings();
  const { addToast } = useNotification();
@@ -103,36 +107,39 @@ const Expenses: React.FC = () => {
  }
 
  return (
- <div className="space-y-6">
+ <div className={embedded ? "space-y-4" : "space-y-6"}>
 
- {/* Header Area */}
- <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+ {/* Header Area - Only show if not embedded OR redesign for mockup */}
+ <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
  <div>
- <h1 className="text-2xl font-bold dark:text-white">{t('expenses.title')}</h1>
- <p className="text-slate-700 dark:text-slate-300 text-sm">Track and manage your business expenditures</p>
+ <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('expenses.title')}</h1>
+ <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">Track and manage your business expenditures</p>
  </div>
  {hasPermission('expenses_add') && (
  <button type="button"
  onClick={openAddModal}
- className="bg-slate-900 dark:bg-white hover:bg-slate-900 dark:hover:bg-white text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 active:scale-95"
+ className="bg-[#0f172a] hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 active:scale-95 transition-all shadow-sm"
  >
- <Plus size={20} />
+ <Plus size={16} strokeWidth={3} />
  {t('expenses.add_expense')}
  </button>
 )}
  </div>
 
- {/* Stats Card */}
- <div className="from-red-50 to-white dark:from-red-900/10 dark:to-slate-800 p-6 rounded-2xl border border-red-100 dark:border-red-900/30 flex items-center justify-between">
+ {/* Stats Card (Mockup Style) */}
+ <div className="bg-red-50/30 dark:bg-red-900/10 p-5 rounded-2xl border border-red-50 dark:border-red-900/30 flex items-center justify-between">
  <div>
- <p className="text-red-500 dark:text-red-400 font-bold uppercase text-xs tracking-wider mb-1">{t('expenses.total_expenses')}</p>
- <h3 className="text-4xl font-extrabold text-red-600 dark:text-red-400">{formatCurrency(totalStats)}</h3>
- <p className="text-xs text-slate-600 mt-1">
- {t('expenses.records_found', { count: filteredExpenses.length })}
+ <p className="text-red-500 dark:text-red-400 font-bold uppercase text-[10px] tracking-wider mb-2">TOTAL EXPENSES</p>
+ <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-2 flex items-baseline gap-1">
+ {formatCurrency(totalStats).replace(/[^0-9.,]/g, '')}
+ <span className="text-red-500 text-lg font-bold">{settings.currency}</span>
+ </h3>
+ <p className="text-[11px] text-slate-500">
+ {filteredExpenses.length} records found
  </p>
  </div>
- <div className="p-4 bg-white dark:bg-slate-700 rounded-2xl text-red-500">
- <DollarSign size={32} strokeWidth={2.5} />
+ <div className="w-12 h-12 bg-red-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-red-500 shadow-sm border border-red-100 dark:border-red-900/50">
+ <DollarSign size={24} strokeWidth={2.5} />
  </div>
  </div>
 
@@ -219,12 +226,24 @@ const Expenses: React.FC = () => {
 ))}
  {filteredExpenses.length === 0 && (
  <tr>
- <td colSpan={5} className="p-12 text-center text-slate-700 dark:text-slate-300">
- <div className="flex flex-col items-center justify-center gap-3">
- <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center">
- <DollarSign className="text-slate-300 dark:text-slate-300"size={32} />
+ <td colSpan={5} className="p-12">
+ <div className="flex flex-col items-center justify-center gap-4 py-8">
+ <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-2">
+ <DollarSign className="text-slate-400"size={32} />
  </div>
- <p className="font-medium text-sm">{t('expenses.no_expenses')}</p>
+ <div className="text-center">
+ <h4 className="font-bold text-slate-900 dark:text-white mb-1">No expenses recorded.</h4>
+ <p className="text-sm text-slate-500 mb-6">No expenses recorded yet.</p>
+ </div>
+ {hasPermission('expenses_add') && (
+ <button type="button"
+ onClick={openAddModal}
+ className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
+ >
+ <Plus size={16} />
+ {t('expenses.add_expense')}
+ </button>
+ )}
  </div>
  </td>
  </tr>
