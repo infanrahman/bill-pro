@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    margin: 0;
+    padding: 0;
+  }
+}
+
 @theme {
   --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
   --font-arabic: 'Tahoma', 'Segoe UI', sans-serif;

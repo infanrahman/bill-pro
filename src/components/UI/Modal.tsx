@@ -11,11 +11,7 @@ interface ModalProps {
  className?: string; // For additional custom classes
 }
 
-declare global {
- interface Window {
- modalOpenCount: number;
- }
-}
+
 
 const Modal: React.FC<ModalProps> = ({
  isOpen,
@@ -27,30 +23,7 @@ const Modal: React.FC<ModalProps> = ({
 }) => {
  const modalRef = useRef<HTMLDivElement>(null);
 
- // Global modal counter to handle nested modals correctly
- // We use a module-level variable since this component is reused
-
- // Handle Body Scroll Lock (Only depends on isOpen)
-   useEffect(() => {
-     if (isOpen) {
-       // Increment count
-       window.modalOpenCount = (window.modalOpenCount || 0) + 1;
-       document.body.style.overflow = 'hidden';
-     }
-
-     return () => {
-       if (isOpen) {
-         // Decrement count
-         window.modalOpenCount = Math.max(0, (window.modalOpenCount || 1) - 1);
-         // Only unlock if no modals are open
-         if (window.modalOpenCount === 0) {
-           document.body.style.overflow = 'unset';
-         }
-       }
-     };
-   }, [isOpen]);
-
-   // Handle Escape Key (Depends on onClose)
+ // Handle Escape Key (Depends on onClose)
    useEffect(() => {
      if (isOpen) {
        const handleEscape = (e: KeyboardEvent) => {
