@@ -88,6 +88,7 @@
 		<string>_ipp._tcp</string>
 		<string>_printer._tcp</string>
 		<string>_pdl-datastream._tcp</string>
+		<string>_billingapp._tcp</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
