@@ -17,7 +17,7 @@ interface ExpensesProps {
 
 const Expenses: React.FC<ExpensesProps> = ({ embedded = false }) => {
  const { t } = useTranslation();
- const { formatCurrency, formatDate } = useSettings();
+ const { formatCurrency, formatDate, settings } = useSettings();
  const { addToast } = useNotification();
  const { hasPermission, isAdmin, activeBranchId, activeBranch } = useAuth();
 
