@@ -1,4 +1,4 @@
-import React, { useEffect, lazy, Suspense, useRef } from 'react';
+import React, { useEffect, lazy, Suspense, useRef, useState, createContext, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -27,11 +27,15 @@ const CashBook = lazy(() => import('./pages/CashBook/CashBook'));
 const Spreadsheet = lazy(() => import('./pages/Spreadsheet/Spreadsheet'));
 
 import { useLicense } from './contexts/LicenseContext';
-import { ActivationModal } from './components/Settings/LicenseComponents'; // Import modal
-import { SyncEngine } from './services/syncEngine';
+import { ActivationModal } from './components/Settings/LicenseComponents';
+import { SyncEngine, type ConnectionStatus } from './services/syncEngine';
 import { checkAndPerformAutoBackup } from './services/backupService';
 import ZatcaSyncService from './components/Background/ZatcaSyncService';
 import { AutoUpdateBanner } from './components/UI/AutoUpdateBanner';
+
+// Global sync status context — consumed by MainLayout header
+export const SyncStatusContext = createContext<ConnectionStatus>('disconnected');
+export const useSyncStatus = () => useContext(SyncStatusContext);
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
  const { isAuthenticated } = useAuth();
@@ -42,19 +46,24 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AppContent = () => {
  const { status, loading } = useLicense();
  const { addToast } = useNotification();
+ const [syncStatus, setSyncStatus] = useState<ConnectionStatus>(
+   SyncEngine.getConnectionStatus()
+ );
 
- // Fix #1: Run auto-backup check every hour (not just once at startup)
- // Fix #10: Show user-facing toast on success or failure
-  const addToastRef = useRef(addToast);
-  useEffect(() => { addToastRef.current = addToast; }, [addToast]);
+ const addToastRef = useRef(addToast);
+ useEffect(() => { addToastRef.current = addToast; }, [addToast]);
 
   useEffect(() => {
-    // Initialize Local Network Sync Services
+    // Initialize Sync Services
     if (window.electron) {
       SyncEngine.initMasterListeners();
     } else {
-      SyncEngine.startClientSync(5000);
+      // Mobile: auto-discover & connect, no manual setup needed
+      SyncEngine.initMobileSync();
     }
+
+    // Subscribe to connection status changes for the header indicator
+    const unsubscribe = SyncEngine.onConnectionChange(setSyncStatus);
 
   const runBackup = async () => {
   const result = await checkAndPerformAutoBackup();
@@ -65,8 +74,11 @@ const AppContent = () => {
   }
   };
   runBackup();
-  const interval = setInterval(runBackup, 60 * 60 * 1000); // re-check every hour
-  return () => clearInterval(interval);
+  const interval = setInterval(runBackup, 60 * 60 * 1000);
+  return () => {
+    unsubscribe();
+    clearInterval(interval);
+  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,7 +134,7 @@ const AppContent = () => {
  }
 
  return (
- <>
+ <SyncStatusContext.Provider value={syncStatus}>
  <ToastContainer />
  <ZatcaSyncService />
  <AutoUpdateBanner />
@@ -149,12 +161,12 @@ const AppContent = () => {
  <Route path="suppliers"element={<Suppliers />} />
  <Route path="suppliers/:id"element={<SupplierDetails />} />
  <Route path="settings"element={<Settings />} />
- <Route path="cash-book"element={<CashBook />} /> {/* Moved inside Layout */}
+ <Route path="cash-book"element={<CashBook />} />
  <Route path="spreadsheet"element={<Spreadsheet />} />
  </Route>
  </Routes>
  </Suspense>
- </>
+ </SyncStatusContext.Provider>
 );
 };
 

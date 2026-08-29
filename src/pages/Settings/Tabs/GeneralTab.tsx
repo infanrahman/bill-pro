@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { 
  Minus, Plus, Languages, DollarSign, Calendar, 
  Hash, TrendingUp, FileSpreadsheet, 
- Zap, Coffee, Clock, Receipt, Sparkles, LayoutGrid
+ Zap, Coffee, Clock, Receipt, Sparkles, LayoutGrid, UtensilsCrossed, Users, Trash2
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import SettingsCard from '../components/SettingsCard';
 import FormRow from '../components/FormRow';
 import SettingsSectionHeader from '../components/SettingsSectionHeader';
@@ -364,6 +365,107 @@ const GeneralTab: React.FC = () => {
  </div>
  </div>
  </SettingsCard>
+
+ {/* 5. Order Taking Mode — mobile only */}
+ {!window.electron && (
+  <SettingsCard title="Order Taking Mode (Waiter Mode)" icon={UtensilsCrossed}>
+   <div className="divide-y divide-slate-100/50 dark:divide-slate-700/50">
+    <FormRow
+     label="Enable Order Taking Mode"
+     description="When ON, POS only creates and sends orders to the PC. Payment is handled on the PC software only."
+     icon={UtensilsCrossed}
+    >
+     <label className="relative inline-flex items-center cursor-pointer">
+      <input
+       type="checkbox"
+       checked={settings.orderTakingMode}
+       onChange={(e) => updateSettings({ orderTakingMode: e.target.checked })}
+       className="sr-only peer"
+      />
+      <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-orange-500"></div>
+     </label>
+    </FormRow>
+
+    {settings.orderTakingMode && (
+     <div className="p-5 space-y-4">
+      <div className="flex items-center justify-between">
+       <div>
+        <p className="text-sm font-bold text-slate-900 dark:text-white">Tables</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+         Configure your restaurant tables. They'll appear as a table picker in the POS.
+        </p>
+       </div>
+       <button
+        type="button"
+        onClick={() => {
+         const newTable = { id: uuidv4(), name: `Table ${(settings.tables?.length ?? 0) + 1}`, capacity: 4 };
+         updateSettings({ tables: [...(settings.tables || []), newTable] });
+        }}
+        className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs transition-colors"
+       >
+        <Plus size={14} /> Add Table
+       </button>
+      </div>
+
+      {(settings.tables || []).length === 0 && (
+       <div className="text-center py-8 text-slate-400 text-sm">
+        No tables yet. Tap "Add Table" to start.
+       </div>
+      )}
+
+      <div className="space-y-2">
+       {(settings.tables || []).map((table, idx) => (
+        <div key={table.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3">
+         <div className="w-8 h-8 bg-orange-100 dark:bg-orange-950/40 rounded-xl flex items-center justify-center shrink-0">
+          <UtensilsCrossed size={14} className="text-orange-500" />
+         </div>
+         <input
+          type="text"
+          value={table.name}
+          onChange={(e) => {
+           const updated = [...(settings.tables || [])];
+           updated[idx] = { ...table, name: e.target.value };
+           updateSettings({ tables: updated });
+          }}
+          className="flex-1 bg-transparent text-sm font-semibold text-slate-900 dark:text-white outline-none placeholder:text-slate-400"
+          placeholder="Table name"
+         />
+         <div className="flex items-center gap-1.5 shrink-0">
+          <Users size={12} className="text-slate-400" />
+          <input
+           type="number"
+           min={1}
+           max={50}
+           value={table.capacity}
+           onChange={(e) => {
+            const updated = [...(settings.tables || [])];
+            updated[idx] = { ...table, capacity: Math.max(1, parseInt(e.target.value) || 1) };
+            updateSettings({ tables: updated });
+           }}
+           className="w-10 bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none text-center"
+           title="Seat capacity"
+          />
+          <span className="text-[10px] text-slate-400">seats</span>
+         </div>
+         <button
+          type="button"
+          onClick={() => {
+           const updated = (settings.tables || []).filter((_, i) => i !== idx);
+           updateSettings({ tables: updated });
+          }}
+          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+         >
+          <Trash2 size={14} />
+         </button>
+        </div>
+       ))}
+      </div>
+     </div>
+    )}
+   </div>
+  </SettingsCard>
+ )}
+
  </div>
  </div>
 );

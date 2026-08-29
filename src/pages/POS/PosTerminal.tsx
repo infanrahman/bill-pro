@@ -5,13 +5,15 @@ import { db, createRecordMetadata, type Invoice } from '../../services/db';
 import { calculateLineItem, calculateDocumentTotals } from '../../utils/financials';
 
 import type { Item, Customer, InvoiceItem, HeldBill } from '../../services/db';
+import type { RestaurantTable } from '../../contexts/SettingsContext';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search, ShoppingCart, User, CreditCard, ShieldOff, LayoutGrid, Archive, ArrowLeft, Clock, UserPlus, XCircle, Sparkles, Plus, Minus, Trash2, Weight, FileText, PauseCircle, PlayCircle, ScanBarcode } from 'lucide-react';
+import { Search, ShoppingCart, User, CreditCard, ShieldOff, LayoutGrid, Archive, ArrowLeft, Clock, UserPlus, XCircle, Sparkles, Plus, Minus, Trash2, Weight, FileText, PauseCircle, PlayCircle, ScanBarcode, UtensilsCrossed, SendHorizontal } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import ShiftModal from './ShiftModal';
 import ItemCard from '../../components/POS/ItemCard';
 import CompactItemCard from '../../components/POS/CompactItemCard';
 import CartItem from './components/CartItem';
+import TableSelectionScreen from './TableSelectionScreen';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useKeyboard } from '../../contexts/KeyboardContext';
 import { scaleService } from '../../services/scaleService';
@@ -60,6 +62,10 @@ const PosTerminal: React.FC = () => {
   const [isHeldBillsOpen, setIsHeldBillsOpen] = useState(false);
   const [isHoldPromptOpen, setIsHoldPromptOpen] = useState(false);
   const [holdName, setHoldName] = useState('');
+  // Order Taking Mode: null = no table selected yet (show table picker); undefined = skip table
+  const [selectedTable, setSelectedTable] = useState<RestaurantTable | null | undefined>(
+    settings.orderTakingMode ? null : undefined
+  );
   
   const [serialPromptIndex, setSerialPromptIndex] = useState<number | null>(null);
   const [serialPromptValue, setSerialPromptValue] = useState('');
@@ -651,7 +657,7 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  };
 
  // --- Access Control (After hooks) ---
- if (!hasPermission('pos_access')) {
+  if (!hasPermission('pos_access')) {
  return (
  <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4 md:p-8 bg-slate-50 dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
  <ShieldOff size={48} className="text-slate-300 mb-4"/>
@@ -659,6 +665,15 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  <p className="text-slate-700">{t('pos.access_denied_msg')}</p>
  </div>
 );
+ }
+
+ // Order Taking Mode: show table selection screen first
+ if (settings.orderTakingMode && !window.electron && selectedTable === null) {
+   return (
+     <TableSelectionScreen
+       onSelectTable={(table) => setSelectedTable(table ?? undefined)}
+     />
+   );
  }
 
  return (
@@ -1124,34 +1139,91 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  }} 
  className="bg-white dark:bg-slate-800 text-slate-700 hover:text-slate-900 dark:hover:text-white p-3 rounded-xl font-bold flex justify-center items-center border border-slate-200/50 dark:border-slate-700/50 group"
  >
- <Archive size={20} className="group-"/>
+ <Archive size={20} className="group-" />
  </button>
  
- <button type="button"
-                    
-                    
-                    onClick={() => {
-                      if (settings.enableSerialTracking) {
-                        const missingSerial = cart.find(i => i.trackSerial && !i.serialNumber);
-                        if (missingSerial) {
-                          addToast(t('pos.serial_missing_error', `Please provide a serial number for ${missingSerial.name}`), 'error');
-                          return;
-                        }
-                      }
-                      setIsCheckoutOpen(true);
-                    }} 
-                    disabled={cart.length === 0 || (settings.enableShiftManagement && !activeShift)} 
-                    className="bg-slate-800 dark:bg-slate-700 disabled:bg-slate-400 disabled:dark:bg-slate-800 disabled:cursor-not-allowed text-white p-2.5 rounded-xl font-semibold shadow-[0_10px_25px_-5px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_30px_-5px_rgba(37,99,235,0.4)] disabled:shadow-none active:scale-[0.98] flex justify-center items-center gap-3 col-span-4 relative overflow-hidden group transition-all"
-                  >
-                    <div className="absolute inset-0 from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full duration-1000 group-disabled:hidden"/>
-                    <div className="p-2 bg-white/20 group-disabled:bg-white/10 rounded-lg text-white">
-                      <CreditCard size={20} /> 
-                    </div>
-                    <div className="flex flex-col items-start group-disabled:opacity-80">
-                      <span className="uppercase tracking-wider text-[8px] opacity-70 font-semibold mb-0.5">{t('pos.ready_to_pay')}</span>
-                      <span className="uppercase tracking-[0.1em] text-sm">{t('pos.checkout')}</span>
-                    </div>
-                  </button>
+ {settings.orderTakingMode && !window.electron ? (
+   // ORDER TAKING MODE: Send to Kitchen button (no payment)
+   <button type="button"
+     onClick={async () => {
+       if (cart.length === 0) return;
+       try {
+         const tableName = selectedTable?.name ?? 'No Table';
+         const billName = selectedTable ? selectedTable.name : `Order ${Date.now()}`;
+         const existing = selectedTable
+           ? await db.heldBills.where('branchId').equals(activeBranchId).filter(b => b.tableName === selectedTable.name).first()
+           : null;
+         const metadata = createRecordMetadata();
+         if (existing) {
+           await db.heldBills.update(existing.id, {
+             cartItems: cart,
+             kitchenNote,
+             orderType,
+             updatedAt: new Date(),
+             tableName,
+             tableCapacity: selectedTable?.capacity,
+           });
+         } else {
+           await db.heldBills.add({
+             ...metadata,
+             name: billName,
+             cartItems: cart,
+             customerId: customer.id,
+             orderType,
+             kitchenNote,
+             createdAt: new Date(),
+             tableName,
+             tableCapacity: selectedTable?.capacity,
+           });
+         }
+         addToast('Order sent to kitchen!', 'success');
+         setCart([]);
+         setKitchenNote('');
+         // Return to table selection
+         setSelectedTable(null);
+       } catch {
+         addToast('Failed to send order', 'error');
+       }
+     }}
+     disabled={cart.length === 0}
+     className="col-span-5 flex items-center justify-center gap-3 bg-orange-500 disabled:bg-slate-400 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold shadow-lg active:scale-[0.98] transition-all relative overflow-hidden group"
+   >
+     <div className="p-1.5 bg-white/20 rounded-lg">
+       <SendHorizontal size={20} />
+     </div>
+     <div className="flex flex-col items-start">
+       <span className="text-[8px] uppercase tracking-wider opacity-70 font-semibold mb-0.5">
+         {selectedTable ? selectedTable.name : 'No Table'}
+       </span>
+       <span className="uppercase tracking-wider text-sm">Send to Kitchen</span>
+     </div>
+   </button>
+ ) : (
+   // NORMAL MODE: Regular checkout button
+   <button type="button"
+     onClick={() => {
+       if (settings.enableSerialTracking) {
+         const missingSerial = cart.find(i => i.trackSerial && !i.serialNumber);
+         if (missingSerial) {
+           addToast(t('pos.serial_missing_error', `Please provide a serial number for ${missingSerial.name}`), 'error');
+           return;
+         }
+       }
+       setIsCheckoutOpen(true);
+     }}
+     disabled={cart.length === 0 || (settings.enableShiftManagement && !activeShift)}
+     className="bg-slate-800 dark:bg-slate-700 disabled:bg-slate-400 disabled:dark:bg-slate-800 disabled:cursor-not-allowed text-white p-2.5 rounded-xl font-semibold shadow-[0_10px_25px_-5px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_30px_-5px_rgba(37,99,235,0.4)] disabled:shadow-none active:scale-[0.98] flex justify-center items-center gap-3 col-span-4 relative overflow-hidden group transition-all"
+   >
+     <div className="absolute inset-0 from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full duration-1000 group-disabled:hidden"/>
+     <div className="p-2 bg-white/20 group-disabled:bg-white/10 rounded-lg text-white">
+       <CreditCard size={20} />
+     </div>
+     <div className="flex flex-col items-start group-disabled:opacity-80">
+       <span className="uppercase tracking-wider text-[8px] opacity-70 font-semibold mb-0.5">{t('pos.ready_to_pay')}</span>
+       <span className="uppercase tracking-[0.1em] text-sm">{t('pos.checkout')}</span>
+     </div>
+   </button>
+ )}
  </div>
  </div>
  </div>

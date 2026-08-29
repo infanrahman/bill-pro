@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
+export interface RestaurantTable {
+  id: string;
+  name: string;    // e.g. "Table 1", "Bar A"
+  capacity: number; // seat count
+}
+
 interface AppSettings {
  currency: string;
  decimals: number;
@@ -23,6 +29,9 @@ interface AppSettings {
     delivery: { icon: string; label: string };
   };
   scannerType?: 'camera' | 'hardware'; // Determines which barcode scanner method to use
+  // Order Taking Mode (Waiter Mode) — mobile only
+  orderTakingMode?: boolean;
+  tables?: RestaurantTable[];
 }
 
 const defaultSettings: AppSettings = {
@@ -41,7 +50,9 @@ const defaultSettings: AppSettings = {
   taxName: 'VAT',
   enableShiftManagement: false,
   enableSerialTracking: false,
-  scannerType: 'camera'
+  scannerType: 'camera',
+  orderTakingMode: false,
+  tables: [],
 };
 
 

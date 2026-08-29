@@ -105,7 +105,7 @@ export class SyncServer {
       console.log(`[SyncServer] Running on port ${port}`);
     });
     
-    // Start Bonjour broadcast
+    // Start Bonjour broadcast (PIN embedded in TXT record for zero-touch mobile pairing)
     try {
         const Bonjour = require('bonjour-service');
         const bonjour = new Bonjour.Bonjour();
@@ -113,9 +113,9 @@ export class SyncServer {
             name: `BillingApp-Host`,
             type: 'billingapp',
             port: port,
-            txt: { app: 'billing', version: '2.0' }
+            txt: { app: 'billing', version: '2.0', pin: this.pairingPin }
         });
-        console.log('[SyncServer] Bonjour broadcast started as _billingapp._tcp');
+        console.log('[SyncServer] Bonjour broadcast started as _billingapp._tcp with PIN embedded');
     } catch(e) {
         console.error('[SyncServer] Bonjour failed to start', e);
     }

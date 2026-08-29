@@ -339,6 +339,9 @@ export interface HeldBill extends SyncEntity {
  orderType: 'dine_in' | 'parcel' | 'pickup' | 'delivery';
  kitchenNote?: string;
  createdAt: Date;
+ // Order Taking Mode fields
+ tableName?: string;    // e.g. "Table 3"
+ tableCapacity?: number; // Number of seats at this table
 }
 
 // Database Class

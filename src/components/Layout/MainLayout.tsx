@@ -1,30 +1,74 @@
-import React from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+﻿import React from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Menu, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationBell from '../UI/NotificationBell';
-
 import { Zap } from 'lucide-react';
 import QuickPaymentModal from '../Sales/QuickPaymentModal';
 import { useState, useEffect } from 'react';
-// import { useKeyboard } from '../../contexts/KeyboardContext';
-
-import { TrialBanner } from '../Settings/LicenseComponents'; // Import Banner
+import { TrialBanner } from '../Settings/LicenseComponents';
 import LicenseBlocker from '../Settings/LicenseBlocker';
 import { AnimatePresence } from 'framer-motion';
 import PageTransition from '../UI/PageTransition';
-import { useLocation } from 'react-router-dom';
-
 import { db } from '../../services/db';
-
 import MobileBottomNav from './MobileBottomNav';
 import { Search } from 'lucide-react';
+import { useSyncStatus } from '../../App';
+import clsx from 'clsx';
+
+// Map route paths to page titles for mobile header
+const routeTitles: Record<string, string> = {
+  '/': 'Dashboard',
+  '/pos': 'Point of Sale',
+  '/inventory': 'Inventory',
+  '/sales': 'Sales',
+  '/expenses': 'Expenses',
+  '/purchase': 'Purchases',
+  '/suppliers': 'Suppliers',
+  '/reports': 'Reports',
+  '/cash-book': 'Cash Book',
+  '/customers': 'Customers',
+  '/settings': 'Settings',
+  '/spreadsheet': 'Spreadsheet',
+};
+
+const SyncStatusPill: React.FC = () => {
+  const status = useSyncStatus();
+  if (window.electron) return null; // Only show on mobile
+
+  return (
+    <div className={clsx(
+      'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors',
+      status === 'connected' && 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+      status === 'connecting' && 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400',
+      status === 'disconnected' && 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400',
+    )}>
+      {status === 'connected' && <Wifi size={11} />}
+      {status === 'connecting' && <Loader2 size={11} className="animate-spin" />}
+      {status === 'disconnected' && <WifiOff size={11} />}
+      <span className="hidden sm:block">
+        {status === 'connected' ? 'Synced' : status === 'connecting' ? 'Connecting' : 'Offline'}
+      </span>
+    </div>
+  );
+};
 
 const MainLayout: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isQuickPayOpen, setIsQuickPayOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1280);
+
+    // Get current page title for mobile header
+    const currentTitle = Object.entries(routeTitles).reduce((best, [path, title]) => {
+      if (location.pathname === path) return title;
+      if (location.pathname.startsWith(path) && path !== '/' && path.length > (best?.path?.length ?? 0)) {
+        return { path, title };
+      }
+      return best;
+    }, null as any);
+    const pageTitle = typeof currentTitle === 'string' ? currentTitle
+      : currentTitle?.title ?? 'BillPro';
 
     useEffect(() => {
         const handleKvKeyDown = (e: KeyboardEvent) => {
@@ -55,7 +99,6 @@ const MainLayout: React.FC = () => {
         let lastKeyTime = Date.now();
 
         const handleGlobalKeyDown = async (e: KeyboardEvent) => {
-            const target = e.target;
             const now = Date.now();
             const timeDelta = now - lastKeyTime;
             lastKeyTime = now;
@@ -98,51 +141,57 @@ const MainLayout: React.FC = () => {
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
             <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative">
                 <TrialBanner />
-                <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 md:p-4 flex items-center justify-between z-10">
-                    <div className="flex items-center gap-3">
-                        {/* Hamburger Menu Button */}
+                <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 md:px-4 flex items-center justify-between z-10 h-14 md:h-16 shrink-0">
+                    <div className="flex items-center gap-2.5">
+                        {/* Hamburger */}
                         <button
                             type="button"
                             onClick={() => setIsSidebarOpen(prev => !prev)}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-800 dark:text-slate-200 transition-colors"
-                            title="Toggle Menu"
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-800 dark:text-slate-200 transition-colors shrink-0"
                         >
-                            <Menu size={24} />
+                            <Menu size={22} />
                         </button>
 
-                        <div className="hidden md:flex items-center gap-2 ml-2">
+                        {/* Desktop back/forward */}
+                        <div className="hidden md:flex items-center gap-1">
                             <button
                                 onClick={() => navigate(-1)}
                                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
-                                title="Go Back"
                             >
                                 <ChevronLeft size={20} />
                             </button>
                             <button
                                 onClick={() => navigate(1)}
                                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-600 dark:text-slate-400"
-                                title="Go Forward"
                             >
                                 <ChevronRight size={20} />
                             </button>
                         </div>
 
-                        {/* Mobile Brand Name */}
-                        <div className="md:hidden flex flex-col pl-1">
-                            <span className="font-bold text-lg leading-tight tracking-wide text-slate-900 dark:text-white uppercase">POS App</span>
+                        {/* Mobile: dynamic page title */}
+                        <div className="md:hidden flex flex-col pl-0.5">
+                            <span className="font-bold text-base leading-tight tracking-tight text-slate-900 dark:text-white">
+                                {pageTitle}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 md:gap-4">
-                        <button className="md:hidden p-2 text-slate-700 dark:text-slate-300">
+                    <div className="flex items-center gap-2 md:gap-3">
+                        {/* Mobile sync status pill */}
+                        <div className="md:hidden">
+                            <SyncStatusPill />
+                        </div>
+
+                        {/* Desktop search */}
+                        <button className="hidden md:hidden p-2 text-slate-700 dark:text-slate-300">
                             <Search size={22} />
                         </button>
-                        
+
+                        {/* Desktop quick pay */}
                         <div className="hidden md:flex">
                             <button
                                 onClick={() => setIsQuickPayOpen(true)}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-900/50 rounded-full transition-colors font-medium text-sm"
-                                title="Quick Payment (Zap)"
                             >
                                 <Zap size={16} className="fill-yellow-700 dark:fill-yellow-400" />
                                 <span>Quick Pay</span>
@@ -150,8 +199,7 @@ const MainLayout: React.FC = () => {
                         </div>
 
                         <NotificationBell />
-                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm">
-                            {/* Avatar Placeholder */}
+                        <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm shrink-0">
                             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" className="w-full h-full object-cover" />
                         </div>
                     </div>
@@ -166,7 +214,7 @@ const MainLayout: React.FC = () => {
                         </AnimatePresence>
                     </div>
                 </main>
-                
+
                 <MobileBottomNav />
             </div>
 
