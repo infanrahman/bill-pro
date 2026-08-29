@@ -7,7 +7,7 @@ import { calculateLineItem, calculateDocumentTotals } from '../../utils/financia
 import type { Item, Customer, InvoiceItem, HeldBill } from '../../services/db';
 import type { RestaurantTable } from '../../contexts/SettingsContext';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search, ShoppingCart, User, CreditCard, ShieldOff, LayoutGrid, Archive, ArrowLeft, Clock, UserPlus, XCircle, Sparkles, Plus, Minus, Trash2, Weight, FileText, PauseCircle, PlayCircle, ScanBarcode, UtensilsCrossed, SendHorizontal } from 'lucide-react';
+import { Search, ShoppingCart, User, CreditCard, ShieldOff, LayoutGrid, Archive, ArrowLeft, Clock, UserPlus, XCircle, X, Sparkles, Plus, Minus, Trash2, Weight, FileText, PauseCircle, PlayCircle, ScanBarcode, UtensilsCrossed, SendHorizontal } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import ShiftModal from './ShiftModal';
 import ItemCard from '../../components/POS/ItemCard';
@@ -59,6 +59,7 @@ const PosTerminal: React.FC = () => {
  return () => clearTimeout(handler);
  }, [customerSearchTerm]);
  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+ const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [isHeldBillsOpen, setIsHeldBillsOpen] = useState(false);
   const [isHoldPromptOpen, setIsHoldPromptOpen] = useState(false);
   const [holdName, setHoldName] = useState('');
@@ -871,13 +872,48 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  </div>
  </div>
 
+ {/* Mobile "View Cart" Floating Button */}
+ {!isMobileCartOpen && (
+   <button
+     type="button"
+     onClick={() => setIsMobileCartOpen(true)}
+     className="sm:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+80px)] right-4 left-4 bg-blue-600 text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between z-40 active:scale-95 transition-transform"
+   >
+     <div className="flex items-center gap-3">
+       <div className="relative">
+         <ShoppingCart size={24} />
+         {cart.length > 0 && (
+           <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-blue-600">
+             {cart.reduce((sum, item) => sum + item.quantity, 0)}
+           </span>
+         )}
+       </div>
+       <span className="font-bold">View Cart</span>
+     </div>
+     <span className="font-bold text-lg">{formatCurrency(cart.reduce((sum, item) => sum + item.total, 0))}</span>
+   </button>
+ )}
+
  {/* Premium Cart Sidebar */}
  <div 
- 
- 
- className="w-full sm:w-72 md:w-80 xl:w-96 2xl:w-[400px] h-[550px] sm:h-full shrink-0 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-850 flex flex-col relative z-20 group/cart"
+ className={clsx(
+   "sm:w-72 md:w-80 xl:w-96 2xl:w-[400px] h-full shrink-0 bg-white dark:bg-slate-900 sm:rounded-3xl border-0 sm:border border-slate-200 dark:border-slate-850 flex flex-col z-50 sm:z-20 group/cart",
+   isMobileCartOpen ? "fixed inset-0 w-full rounded-none" : "hidden sm:flex relative"
+ )}
  >
- <div className="p-4 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 relative z-20">
+ <div className="p-4 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 relative z-20 pt-[max(1rem,env(safe-area-inset-top))]">
+   {/* Mobile Cart Header with Close Button */}
+   <div className="flex items-center justify-between mb-4 sm:hidden">
+     <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+       <ShoppingCart size={20} /> Current Order
+     </h2>
+     <button 
+       onClick={() => setIsMobileCartOpen(false)}
+       className="p-2 bg-slate-200 dark:bg-slate-800 rounded-full text-slate-700 dark:text-slate-300"
+     >
+       <X size={20} />
+     </button>
+   </div>
  <>
  {editingInvoice && (
  <div 

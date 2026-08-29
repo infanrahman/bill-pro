@@ -50,6 +50,13 @@ const AppContent = () => {
    SyncEngine.getConnectionStatus()
  );
 
+ useEffect(() => {
+   // Request native permissions on mobile
+   import('./services/permissionService').then(m => {
+     m.PermissionService.requestAllPermissions();
+   }).catch(() => {});
+ }, []);
+
  const addToastRef = useRef(addToast);
  useEffect(() => { addToastRef.current = addToast; }, [addToast]);
 

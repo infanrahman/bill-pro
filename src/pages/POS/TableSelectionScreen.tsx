@@ -41,7 +41,7 @@ const TableSelectionScreen: React.FC<TableSelectionScreenProps> = ({ onSelectTab
   }, [heldBills]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 pb-[env(safe-area-inset-bottom)]">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 pt-4 pb-4 shrink-0">
         <div className="flex items-center gap-3 mb-1">
