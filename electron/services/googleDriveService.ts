@@ -24,7 +24,7 @@ interface GoogleDriveConfig {
 }
 
 export class GoogleDriveService {
-    private oAuth2Client: OAuth2Client | null = null;
+    private oAuth2Client: any = null;
     private config: GoogleDriveConfig | null = null;
 
     constructor() {

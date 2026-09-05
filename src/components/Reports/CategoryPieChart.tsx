@@ -34,7 +34,7 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ data }) => {
 ))}
  </Pie>
  <Tooltip
- formatter={(value: number) => [`${value} items`, 'Sold']}
+ formatter={(value: any) => [`${value} items`, 'Sold']}
  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
  />
  <Legend iconType="circle"/>
