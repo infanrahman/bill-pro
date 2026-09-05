@@ -360,11 +360,11 @@ const ItemList: React.FC = () => {
  {/* Header Section */}
   <div className="relative overflow-hidden group">
  
- <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 relative z-10">
+ <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 relative z-10">
  <div>
  <div className="flex items-center gap-3 mb-2">
  <PackageOpen size={32} className="text-slate-900 dark:text-white"/>
- <h1 className="text-4xl font-semibold dark:text-white tracking-tight uppercase">
+ <h1 className="text-2xl md:text-4xl font-semibold dark:text-white tracking-tight uppercase">
  {t('inventory.title')}
  </h1>
  </div>
@@ -373,7 +373,7 @@ const ItemList: React.FC = () => {
  </p>
  </div>
 
- <div className="flex flex-wrap items-center gap-4">
+ <div className="flex flex-wrap items-center gap-2">
  <>
  {selectedIds.length > 0 && (
  <div className="flex items-center gap-2 bg-slate-900 dark:bg-slate-700 p-2 rounded-2xl">
@@ -431,7 +431,7 @@ const ItemList: React.FC = () => {
  </div>
 
  {/* Stats Ribbon */}
- <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+ <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
  {[
  { label: t('inventory.total_items') || 'Total Products', value: inventoryStats?.total || 0, icon: Box, color: 'indigo' },
  { label: t('inventory.low_stock') || 'Low Stock Alerts', value: inventoryStats?.lowStock || 0, icon: AlertTriangle, color: 'rose' },
@@ -515,7 +515,7 @@ const ItemList: React.FC = () => {
  </div>
  </div>
 
- <div className="flex items-center gap-3 w-full md:w-auto">
+ <div className="flex flex-col gap-2 md:flex-row md:items-center md:w-auto w-full">
  {activeTab === 'items' && categories && categories.length > 0 && (
  <select
  value={selectedCategory}
@@ -578,105 +578,147 @@ const ItemList: React.FC = () => {
  {loading || (items && items.length > 0) ? (
   viewMode === 'list' ? (
  <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700/50 overflow-hidden shadow-sm">
- <div className="overflow-x-auto">
- <table className="w-full text-left whitespace-nowrap min-w-[800px]">
- <thead>
- <tr className="border-b border-slate-50 dark:border-slate-700/50">
- <th className="p-5 w-12 text-center">
- <input
- type="checkbox"
- className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
- checked={items && items.length > 0 && items.every((i: any) => selectedIds.includes(i.id!))}
- onChange={toggleSelectAll}
- />
- </th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.item_name') || 'Item Name'}</th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.barcode') || 'Barcode'}</th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.stock') || 'Stock'}</th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.sale_price') || 'Sale Price'}</th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.supplier') || t('suppliers.title') || 'Supplier'}</th>
- <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right"></th>
- </tr>
- </thead>
- <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
- {loading || !items ? (
- Array.from({ length: 5 }).map((_, i) => (
- <tr key={i} className="">
- <td className="p-5"><Skeleton width={20} height={20} /></td>
- <td className="p-5"><Skeleton width={200} height={20} /></td>
- <td className="p-5"><Skeleton width={120} height={20} /></td>
- <td className="p-5"><Skeleton width={80} height={20} /></td>
- <td className="p-5"><Skeleton width={100} height={20} /></td>
- <td className="p-5"><Skeleton width={100} height={20} /></td>
- <td className="p-5 text-right"><Skeleton width={100} height={32} /></td>
- </tr>
-))
-) : (
- items.map((item: Item, idx: number) => (
- <tr 
- key={item.id}
- className="hover:bg-slate-50 dark:hover:bg-slate-700/50 group transition-colors"
- >
- <td className="p-5 text-center">
- <input
- type="checkbox"
- className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
- checked={selectedIds.includes(item.id!)}
- onChange={() => toggleSelect(item.id!)}
- />
- </td>
- <td className="p-5">
- <div className="flex items-center gap-4">
- {item.image && (
- <img src={item.image} className="w-10 h-10 rounded-lg object-cover border border-slate-100 dark:border-slate-700"alt=""/>
-)}
- <div>
- <p className="font-bold text-xs dark:text-white uppercase tracking-tight">{item.name}</p>
- {item.itemCode && (
- <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">
- PLU: {item.itemCode}
- </span>
-)}
- </div>
- </div>
- </td>
- <td className="p-5">
- <span className="font-mono text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg text-indigo-700 dark:text-indigo-400 tracking-wider inline-block">
- {item.barcode || '---'}
- </span>
- </td>
- <td className="p-5">
- <div className={clsx(
-"flex items-center gap-2 px-3 py-1 rounded-full w-fit text-[9px] font-semibold uppercase tracking-wider border",
- (item.stock || 0) <= (item.minStock || 0) 
- ?"bg-rose-500/10 text-rose-500 border-rose-500/20"
- :"bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-)}>
- <div className={clsx("w-1.5 h-1.5 rounded-full", (item.stock || 0) <= (item.minStock || 0) ?"bg-rose-500":"bg-emerald-500")} />
- {item.stock} {t('inventory.units')}
- </div>
- </td>
- <td className="p-5">
- <p className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</p>
- </td>
- <td className="p-5">
- <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
- {item.supplierId ? (supplierMap.get(item.supplierId) || '---') : '---'}
- </span>
- </td>
- <td className="p-5 text-right">
- <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100">
- <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
- <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-2.5 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
- <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-2.5 bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
- </div>
- </td>
- </tr>
-))
-)}
- </tbody>
- </table>
- </div>
+   {/* Mobile Card View */}
+   <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+     {loading || !items ? (
+       Array.from({ length: 4 }).map((_, i) => (
+         <div key={i} className="p-4 animate-pulse">
+           <div className="flex gap-3">
+             <Skeleton width={40} height={40} />
+             <div className="flex-1">
+               <Skeleton width="60%" height={14} />
+               <Skeleton width="40%" height={12} />
+             </div>
+           </div>
+         </div>
+       ))
+     ) : items.map((item: Item) => (
+       <div key={item.id} className="p-4 flex items-start justify-between gap-3">
+         <div className="flex items-center gap-3 min-w-0 flex-1">
+           {item.image && <img src={item.image} className="w-10 h-10 rounded-lg object-cover border border-slate-100 dark:border-slate-700 shrink-0" alt="" />}
+           <div className="min-w-0">
+             <p className="font-bold text-xs dark:text-white uppercase tracking-tight truncate">{item.name}</p>
+             {item.barcode && <p className="font-mono text-[10px] text-slate-400">{item.barcode}</p>}
+             <div className="flex items-center gap-2 mt-1">
+               <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase border",
+                 (item.stock || 0) <= (item.minStock || 0)
+                   ? "bg-rose-50 text-rose-500 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400"
+                   : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
+               )}>
+                 {item.stock} {t('inventory.units')}
+               </span>
+               <span className="text-xs font-bold text-slate-900 dark:text-white">{formatCurrency(item.salePrice)}</span>
+             </div>
+           </div>
+         </div>
+         <div className="flex gap-1 shrink-0">
+           <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white rounded-lg"><Edit size={14} /></button>
+           <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-lg"><Trash size={14} /></button>
+         </div>
+       </div>
+     ))}
+   </div>
+
+   {/* Desktop Table View */}
+   <div className="hidden md:block overflow-x-auto">
+   <table className="w-full text-left whitespace-nowrap min-w-[800px]">
+   <thead>
+   <tr className="border-b border-slate-50 dark:border-slate-700/50">
+   <th className="p-5 w-12 text-center">
+   <input
+   type="checkbox"
+   className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+   checked={items && items.length > 0 && items.every((i: any) => selectedIds.includes(i.id!))}
+   onChange={toggleSelectAll}
+   />
+   </th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.item_name') || 'Item Name'}</th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.barcode') || 'Barcode'}</th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.stock') || 'Stock'}</th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.sale_price') || 'Sale Price'}</th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{t('inventory.supplier') || t('suppliers.title') || 'Supplier'}</th>
+   <th className="p-5 text-[9px] font-bold uppercase tracking-wider text-slate-400 text-right"></th>
+   </tr>
+   </thead>
+   <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+   {loading || !items ? (
+   Array.from({ length: 5 }).map((_, i) => (
+   <tr key={i} className="">
+   <td className="p-5"><Skeleton width={20} height={20} /></td>
+   <td className="p-5"><Skeleton width={200} height={20} /></td>
+   <td className="p-5"><Skeleton width={120} height={20} /></td>
+   <td className="p-5"><Skeleton width={80} height={20} /></td>
+   <td className="p-5"><Skeleton width={100} height={20} /></td>
+   <td className="p-5"><Skeleton width={100} height={20} /></td>
+   <td className="p-5 text-right"><Skeleton width={100} height={32} /></td>
+   </tr>
+  ))
+ ) : (
+   items.map((item: Item, idx: number) => (
+   <tr 
+   key={item.id}
+   className="hover:bg-slate-50 dark:hover:bg-slate-700/50 group transition-colors"
+   >
+   <td className="p-5 text-center">
+   <input
+   type="checkbox"
+   className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500"
+   checked={selectedIds.includes(item.id!)}
+   onChange={() => toggleSelect(item.id!)}
+   />
+   </td>
+   <td className="p-5">
+   <div className="flex items-center gap-4">
+   {item.image && (
+   <img src={item.image} className="w-10 h-10 rounded-lg object-cover border border-slate-100 dark:border-slate-700" alt=""/>
+  )}
+   <div>
+   <p className="font-bold text-xs dark:text-white uppercase tracking-tight">{item.name}</p>
+   {item.itemCode && (
+   <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded tracking-wider">
+   PLU: {item.itemCode}
+   </span>
+  )}
+   </div>
+   </div>
+   </td>
+   <td className="p-5">
+   <span className="font-mono text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg text-indigo-700 dark:text-indigo-400 tracking-wider inline-block">
+   {item.barcode || '---'}
+   </span>
+   </td>
+   <td className="p-5">
+   <div className={clsx(
+  "flex items-center gap-2 px-3 py-1 rounded-full w-fit text-[9px] font-semibold uppercase tracking-wider border",
+   (item.stock || 0) <= (item.minStock || 0) 
+   ?"bg-rose-500/10 text-rose-500 border-rose-500/20"
+   :"bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+  )}>
+   <div className={clsx("w-1.5 h-1.5 rounded-full", (item.stock || 0) <= (item.minStock || 0) ?"bg-rose-500":"bg-emerald-500")} />
+   {item.stock} {t('inventory.units')}
+   </div>
+   </td>
+   <td className="p-5">
+   <p className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</p>
+   </td>
+   <td className="p-5">
+   <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+   {item.supplierId ? (supplierMap.get(item.supplierId) || '---') : '---'}
+   </span>
+   </td>
+   <td className="p-5 text-right">
+   <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100">
+   <button type="button" onClick={() => navigate(`/inventory/edit/${item.id}`)} className="p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors" title={t('common.edit') || 'Edit'}><Edit size={16} /></button>
+   <button type="button" onClick={() => { setSelectedItemForLabel([item]); setIsLabelModalOpen(true); }} className="p-2.5 bg-white dark:bg-slate-800 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('inventory.print_label') || 'Print Label'}><Printer size={16} /></button>
+   <button type="button" onClick={() => handleDeleteClick(item.id!)} className="p-2.5 bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors" title={t('common.delete') || 'Delete'}><Trash size={16} /></button>
+   </div>
+   </td>
+   </tr>
+  ))
+ )}
+   </tbody>
+   </table>
+   </div>
  </div>
 ) : (
  <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-8">

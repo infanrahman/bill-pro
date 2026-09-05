@@ -381,67 +381,67 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
   };
 
   return (
- <div className="space-y-6">
- <h1 className="text-2xl font-semibold dark:text-white uppercase tracking-tight flex items-center gap-4">
- <div className="p-3 bg-slate-900 dark:bg-white text-white rounded-2xl">
- <History size={24} strokeWidth={2.5} />
- </div>
- {t('transactions.title')}
- </h1>
+  <div className="space-y-6 pb-20 md:pb-6">
+  <h1 className="text-2xl md:text-4xl font-semibold dark:text-white uppercase tracking-tight flex items-center gap-4">
+  <div className="p-3 bg-slate-900 dark:bg-white text-white rounded-2xl">
+  <History size={24} strokeWidth={2.5} />
+  </div>
+  {t('transactions.title')}
+  </h1>
 
- <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row flex-wrap gap-4 md:gap-6 items-stretch md:items-center relative overflow-hidden group">
- 
- <div className="relative flex-1 w-full md:w-auto min-w-[200px] z-10">
- <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={20} />
- <input
- type="text"
- placeholder={t('transactions.search_placeholder')}
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- className="w-full pl-12 pr-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-sm"
- />
- </div>
+  <div className="bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl border border-white/50 dark:border-slate-700/30 flex flex-col md:flex-row flex-wrap gap-4 md:gap-6 items-stretch md:items-center relative overflow-hidden group">
+  
+  <div className="relative flex-1 w-full md:w-auto min-w-[200px] z-10">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={20} />
+  <input
+  type="text"
+  placeholder={t('transactions.search_placeholder')}
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+  className="w-full pl-12 pr-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-sm"
+  />
+  </div>
 
- <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 z-10 w-full md:w-auto">
- <div className="flex flex-col flex-1">
- <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.from')}</label>
- <input
- type="datetime-local"
- value={startDate}
- onChange={(e) => setStartDate(e.target.value)}
- className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
- />
- </div>
- <div className="flex flex-col flex-1">
- <label className="text-[10px] uppercase font-semibold text-slate-600 pl-1 tracking-wider">{t('transactions.to')}</label>
- <input
- type="datetime-local"
- value={endDate}
- onChange={(e) => setEndDate(e.target.value)}
- className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
- />
- </div>
- <div className="flex flex-col flex-1">
- <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.payment') || 'Payment'}</label>
- <select
- value={paymentMode}
- onChange={(e) => setPaymentMode(e.target.value)}
- className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
- >
- <option value="all">{t('common.all') || 'All'}</option>
- <option value="cash">{t('common.cash') || 'Cash'}</option>
- <option value="card">{t('common.card') || 'Card'}</option>
- <option value="credit">{t('common.credit') || 'Credit'}</option>
- <option value="upi">{t('common.upi') || 'UPI'}</option>
- <option value="split">{t('common.split') || 'Split'}</option>
- </select>
- </div>
- </div>
+  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 z-10 w-full md:w-auto">
+  <div className="flex flex-col flex-1">
+  <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.from')}</label>
+  <input
+  type="datetime-local"
+  value={startDate}
+  onChange={(e) => setStartDate(e.target.value)}
+  className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+  />
+  </div>
+  <div className="flex flex-col flex-1">
+  <label className="text-[10px] uppercase font-semibold text-slate-600 pl-1 tracking-wider">{t('transactions.to')}</label>
+  <input
+  type="datetime-local"
+  value={endDate}
+  onChange={(e) => setEndDate(e.target.value)}
+  className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+  />
+  </div>
+  <div className="flex flex-col flex-1">
+  <label className="text-[10px] uppercase font-bold text-slate-600 pl-1">{t('transactions.payment') || 'Payment'}</label>
+  <select
+  value={paymentMode}
+  onChange={(e) => setPaymentMode(e.target.value)}
+  className="w-full px-4 py-3 rounded-xl md:rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-white font-bold outline-none focus:ring-4 focus:ring-slate-900/20 dark:focus:ring-white/20 text-xs"
+  >
+  <option value="all">{t('common.all') || 'All'}</option>
+  <option value="cash">{t('common.cash') || 'Cash'}</option>
+  <option value="card">{t('common.card') || 'Card'}</option>
+  <option value="credit">{t('common.credit') || 'Credit'}</option>
+  <option value="upi">{t('common.upi') || 'UPI'}</option>
+  <option value="split">{t('common.split') || 'Split'}</option>
+  </select>
+  </div>
+  </div>
 
- <div className="flex gap-2 ml-auto z-10">
+  <div className="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto z-10">
   <button type="button"
   onClick={handlePrintDayReport}
-  className="flex items-center gap-3 px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
+  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
   >
   <Printer size={18} strokeWidth={2.5} />
   <span>{t('transactions.print_report') || 'Print Report'}</span>
@@ -449,7 +449,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
   {settings.enableExcelExport && (
   <button type="button"
   onClick={handleExportExcel}
-  className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
+  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500 text-white rounded-xl font-semibold text-xs uppercase tracking-wider"
   >
   <FileSpreadsheet size={18} strokeWidth={2.5} />
   <span>{t('common.export_excel')}</span>
@@ -458,165 +458,260 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ onReturn }) => {
  </div>
  </div>
 
- <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
- <div className="overflow-x-auto custom-scrollbar">
- <table className="w-full text-left whitespace-nowrap min-w-[900px] responsive-table">
- <thead className="bg-slate-900/[0.02] dark:bg-white/[0.02] border-b border-slate-200/50 dark:border-slate-700/50">
- <tr>
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.invoice_no')}</th>
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.date')}</th>
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.customer')}</th>
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.amount')}</th>
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.payment')}</th>
- {isZatcaEnabled && <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">ZATCA</th>}
- <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide text-right">{t('transactions.actions')}</th>
- </tr>
- </thead>
- <tbody className="divide-y divide-slate-200/30 dark:divide-slate-700/30">
- {filteredInvoices?.map((inv: any) => (
- <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 relative">
- <td data-label="Invoice No" className="p-6">
-<span className="font-mono text-[10px] font-semibold text-slate-900 dark:text-white bg-slate-900/10 dark:bg-white/10 px-3 py-1.5 rounded-full border border-slate-900/10 dark:border-white/10">
- {inv.invoiceNumber}
- </span>
- </td>
- <td data-label="Date" className="p-6 font-bold text-slate-600 dark:text-slate-300 text-xs">{formatDate(inv.createdAt)}</td>
- <td data-label="Customer" className="p-6 font-semibold text-slate-800 dark:text-white uppercase text-xs tracking-tight">{inv.customerName}</td>
- <td data-label="Amount" className="p-6 font-semibold text-slate-900 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</td>
- <td className="p-4">
- <span className={`px-2 py-1.5 rounded-md text-xs font-semibold uppercase border
- ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
- (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
- inv.paymentMode ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 ' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
- {inv.type === 'return' 
- ? t('common.return') 
- : (settings.cafeMode && inv.paymentStatus !== 'paid') 
- ? 'Pending' 
- : t(`payment.${inv.paymentMode}`) || inv.paymentMode}
- </span>
- </td>
- {isZatcaEnabled && (
- <td data-label="ZATCA" className="p-4">
-{inv.zatcaStatus === 'REPORTED' ? (
- <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
- <ShieldCheck size={12} /> Reported
- </span>
-) : inv.zatcaStatus === 'ERROR' ? (
- <span 
- className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
- title={inv.zatcaError || 'Validation Error'}
- >
- <ShieldAlert size={12} /> Error
- </span>
-) : (
- <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600">
- <Clock size={12} /> Pending
- </span>
-)}
- </td>
-)}
- <td data-label="Actions" className="p-6 flex-col md:flex-row md:items-center items-end gap-2">
- <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transform translate-x-4 group-">
- <button type="button"
- onClick={() => setViewInvoice(inv)}
- className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title={t('transactions.view_details')}
- >
- <Eye size={18} />
- </button>
- {inv.paymentStatus !== 'paid' && inv.type !== 'return' && (
- <button type="button"
- onClick={() => navigate('/pos', { state: { editInvoice: inv, hidePayLater: true } })}
- className="p-2.5 text-slate-600 hover:text-emerald-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title="Proceed to Payment"
- >
- <CreditCard size={18} />
- </button>
-)}
- {hasPermission('sales_edit') && inv.type !== 'return' && (
- <button type="button"
- onClick={() => onReturn && onReturn(inv)}
- className="p-2.5 text-slate-600 hover:text-amber-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title="Return"
- >
- <RotateCcw size={18} />
- </button>
-)}
- {isZatcaEnabled && inv.zatcaStatus === 'ERROR' && (
- <button type="button"
- onClick={() => handleRetryZatca(inv)}
- disabled={isRetryingZatca === inv.id}
- className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-50"
- title="Retry ZATCA Submission"
- >
- <RefreshCw size={18} className={isRetryingZatca === inv.id ?"":""} />
- </button>
-)}
- <button type="button"
- onClick={() => printInvoice(inv)}
- className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title={t('transactions.print_invoice')}
- >
- <Printer size={18} />
- </button>
- <button type="button"
- onClick={async () => {
- const saved = localStorage.getItem('businessDetails');
- const business = saved ? JSON.parse(saved) : { name: 'My Shop' };
- import('../../services/invoiceGenerator').then(m => {
- m.downloadInvoicePDF(inv, business).then(success => {
- if (success) addToast(t('transactions.download_success'), 'success');
- else addToast(t('transactions.download_failed'), 'info');
- });
- });
- }}
- className="p-2.5 text-slate-600 hover:text-green-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title={t('transactions.download_pdf')}
- >
- <Download size={18} />
- </button>
- {settings.enableSharing && (
- <button type="button"
- onClick={() => {
- setSelectedInvoiceForShare(inv);
- setShareModalOpen(true);
- }}
- className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title="Share"
- >
- <Send size={18} />
- </button>
-)}
- {/* Delete: Admin OR sales_delete */}
- {(isAdmin || hasPermission('sales_delete')) && (
- <>
- <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"/>
- <button type="button"
- onClick={(e) => handleDeleteClick(inv.id!, e)}
- className="p-2.5 text-slate-600 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
- title={t('transactions.delete_invoice')}
- >
- <Trash2 size={18} />
- </button>
- </>
-)}
- </div>
- </td>
- </tr>
-))}
- </tbody>
- </table>
- </div>
+  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-white/50 dark:border-slate-700/30 overflow-hidden">
 
- <Pagination
- currentPage={currentPage}
- totalPages={totalPages}
- onPageChange={setCurrentPage}
- totalItems={totalItems}
- itemsPerPage={pageSize}
- onItemsPerPageChange={setPageSize}
- />
- </div>
+  {/* Mobile card view */}
+  <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+  {filteredInvoices?.map((inv: any) => (
+  <div key={inv.id} className="p-4 bg-white dark:bg-slate-800">
+  <div className="flex items-start justify-between mb-2">
+  <div>
+  <span className="font-mono text-[10px] font-semibold text-slate-900 dark:text-white bg-slate-900/10 dark:bg-white/10 px-2.5 py-1 rounded-full border border-slate-900/10 dark:border-white/10">
+  {inv.invoiceNumber}
+  </span>
+  <div className="font-semibold text-slate-800 dark:text-white uppercase text-xs tracking-tight mt-1.5">{inv.customerName}</div>
+  </div>
+  <div className="text-right">
+  <div className="font-bold text-slate-900 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</div>
+  <div className="text-[10px] text-slate-400 mt-0.5">{formatDate(inv.createdAt)}</div>
+  </div>
+  </div>
+  <div className="flex items-center gap-2 mb-3">
+  <span className={`px-2 py-1 rounded-md text-xs font-semibold uppercase border
+  ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
+  (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
+  inv.paymentMode ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+  {inv.type === 'return'
+  ? t('common.return')
+  : (settings.cafeMode && inv.paymentStatus !== 'paid')
+  ? 'Pending'
+  : t(`payment.${inv.paymentMode}`) || inv.paymentMode}
+  </span>
+  {isZatcaEnabled && (
+  inv.zatcaStatus === 'REPORTED' ? (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+  <ShieldCheck size={11} /> Reported
+  </span>
+  ) : inv.zatcaStatus === 'ERROR' ? (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800" title={inv.zatcaError || 'Validation Error'}>
+  <ShieldAlert size={11} /> Error
+  </span>
+  ) : (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600">
+  <Clock size={11} /> Pending
+  </span>
+  )
+  )}
+  </div>
+  <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+  <button type="button" onClick={() => setViewInvoice(inv)}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+  title={t('transactions.view_details')}><Eye size={14} /></button>
+  {inv.paymentStatus !== 'paid' && inv.type !== 'return' && (
+  <button type="button" onClick={() => navigate('/pos', { state: { editInvoice: inv, hidePayLater: true } })}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-lg"
+  title="Proceed to Payment"><CreditCard size={14} /></button>
+  )}
+  {hasPermission('sales_edit') && inv.type !== 'return' && (
+  <button type="button" onClick={() => onReturn && onReturn(inv)}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20 rounded-lg"
+  title="Return"><RotateCcw size={14} /></button>
+  )}
+  {isZatcaEnabled && inv.zatcaStatus === 'ERROR' && (
+  <button type="button" onClick={() => handleRetryZatca(inv)} disabled={isRetryingZatca === inv.id}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 rounded-lg disabled:opacity-50"
+  title="Retry ZATCA"><RefreshCw size={14} /></button>
+  )}
+  <button type="button" onClick={() => printInvoice(inv)}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+  title={t('transactions.print_invoice')}><Printer size={14} /></button>
+  <button type="button"
+  onClick={async () => {
+  const saved = localStorage.getItem('businessDetails');
+  const business = saved ? JSON.parse(saved) : { name: 'My Shop' };
+  import('../../services/invoiceGenerator').then(m => {
+  m.downloadInvoicePDF(inv, business).then(success => {
+  if (success) addToast(t('transactions.download_success'), 'success');
+  else addToast(t('transactions.download_failed'), 'info');
+  });
+  });
+  }}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20 rounded-lg"
+  title={t('transactions.download_pdf')}><Download size={14} /></button>
+  {settings.enableSharing && (
+  <button type="button" onClick={() => { setSelectedInvoiceForShare(inv); setShareModalOpen(true); }}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 rounded-lg"
+  title="Share"><Send size={14} /></button>
+  )}
+  {(isAdmin || hasPermission('sales_delete')) && (
+  <button type="button" onClick={(e) => handleDeleteClick(inv.id!, e)}
+  className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg"
+  title={t('transactions.delete_invoice')}><Trash2 size={14} /></button>
+  )}
+  </div>
+  </div>
+  ))}
+  </div>
+
+  {/* Desktop table view */}
+  <div className="hidden md:block overflow-x-auto custom-scrollbar">
+  <table className="w-full text-left whitespace-nowrap min-w-[900px] responsive-table">
+  <thead className="bg-slate-900/[0.02] dark:bg-white/[0.02] border-b border-slate-200/50 dark:border-slate-700/50">
+  <tr>
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.invoice_no')}</th>
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.date')}</th>
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.customer')}</th>
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.amount')}</th>
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{t('transactions.payment')}</th>
+  {isZatcaEnabled && <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">ZATCA</th>}
+  <th className="p-6 text-[10px] font-semibold text-slate-600 uppercase tracking-wide text-right">{t('transactions.actions')}</th>
+  </tr>
+  </thead>
+  <tbody className="divide-y divide-slate-200/30 dark:divide-slate-700/30">
+  {filteredInvoices?.map((inv: any) => (
+  <tr key={inv.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 relative">
+  <td data-label="Invoice No" className="p-6">
+  <span className="font-mono text-[10px] font-semibold text-slate-900 dark:text-white bg-slate-900/10 dark:bg-white/10 px-3 py-1.5 rounded-full border border-slate-900/10 dark:border-white/10">
+  {inv.invoiceNumber}
+  </span>
+  </td>
+  <td data-label="Date" className="p-6 font-bold text-slate-600 dark:text-slate-300 text-xs">{formatDate(inv.createdAt)}</td>
+  <td data-label="Customer" className="p-6 font-semibold text-slate-800 dark:text-white uppercase text-xs tracking-tight">{inv.customerName}</td>
+  <td data-label="Amount" className="p-6 font-semibold text-slate-900 dark:text-white text-sm">{formatCurrency(inv.grandTotal)}</td>
+  <td className="p-4">
+  <span className={`px-2 py-1.5 rounded-md text-xs font-semibold uppercase border
+  ${inv.type === 'return' ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
+  (settings.cafeMode && inv.paymentStatus !== 'paid') ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800' :
+  inv.paymentMode ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 ' : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+  {inv.type === 'return'
+  ? t('common.return')
+  : (settings.cafeMode && inv.paymentStatus !== 'paid')
+  ? 'Pending'
+  : t(`payment.${inv.paymentMode}`) || inv.paymentMode}
+  </span>
+  </td>
+  {isZatcaEnabled && (
+  <td data-label="ZATCA" className="p-4">
+  {inv.zatcaStatus === 'REPORTED' ? (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+  <ShieldCheck size={12} /> Reported
+  </span>
+  ) : inv.zatcaStatus === 'ERROR' ? (
+  <span
+  className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-help"
+  title={inv.zatcaError || 'Validation Error'}
+  >
+  <ShieldAlert size={12} /> Error
+  </span>
+  ) : (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600">
+  <Clock size={12} /> Pending
+  </span>
+  )}
+  </td>
+  )}
+  <td data-label="Actions" className="p-6">
+  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+  <button type="button"
+  onClick={() => setViewInvoice(inv)}
+  className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title={t('transactions.view_details')}
+  >
+  <Eye size={18} />
+  </button>
+  {inv.paymentStatus !== 'paid' && inv.type !== 'return' && (
+  <button type="button"
+  onClick={() => navigate('/pos', { state: { editInvoice: inv, hidePayLater: true } })}
+  className="p-2.5 text-slate-600 hover:text-emerald-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title="Proceed to Payment"
+  >
+  <CreditCard size={18} />
+  </button>
+  )}
+  {hasPermission('sales_edit') && inv.type !== 'return' && (
+  <button type="button"
+  onClick={() => onReturn && onReturn(inv)}
+  className="p-2.5 text-slate-600 hover:text-amber-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title="Return"
+  >
+  <RotateCcw size={18} />
+  </button>
+  )}
+  {isZatcaEnabled && inv.zatcaStatus === 'ERROR' && (
+  <button type="button"
+  onClick={() => handleRetryZatca(inv)}
+  disabled={isRetryingZatca === inv.id}
+  className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-50"
+  title="Retry ZATCA Submission"
+  >
+  <RefreshCw size={18} className={isRetryingZatca === inv.id ? "" : ""} />
+  </button>
+  )}
+  <button type="button"
+  onClick={() => printInvoice(inv)}
+  className="p-2.5 text-slate-600 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title={t('transactions.print_invoice')}
+  >
+  <Printer size={18} />
+  </button>
+  <button type="button"
+  onClick={async () => {
+  const saved = localStorage.getItem('businessDetails');
+  const business = saved ? JSON.parse(saved) : { name: 'My Shop' };
+  import('../../services/invoiceGenerator').then(m => {
+  m.downloadInvoicePDF(inv, business).then(success => {
+  if (success) addToast(t('transactions.download_success'), 'success');
+  else addToast(t('transactions.download_failed'), 'info');
+  });
+  });
+  }}
+  className="p-2.5 text-slate-600 hover:text-green-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title={t('transactions.download_pdf')}
+  >
+  <Download size={18} />
+  </button>
+  {settings.enableSharing && (
+  <button type="button"
+  onClick={() => {
+  setSelectedInvoiceForShare(inv);
+  setShareModalOpen(true);
+  }}
+  className="p-2.5 text-slate-600 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title="Share"
+  >
+  <Send size={18} />
+  </button>
+  )}
+  {/* Delete: Admin OR sales_delete */}
+  {(isAdmin || hasPermission('sales_delete')) && (
+  <>
+  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"/>
+  <button type="button"
+  onClick={(e) => handleDeleteClick(inv.id!, e)}
+  className="p-2.5 text-slate-600 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+  title={t('transactions.delete_invoice')}
+  >
+  <Trash2 size={18} />
+  </button>
+  </>
+  )}
+  </div>
+  </td>
+  </tr>
+  ))}
+  </tbody>
+  </table>
+  </div>
+
+  <Pagination
+  currentPage={currentPage}
+  totalPages={totalPages}
+  onPageChange={setCurrentPage}
+  totalItems={totalItems}
+  itemsPerPage={pageSize}
+  onItemsPerPageChange={setPageSize}
+  />
+  </div>
  <ConfirmationModal
  isOpen={!!invoiceToDelete}
  onClose={() => setInvoiceToDelete(null)}

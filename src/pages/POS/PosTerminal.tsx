@@ -858,7 +858,7 @@ const handleCheckoutComplete = async (invoiceData: any): Promise<string> => {
  >
  <div className="text-xs font-semibold text-slate-800 dark:text-white line-clamp-1 mb-2 uppercase tracking-tight group-hover:text-amber-500">{item.name}</div>
  <div className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">{formatCurrency(item.salePrice)}</div>
- <div className="absolute bottom-3.5 right-3.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 translate-y-1 group-">
+ <div className="absolute bottom-3.5 right-3.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-200">
  <div className="bg-amber-500 text-white p-1.5 rounded-lg">
  <Plus size={14} />
  </div>

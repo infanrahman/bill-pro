@@ -778,7 +778,93 @@ const PurchaseOrders = () => {
             </div>
 
             {/* List */}
-            <div className="bg-white dark:bg-slate-800 rounded-b-xl rounded-tr-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-b-xl rounded-tr-xl shadow-sm border border-slate-200 dark:border-slate-700">
+
+                {/* Mobile card view */}
+                <div className="md:hidden space-y-3 p-4">
+                    {filteredPurchases?.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500">{t('purchases.no_records')}</div>
+                    ) : (
+                        filteredPurchases?.map((po: any) => {
+                            const paid = po.paidAmount || 0;
+                            const balance = po.totalAmount - paid;
+                            return (
+                                <div key={po.id || po.orderNumber} className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm">
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                            <div className="font-bold text-sm text-slate-900 dark:text-white">{po.supplierName}</div>
+                                            <div className="font-mono text-xs text-slate-500 dark:text-slate-400 mt-0.5">{po.orderNumber}</div>
+                                        </div>
+                                        {activeTab === 'order' ? (
+                                            <span className={`px-2 py-1 border rounded-md text-xs font-semibold uppercase ${po.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'}`}>
+                                                {po.status === 'completed' ? t('purchases.status_completed') : t('purchases.status_pending')}
+                                            </span>
+                                        ) : (
+                                            balance > 0.01
+                                                ? <span className="text-red-500 dark:text-red-400 font-semibold text-sm">{formatCurrency(balance)}</span>
+                                                : <span className="text-green-600 dark:text-green-400 font-semibold text-sm">{t('purchases.settled')}</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-slate-500 space-y-1 mb-3">
+                                        <div className="flex justify-between">
+                                            <span>{t('purchases.date')}</span>
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">{formatDate(po.date)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>{t('purchases.items')}</span>
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">{t('purchases.item_count', { count: po.items.length })}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>{t('purchases.total')}</span>
+                                            <span className={`font-bold text-base ${activeTab === 'return' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>{formatCurrency(po.totalAmount)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100 dark:border-slate-700">
+                                        <button onClick={() => setViewOrder(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium" title={t('purchases.view_details')}>
+                                            <Eye size={13} /> {t('purchases.view_details')}
+                                        </button>
+                                        {activeTab === 'order' && po.status !== 'completed' && (
+                                            <button onClick={() => convertOrderToBill(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-medium" title={t('purchases.tooltip_receive')}>
+                                                <CheckCircle size={13} /> {t('purchases.tooltip_receive')}
+                                            </button>
+                                        )}
+                                        {activeTab === 'bill' && balance > 0.01 && (
+                                            <button onClick={() => handleOpenPayment(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-medium" title={t('purchases.tooltip_pay')}>
+                                                <CreditCard size={13} /> {t('purchases.tooltip_pay')}
+                                            </button>
+                                        )}
+                                        {activeTab === 'bill' && (
+                                            <button onClick={() => createReturnFromBill(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium" title={t('purchases.tooltip_return')}>
+                                                <RotateCcw size={13} />
+                                            </button>
+                                        )}
+                                        <button onClick={() => handlePrint(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium" title={t('common.print')}>
+                                            <Printer size={13} />
+                                        </button>
+                                        {activeTab === 'bill' && (
+                                            <button onClick={() => handlePrintLabels(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium" title={t('inventory.print_label') || 'Print Labels'}>
+                                                <QrCode size={13} />
+                                            </button>
+                                        )}
+                                        {hasPermission('purchases_edit') && (
+                                            <button onClick={() => handleEditPurchase(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium" title={t('common.edit')}>
+                                                <Edit size={13} />
+                                            </button>
+                                        )}
+                                        {(isAdmin || hasPermission('purchases_delete')) && (
+                                            <button onClick={() => handleDeleteClick(po)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium" title={t('common.delete')}>
+                                                <Trash2 size={13} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Desktop table view */}
+                <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left whitespace-nowrap min-w-[900px] responsive-table">
                     <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                         <tr>
@@ -932,6 +1018,7 @@ const PurchaseOrders = () => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {/* Payment Modal */}

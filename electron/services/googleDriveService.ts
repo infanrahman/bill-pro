@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+
 import http from 'http';
 import url from 'url';
 import fs from 'fs';
@@ -24,7 +24,7 @@ interface GoogleDriveConfig {
 }
 
 export class GoogleDriveService {
-    private oAuth2Client: OAuth2Client | null = null;
+    private oAuth2Client: any | null = null;
     private config: GoogleDriveConfig | null = null;
 
     constructor() {

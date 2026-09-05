@@ -11,11 +11,11 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron .",
     "build:base": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false tsc -p tsconfig.electron.json && tsc -b && vite build",
-    "build": "npm run build:base && electron-builder --dir",
-    "build:win": "npm run build:base && electron-builder --win",
-    "build:portable": "npm run build:base && electron-builder --win portable",
-    "build:zip": "npm run build:base && electron-builder --win zip",
-    "dist": "npm run build:base && electron-builder",
+    "build": "npm run build:base && cross-env NODE_OPTIONS=\"--max-old-space-size=16384\" electron-builder --dir",
+    "build:win": "npm run build:base && cross-env NODE_OPTIONS=\"--max-old-space-size=16384\" electron-builder --win",
+    "build:portable": "npm run build:base && cross-env NODE_OPTIONS=\"--max-old-space-size=16384\" electron-builder --win portable",
+    "build:zip": "npm run build:base && cross-env NODE_OPTIONS=\"--max-old-space-size=16384\" electron-builder --win zip",
+    "dist": "npm run build:base && cross-env NODE_OPTIONS=\"--max-old-space-size=16384\" electron-builder",
     "build:mobile": "npm run build:base && cap sync",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -104,7 +104,9 @@
     "forceCodeSigning": false,
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {

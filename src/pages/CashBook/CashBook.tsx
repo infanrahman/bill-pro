@@ -29,12 +29,12 @@ const CashBook: React.FC = () => {
  }
 
  return (
- <div className="space-y-10 pb-24 fade-in">
+ <div className="space-y-6 md:space-y-10 pb-20 md:pb-6 fade-in">
  {/* Header / Tabs */}
  <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 md:gap-8">
  <div className="relative">
  
- <h1 className="text-3xl md:text-5xl font-semibold text-slate-900 dark:text-white tracking-tight uppercase relative z-10 flex items-center gap-3 md:gap-4">
+ <h1 className="text-2xl md:text-5xl font-semibold text-slate-900 dark:text-white tracking-tight uppercase relative z-10 flex items-center gap-3 md:gap-4">
  {t('cashbook.title')}
  <Sparkles size={24} className="text-amber-500 md:w-6 md:h-6 w-5 h-5"/>
  </h1>

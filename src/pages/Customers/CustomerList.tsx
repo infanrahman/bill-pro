@@ -157,7 +157,7 @@ const CustomerList: React.FC = () => {
  </div>
 
  {/* Stats Grid */}
- <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+ <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
  {[
  { label: t('customers.total_customers') || 'Total Customers', value: stats.totalCustomers, icon: Users, color: 'blue' },
  { label: t('customers.outstanding_balance') || 'Total Outstanding', value: formatCurrency(stats.totalOutstanding), icon: Wallet, color: 'rose' },

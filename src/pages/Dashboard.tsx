@@ -194,34 +194,22 @@ const Dashboard: React.FC = () => {
  };
 
  return (
- <div 
- 
- 
- className="space-y-6 md:space-y-10 p-4 md:p-8 min-h-screen pb-20"
- >
- {/* Header with Background Decorative Elements */}
+ <div className="space-y-5 md:space-y-10 p-3 md:p-8 min-h-screen pb-24 md:pb-20">
+ {/* Header */}
  <div className="relative">
- 
- 
- 
- <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+ <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
  <div>
- <div 
- 
- 
- className="flex items-center gap-3 mb-2"
- >
- <span className="text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-white">{greeting()}</span>
- <div className="h-[2px] w-8 bg-slate-900 dark:bg-white"/>
+ <div className="flex items-center gap-3 mb-1 md:mb-2">
+ <span className="text-xs md:text-sm font-semibold uppercase tracking-wider text-slate-900 dark:text-white">{greeting()}</span>
+ <div className="h-[2px] w-6 md:w-8 bg-slate-900 dark:bg-white"/>
  </div>
- <h1 className="text-4xl md:text-5xl font-semibold dark:text-white tracking-tight flex flex-wrap items-center gap-4">
+ <h1 className="text-xl md:text-5xl font-semibold dark:text-white tracking-tight flex flex-wrap items-center gap-2 md:gap-4">
  {user?.name || 'Admin'}
- <span className="text-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-full font-semibold uppercase tracking-wider">v3.0</span>
+ <span className="text-sm md:text-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3 py-1 md:px-4 md:py-1.5 rounded-full font-semibold uppercase tracking-wider">v3.0</span>
  </h1>
- <p className="text-slate-700 dark:text-slate-300 mt-2 font-medium">{t('dashboard.description')}</p>
+ <p className="text-slate-700 dark:text-slate-300 mt-1 md:mt-2 font-medium text-sm md:text-base">{t('dashboard.description')}</p>
  </div>
- 
- <div className="flex gap-3">
+ <div className="hidden md:flex gap-3">
  <div className="px-6 py-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 flex items-center gap-4">
  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600">
  <Activity size={20} />
@@ -239,7 +227,7 @@ const Dashboard: React.FC = () => {
  </div>
 
  {/* Stats Grid */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
+ <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-8">
  {hasPermission('reports_view') && (
  <>
  <StatCard
@@ -330,7 +318,7 @@ const Dashboard: React.FC = () => {
  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Revenue</span>
  </div>
  </div>
- <div className="h-[350px]">
+ <div className="h-[200px] md:h-[350px]">
  <ResponsiveContainer width="100%"height="100%">
  <AreaChart data={chartData}>
  <defs>
@@ -431,16 +419,58 @@ const Dashboard: React.FC = () => {
  
  
  
- className="bg-white dark:bg-slate-800 p-6 md:p-10 rounded-3xl md:rounded-[3.5rem] border border-slate-200/50 dark:border-slate-700/50"
+ className="bg-white dark:bg-slate-800 p-4 md:p-10 rounded-2xl md:rounded-[3.5rem] border border-slate-200/50 dark:border-slate-700/50"
  >
- <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-10">
+ <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 md:mb-10">
  <div>
- <h3 className="text-xl md:text-2xl font-semibold dark:text-white tracking-tight uppercase">{t('dashboard.recent_transactions')}</h3>
- <p className="text-slate-600 text-[10px] md:text-xs font-bold uppercase tracking-wide mt-1">Live Feed</p>
+ <h3 className="text-base md:text-2xl font-semibold dark:text-white tracking-tight uppercase">{t('dashboard.recent_transactions')}</h3>
+ <p className="text-slate-600 text-[10px] font-bold uppercase tracking-wide mt-1">Live Feed</p>
  </div>
  </div>
 
- <div className="overflow-x-auto -mx-6 md:-mx-10 px-6 md:px-10 pb-4">
+ {/* Mobile Card List */}
+ <div className="md:hidden space-y-3">
+ {[...(invoices || [])].sort((a: any, b: any) => {
+   const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+   const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+   return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime);
+ }).slice(0, 8).map((inv: any) => (
+   <div key={inv.id} className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-3 border border-slate-100 dark:border-slate-800">
+     <div className="flex items-start justify-between mb-2">
+       <div>
+         <span className="font-mono text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded-lg text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+           #{inv.invoiceNumber}
+         </span>
+         <p className="font-semibold text-sm text-slate-900 dark:text-white mt-1.5 uppercase tracking-tight">{inv.customerName || 'Walk-in Customer'}</p>
+       </div>
+       <div className="text-right">
+         <p className="font-bold text-base text-slate-900 dark:text-white">{formatCurrency(inv.grandTotal)}</p>
+         <span className={`text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full
+           ${inv.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' :
+             inv.paymentStatus === 'pending' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' :
+             'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+           {inv.paymentStatus}
+         </span>
+       </div>
+     </div>
+     <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+       <span>{formatDate(inv.createdAt)}</span>
+       <span className="bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md">{inv.paymentMode}</span>
+     </div>
+   </div>
+ ))}
+ {invoices?.length === 0 && (
+   <div className="flex flex-col items-center gap-4 py-12">
+     <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-300">
+       <Layers size={32} />
+     </div>
+     <p className="text-slate-600 text-xs font-semibold uppercase tracking-wider">{t('dashboard.no_transactions')}</p>
+   </div>
+ )}
+ </div>
+
+ {/* Desktop Table */}
+ <div className="hidden md:block overflow-x-auto -mx-10 px-10 pb-4">
  <table className="w-full text-left whitespace-nowrap min-w-[600px]">
  <thead className="text-slate-600 text-[10px] font-semibold uppercase tracking-wider">
  <tr>
@@ -457,14 +487,8 @@ const Dashboard: React.FC = () => {
                   const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                   const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                   return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime);
-                }).slice(0, 8).map((inv: any, i: number) => (
- <tr 
- 
- 
- 
- key={inv.id} 
- className="hover:bg-slate-100 dark:hover:bg-slate-700 group"
- >
+                }).slice(0, 8).map((inv: any) => (
+ <tr key={inv.id} className="hover:bg-slate-100 dark:hover:bg-slate-700 group">
  <td className="py-6 px-4 font-semibold text-slate-700 dark:text-slate-300 text-[10px] uppercase tracking-wider">
  {formatDate(inv.createdAt)}
  </td>
